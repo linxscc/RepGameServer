@@ -1,0 +1,84 @@
+# 启动与关闭命令
+
+## 1. 启动 GoFrame 后端
+
+```powershell
+cd GoServer
+go run main.go
+```
+
+关闭：
+- 直接在运行窗口按 `Ctrl+C` 即可。
+
+---
+
+## 2. 启动 React 前端
+
+```powershell
+cd Front\myrepapp
+npm start
+```
+打包
+npm run build
+
+关闭：
+- 直接在运行窗口按 `Ctrl+C` 即可。
+
+---
+
+## 3. 启动 Nginx
+
+```powershell
+cd nginx
+./nginx.exe -p . -c conf/nginx.conf
+```
+
+关闭：
+```powershell
+./nginx.exe -s stop
+```
+
+---
+
+## 4. Docker 一体化部署
+
+```powershell
+# 构建并启动所有服务（前端+后端+Nginx）
+docker compose up --build
+```
+
+关闭：
+```powershell
+docker compose down
+```
+重新构建并启动
+docker compose build --no-cache
+docker compose up
+
+修改完配置后，重启容器
+docker compose down
+docker compose up --build
+
+---
+
+## 5. 本地 hosts 文件配置（确保域名和 nginx.conf 一致）
+
+编辑文件：
+```
+C:\Windows\System32\drivers\etc\hosts
+```
+添加一行（与 nginx.conf 的 server_name 保持一致）：
+```
+127.0.0.1   zspersonaldomain.com
+```
+
+这样在浏览器访问 http://zspersonaldomain.com/ 就会指向本地 Nginx。
+
+---
+
+> **注意：**
+> - 前端生产环境建议用 `npm run build` 后，将 `build` 目录内容复制到 `nginx/html` 目录。
+> - Nginx 启动后，访问 http://localhost/ 即可访问前端，API 请求会自动代理到后端。
+> - nginx.conf 的 server_name 字段和 hosts 文件中的域名必须一致。
+> - 修改 hosts 文件需管理员权限。
+> - 线上服务器请将域名解析到公网 IP。

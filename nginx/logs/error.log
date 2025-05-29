@@ -1,0 +1,5 @@
+2025/05/29 15:09:15 [emerg] 28504#43488: bind() to 0.0.0.0:80 failed (10013: An attempt was made to access a socket in a way forbidden by its access permissions)
+2025/05/29 15:13:37 [notice] 24768#31112: signal process started
+2025/05/29 15:52:42 [notice] 41084#44108: signal process started
+2025/05/29 16:15:21 [notice] 43044#24096: signal process started
+2025/05/29 16:21:48 [notice] 47836#12376: signal process started
