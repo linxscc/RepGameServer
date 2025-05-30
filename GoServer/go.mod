@@ -1,4 +1,4 @@
-module hello
+module GoServer
 
 go 1.24.3
 

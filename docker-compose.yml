@@ -1,8 +1,8 @@
-version: '3'
 services:
   app:
-    build: .
+    image: kernzs/repgame:latest
     ports:
       - "80:80"
       - "8000:8000"
+      - "9060:9060"
     container_name: repgame_allinone

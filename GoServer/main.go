@@ -2,13 +2,16 @@
 package main
 
 import (
-	"hello/internal/controller"
+	"GoServer/internal/controller"
+	tcpserver "GoServer/tcpgameserver"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 )
 
 func main() {
+	go tcpserver.StartTCPServer()
+
 	s := g.Server()
 	s.Group("/", func(group *ghttp.RouterGroup) {
 		group.Bind(

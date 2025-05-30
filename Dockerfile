@@ -22,11 +22,14 @@ COPY --from=frontend-build /app/front/myrepapp/build /usr/share/nginx/html
 COPY nginx/conf/nginx.conf /etc/nginx/nginx.conf
 # 拷贝后端可执行文件
 COPY --from=backend-build /app/goserver/server /app/server
+# 拷贝后端配置文件
+COPY --from=backend-build /app/goserver/tcpgameserver/config/response_codes.json /app/goserver/tcpgameserver/config/response_codes.json
 # 启动脚本
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
 EXPOSE 80
 EXPOSE 8000
+EXPOSE 9060
 
 CMD ["/app/start.sh"]

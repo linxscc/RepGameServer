@@ -1,8 +1,8 @@
 package controller
 
 import (
+	v1 "GoServer/api/v1"
 	"context"
-	v1 "hello/api/v1"
 
 	"github.com/gogf/gf/v2/frame/g"
 )
