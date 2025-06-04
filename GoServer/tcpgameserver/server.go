@@ -2,49 +2,68 @@ package tcpserver
 
 import (
 	messagehandle "GoServer/tcpgameserver/MessageHandle"
-	"GoServer/tcpgameserver/tools"
-	"encoding/json"
+	"GoServer/tcpgameserver/events"
+	"GoServer/tcpgameserver/setup"
 	"log"
 	"net"
-	"os"
-	"path/filepath"
 )
 
 // 启动TCP服务器
 func StartTCPServer() {
-	// 启动时加载响应码（使用相对路径，便于部署）
-	wd, _ := os.Getwd()
-	jsonPath := filepath.Join(wd, "goserver", "tcpgameserver", "config", "response_codes.json")
-	log.Println("Loading response codes from:", jsonPath)
-	tools.LoadResponseCodes(jsonPath)
+	// 初始化服务器组件（响应码、卡牌池、游戏开始回调等）
+	setup.InitializeServer()
+
+	// 启动TCP监听
 	ln, err := net.Listen("tcp", ":9060")
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println("TCP server listening on :9060")
+
+	// 处理连接请求
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			log.Println("Accept error:", err)
 			continue
 		}
-		go func(c net.Conn) {
-			defer c.Close()
-			buf := make([]byte, 1024)
-			for {
-				n, err := c.Read(buf)
-				if err != nil {
-					break // 连接断开或出错，退出循环
-				}
-				msg := string(buf[:n])
-				log.Printf("TCP received: %s", msg)
-				resp := messagehandle.HandleTCPMessage(msg, c)
-				jsonBytes, _ := json.Marshal(resp)
-				jsonBytes = append(jsonBytes, '\n')
-				c.Write(jsonBytes)
+		go handleConnection(conn)
+	}
+}
+
+// 处理客户端连接
+func handleConnection(conn net.Conn) {
+	// 使用连接管理器处理新连接
+	clientID := messagehandle.HandleNewConnection(conn)
+	clientAddr := conn.RemoteAddr().String()
+
+	defer func() {
+		messagehandle.HandleConnectionClose(clientID)
+
+		conn.Close()
+	}()
+
+	buf := make([]byte, 1024)
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			// 发布连接超时或错误事件
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				timeoutData := events.NewEventData(events.EventClientTimeout, "tcp_server", map[string]interface{}{
+					"client_id":      clientID,
+					"client_address": clientAddr,
+					"error":          err.Error(),
+				})
+				events.Publish(events.EventClientTimeout, timeoutData)
 			}
-			log.Printf("Connection closed: %s", c.RemoteAddr().String())
-		}(conn)
+			break // 连接断开或出错，退出循环
+		}
+
+		// 更新客户端活动时间
+		messagehandle.UpdateClientActivity(clientID)
+
+		msg := string(buf[:n])
+		messagehandle.HandleTCPMessage(msg, conn, clientID)
 	}
 }
 

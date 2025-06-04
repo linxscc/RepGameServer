@@ -53,7 +53,9 @@ docker compose up --build
 docker compose down
 ```
 重新构建并启动
+构建并启动所有服务
 docker compose build --no-cache
+或仅启动（不重新构建）
 docker compose up
 
 重启容器
@@ -94,7 +96,7 @@ C:\Windows\System32\drivers\etc\hosts
 ```
 #ec2初次部署
 #ec2连接
-ssh -i RepGameKey.pem ubuntu@ec2-52-62-195-43.ap-southeast-2.compute.amazonaws.com
+ssh -i RepGameKey.pem ubuntu@13.237.148.137
 
 sudo apt-get update
 sudo apt-get upgrade -y
@@ -120,26 +122,61 @@ sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
+#DNS分配网站
+namecheap
+ZHOUKern
+
+
 ```
-# RepGame 部署指南
+## RepGame 部署指南
 #ec2连接
-ssh -i RepGameKey.pem ubuntu@ec2-52-62-195-43.ap-southeast-2.compute.amazonaws.com
+ssh -i RepGameKey.pem ubuntu@13.237.148.137  # 弹性IP，不随实例重启变化
 #EC2拉取docker
 #第一次
 docker login
+
+拉取镜像
 sudo docker pull kernzs/repgame:latest
-#第二次以后
+
+#第二次以后，单个服务启动
 sudo docker stop repgame
 sudo docker rm repgame
-sudo docker pull kernzs/repgame:latest
-sudo docker run -d -p 80:80 -p 8000:8000 -p 9060:9060 --name repgame kernzs/repgame:latest
+sudo docker run -d -p 80:80 -p 8000:8000 -p 9060:9060 -p 3306:3306 --name repgame kernzs/repgame:latest
 
+#上传docker-compose.yml，第二次以后，整体服务执行
+scp -i .\RepGameKey.pem .\docker-compose.yml ubuntu@13.237.148.137:/home/ubuntu/
+ssh -i RepGameKey.pem ubuntu@13.237.148.137
+cd /home/ubuntu
+
+sudo docker compose down
 sudo docker compose up -d
 ```
+
+#查看Docker容器的日志
+镜像日志
+ssh -i "RepGameKey.pem" ubuntu@52.62.195.43 "sudo docker logs -f repgame"
+实时查看
+sudo docker logs -f repgame_allinone
 
 zspersonaldomain.it.com
 
 ---
+
+
+#RDS数据库
+转发本地通道
+ssh -i "RepGameKey.pem" -L 13306:repgame-database-0.cx2omeoogidr.ap-southeast-2.rds.amazonaws.com:3306 ubuntu@13.237.148.137
+登录设置
+127.0.0.1
+13306
+repgameadmin
+repgameadmin
+
+repgame-database-0.cx2omeoogidr.ap-southeast-2.rds.amazonaws.com
+3306
+repgameadmin
+repgameadmin
+
 
 
 > **注意：**

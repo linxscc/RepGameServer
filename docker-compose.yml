@@ -5,4 +5,12 @@ services:
       - "80:80"
       - "8000:8000"
       - "9060:9060"
+      - "3306:3306"
     container_name: repgame_allinone
+    environment:
+      - DOCKER_BUILD=1
+      - DB_HOST=repgame-database-0.cx2omeoogidr.ap-southeast-2.rds.amazonaws.com
+      - DB_PORT=3306
+      - DB_NAME=RepGame
+      - DB_USER=repgameadmin
+      - DB_PASSWORD=repgameadmin

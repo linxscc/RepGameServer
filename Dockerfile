@@ -22,8 +22,15 @@ COPY --from=frontend-build /app/front/myrepapp/build /usr/share/nginx/html
 COPY nginx/conf/nginx.conf /etc/nginx/nginx.conf
 # 拷贝后端可执行文件
 COPY --from=backend-build /app/goserver/server /app/server
+
+# 设置 Docker 环境变量，使用 RDS 数据库
+ENV DOCKER_BUILD=1
+
 # 拷贝后端配置文件
-COPY --from=backend-build /app/goserver/tcpgameserver/config/response_codes.json /app/goserver/tcpgameserver/config/response_codes.json
+COPY --from=backend-build /app/goserver/tcpgameserver/config /app/goserver/tcpgameserver/config
+# 确保数据库服务目录存在
+RUN mkdir -p /app/goserver/tcpgameserver/service
+COPY --from=backend-build /app/goserver/tcpgameserver/service /app/goserver/tcpgameserver/service
 # 启动脚本
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
