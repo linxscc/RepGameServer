@@ -11,7 +11,7 @@ type ResponseHelper struct{}
 func (h *ResponseHelper) CreateSuccessTcpResponse(id int, data interface{}) *models.TcpResponse {
 	response, exists := GetResponseByID(id)
 	if !exists {
-		defaultResponse, _ := GetResponseByID(5001)
+		defaultResponse, _ := GetResponseByID(9999)
 		return &models.TcpResponse{
 			Code:        defaultResponse.Code,
 			Message:     defaultResponse.Message,
@@ -31,7 +31,7 @@ func (h *ResponseHelper) CreateSuccessTcpResponse(id int, data interface{}) *mod
 func (h *ResponseHelper) CreateErrorTcpResponse(id int) *models.TcpResponse {
 	response, exists := GetResponseByID(id)
 	if !exists {
-		defaultResponse, _ := GetResponseByID(5001)
+		defaultResponse, _ := GetResponseByID(9999)
 		return &models.TcpResponse{
 			Code:        defaultResponse.Code,
 			Message:     defaultResponse.Message,

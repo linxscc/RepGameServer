@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 
+	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/tools"
 	"GoServer/tcpgameserver/types"
@@ -28,29 +29,16 @@ func HandleUserReady(conn net.Conn, clientID string, connManager *service.Connec
 
 	// 设置玩家状态为准备就绪
 	connManager.SetPlayerStatus(clientID, types.StatusReady)
-
-	// 获取准备就绪的玩家统计
-	readyPlayers := connManager.GetConnectionsByStatus(types.StatusReady)
-	stats := connManager.GetConnectionStats()
-
-	// 匹配逻辑（这里可以根据需要实现具体的匹配逻辑）
+	stats := connManager.GetConnectionStats() // 匹配逻辑 - 当有足够玩家准备就绪时发送游戏开始事件
 	if stats["ready"] >= 2 {
-		log.Printf("有足够的玩家准备就绪，可以开始匹配")
-		// 这里可以调用匹配逻辑
-		// logic.StartMatchMaking()
-	}
 
-	// 构建响应数据
-	var readyPlayerNames []string
-	for _, player := range readyPlayers {
-		if player.Username != "" {
-			readyPlayerNames = append(readyPlayerNames, player.Username)
-		}
-	}
+		// 创建游戏开始事件数据
+		gameStartData := events.CreateRoomEventData(events.EventGameStart, "new_room", int(stats["ready"]))
+		gameStartData.AddData("message", "Players ready, starting matchmaking")
+		gameStartData.AddData("trigger_source", "user_ready_handler")
 
-	responseData := map[string]interface{}{
-		"ready_players": readyPlayerNames,
-		"player_count":  stats["ready"],
+		// 发布游戏开始事件，让事件监听器处理匹配逻辑
+		events.Publish(events.EventGameStart, gameStartData)
+
 	}
-	SendTCPResponse(conn, tools.GlobalResponseHelper.CreateSuccessTcpResponse(4001, responseData))
 }

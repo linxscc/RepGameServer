@@ -35,8 +35,6 @@ func LoadResponseCodes() error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 
-	log.Println("Loading response codes from database...")
-
 	// 从数据库获取所有响应码
 	responseInfos, err := service.GetAllResponseInfo()
 	if err != nil {
@@ -51,7 +49,6 @@ func LoadResponseCodes() error {
 		manager.codes[info.ID] = info
 	}
 
-	log.Printf("Successfully loaded %d response codes from database", len(responseInfos))
 	return nil
 }
 

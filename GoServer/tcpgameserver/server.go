@@ -1,8 +1,8 @@
 package tcpserver
 
 import (
-	messagehandle "GoServer/tcpgameserver/MessageHandle"
 	"GoServer/tcpgameserver/events"
+	messagehandle "GoServer/tcpgameserver/messageHandle"
 	"GoServer/tcpgameserver/setup"
 	"log"
 	"net"

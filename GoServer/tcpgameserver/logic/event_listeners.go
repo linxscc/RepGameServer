@@ -1,8 +1,10 @@
-package events
+package logic
 
 import (
+	"GoServer/tcpgameserver/cards"
+	"GoServer/tcpgameserver/events"
+	"GoServer/tcpgameserver/tools"
 	"log"
-	"time"
 )
 
 // EventListener 事件监听器接口
@@ -42,10 +44,10 @@ func NewGameEventListener() *GameEventListener {
 		BaseEventListener: BaseEventListener{
 			Name: "GameEventListener",
 			EventTypes: []string{
-				EventGameStart,
-				EventGameEnd,
-				EventGamePause,
-				EventGameResume,
+				events.EventGameStart,
+				events.EventGameEnd,
+				events.EventGamePause,
+				events.EventGameResume,
 			},
 			Priority: 10, // 高优先级
 		},
@@ -54,13 +56,13 @@ func NewGameEventListener() *GameEventListener {
 
 func (g *GameEventListener) HandleEvent(eventType string, data interface{}) {
 	switch eventType {
-	case EventGameStart:
+	case events.EventGameStart:
 		g.handleGameStart(data)
-	case EventGameEnd:
+	case events.EventGameEnd:
 		g.handleGameEnd(data)
-	case EventGamePause:
+	case events.EventGamePause:
 		g.handleGamePause(data)
-	case EventGameResume:
+	case events.EventGameResume:
 		g.handleGameResume(data)
 	default:
 		log.Printf("GameEventListener: Unknown event type: %s", eventType)
@@ -68,22 +70,20 @@ func (g *GameEventListener) HandleEvent(eventType string, data interface{}) {
 }
 
 func (g *GameEventListener) handleGameStart(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
-		log.Printf("🎮 Game Started - Room: %s, Time: %s",
-			eventData.RoomID,
-			time.Unix(eventData.Timestamp, 0).Format("15:04:05"))
+	log.Printf("🎮 Received game start event, processing directly")
 
-		// 执行游戏开始逻辑
-		if roomID := eventData.RoomID; roomID != "" {
-			// 初始化游戏状态
-			// 发送游戏开始消息给所有玩家
-			log.Printf("Initializing game state for room: %s", roomID)
-		}
+	// 直接创建并使用GameStartProcessor处理游戏开始逻辑
+	processor := &GameStartProcessor{}
+	err := processor.ProcessGameStart(data)
+	if err != nil {
+		log.Printf("Game start processing failed: %v", err)
+	} else {
+		log.Printf("Game start processing completed successfully")
 	}
 }
 
 func (g *GameEventListener) handleGameEnd(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		log.Printf("🏁 Game Ended - Room: %s", eventData.RoomID)
 
 		// 执行游戏结束逻辑
@@ -98,112 +98,16 @@ func (g *GameEventListener) handleGameEnd(data interface{}) {
 }
 
 func (g *GameEventListener) handleGamePause(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		log.Printf("⏸️ Game Paused - Room: %s", eventData.RoomID)
 		// 暂停游戏逻辑
 	}
 }
 
 func (g *GameEventListener) handleGameResume(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		log.Printf("▶️ Game Resumed - Room: %s", eventData.RoomID)
 		// 恢复游戏逻辑
-	}
-}
-
-// PlayerEventListener 玩家事件监听器
-type PlayerEventListener struct {
-	BaseEventListener
-}
-
-func NewPlayerEventListener() *PlayerEventListener {
-	return &PlayerEventListener{
-		BaseEventListener: BaseEventListener{
-			Name: "PlayerEventListener",
-			EventTypes: []string{
-				EventPlayerJoin,
-				EventPlayerLeave,
-				EventPlayerAction,
-				EventPlayerDeath,
-			},
-			Priority: 20,
-		},
-	}
-}
-
-func (p *PlayerEventListener) HandleEvent(eventType string, data interface{}) {
-	switch eventType {
-	case EventPlayerJoin:
-		p.handlePlayerJoin(data)
-	case EventPlayerLeave:
-		p.handlePlayerLeave(data)
-	case EventPlayerAction:
-		p.handlePlayerAction(data)
-	case EventPlayerDeath:
-		p.handlePlayerDeath(data)
-	default:
-		log.Printf("PlayerEventListener: Unknown event type: %s", eventType)
-	}
-}
-
-func (p *PlayerEventListener) handlePlayerJoin(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
-		playerName, _ := eventData.GetString("player_name")
-		log.Printf("👤 Player Joined - %s in room %s", playerName, eventData.RoomID)
-
-		// 执行玩家加入逻辑
-		// 更新房间玩家列表
-		// 发送欢迎消息
-		// 同步游戏状态给新玩家
-
-		// 触发相关事件
-		if playerCount, exists := eventData.GetInt("player_count"); exists && playerCount >= 2 {
-			// 如果房间人数满足条件，可以触发游戏开始事件
-			gameStartData := CreateRoomEventData(EventGameStart, eventData.RoomID, playerCount)
-			Publish(EventGameStart, gameStartData)
-		}
-	}
-}
-
-func (p *PlayerEventListener) handlePlayerLeave(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
-		playerName, _ := eventData.GetString("player_name")
-		log.Printf("👋 Player Left - %s from room %s", playerName, eventData.RoomID)
-
-		// 执行玩家离开逻辑
-		// 更新房间玩家列表
-		// 检查是否需要暂停游戏
-		// 如果房间为空，触发房间销毁事件
-
-		if playerCount, exists := eventData.GetInt("remaining_players"); exists && playerCount == 0 {
-			roomDestroyData := CreateRoomEventData(EventRoomEmpty, eventData.RoomID, 0)
-			Publish(EventRoomEmpty, roomDestroyData)
-		}
-	}
-}
-
-func (p *PlayerEventListener) handlePlayerAction(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
-		action, _ := eventData.GetString("action")
-		playerName, _ := eventData.GetString("player_name")
-		log.Printf("⚡ Player Action - %s performed %s", playerName, action)
-
-		// 处理玩家行动
-		// 验证行动合法性
-		// 更新游戏状态
-		// 广播行动结果
-	}
-}
-
-func (p *PlayerEventListener) handlePlayerDeath(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
-		playerName, _ := eventData.GetString("player_name")
-		log.Printf("💀 Player Death - %s died", playerName)
-
-		// 处理玩家死亡
-		// 移除玩家
-		// 检查游戏结束条件
-		// 触发复活机制（如果有）
 	}
 }
 
@@ -217,11 +121,11 @@ func NewCardEventListener() *CardEventListener {
 		BaseEventListener: BaseEventListener{
 			Name: "CardEventListener",
 			EventTypes: []string{
-				EventCardDraw,
-				EventCardPlay,
-				EventCardDiscard,
-				EventCardShuffle,
-				EventDeckEmpty,
+				events.EventCardDraw,
+				events.EventCardPlay,
+				events.EventCardDiscard,
+				events.EventCardShuffle,
+				events.EventDeckEmpty,
 			},
 			Priority: 30,
 		},
@@ -230,15 +134,11 @@ func NewCardEventListener() *CardEventListener {
 
 func (c *CardEventListener) HandleEvent(eventType string, data interface{}) {
 	switch eventType {
-	case EventCardDraw:
+	case events.EventCardDraw:
 		c.handleCardDraw(data)
-	case EventCardPlay:
+	case events.EventCardPlay:
 		c.handleCardPlay(data)
-	case EventCardDiscard:
-		c.handleCardDiscard(data)
-	case EventCardShuffle:
-		c.handleCardShuffle(data)
-	case EventDeckEmpty:
+	case events.EventDeckEmpty:
 		c.handleDeckEmpty(data)
 	default:
 		log.Printf("CardEventListener: Unknown event type: %s", eventType)
@@ -246,7 +146,7 @@ func (c *CardEventListener) HandleEvent(eventType string, data interface{}) {
 }
 
 func (c *CardEventListener) handleCardDraw(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		cardName, _ := eventData.GetString("card_name")
 		playerName, _ := eventData.GetString("player_name")
 		log.Printf("🃏 Card Draw - %s drew %s", playerName, cardName)
@@ -259,7 +159,7 @@ func (c *CardEventListener) handleCardDraw(data interface{}) {
 }
 
 func (c *CardEventListener) handleCardPlay(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		cardName, _ := eventData.GetString("card_name")
 		playerName, _ := eventData.GetString("player_name")
 		target, _ := eventData.GetString("target")
@@ -273,50 +173,25 @@ func (c *CardEventListener) handleCardPlay(data interface{}) {
 
 		// 如果是攻击卡牌，触发伤害事件
 		if damage, exists := eventData.GetFloat64("damage"); exists && damage > 0 {
-			damageData := NewEventData(EventDamage, "card_system", map[string]interface{}{
+			damageData := events.NewEventData(events.EventDamage, "card_system", map[string]interface{}{
 				"target":   target,
 				"damage":   damage,
 				"source":   cardName,
 				"attacker": playerName,
 			})
-			Publish(EventDamage, damageData)
+			events.Publish(events.EventDamage, damageData)
 		}
 	}
 }
 
-func (c *CardEventListener) handleCardDiscard(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
-		cardName, _ := eventData.GetString("card_name")
-		playerName, _ := eventData.GetString("player_name")
-		log.Printf("🗑️ Card Discard - %s discarded %s", playerName, cardName)
-
-		// 处理弃牌逻辑
-		// 移动卡牌到弃牌堆
-		// 触发弃牌效果
-	}
-}
-
-func (c *CardEventListener) handleCardShuffle(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
-		log.Printf("🔀 Card Shuffle - Deck shuffled in room %s", eventData.RoomID)
-
-		// 处理洗牌逻辑
-		// 重新排列牌库
-		// 通知所有玩家
-	}
-}
-
 func (c *CardEventListener) handleDeckEmpty(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		log.Printf("📭 Deck Empty - No more cards in room %s", eventData.RoomID)
 
 		// 处理牌库为空
 		// 将弃牌堆洗入牌库
 		// 或者触发特殊规则
 
-		// 自动洗牌
-		shuffleData := CreateRoomEventData(EventCardShuffle, eventData.RoomID, 0)
-		Publish(EventCardShuffle, shuffleData)
 	}
 }
 
@@ -330,11 +205,11 @@ func NewBattleEventListener() *BattleEventListener {
 		BaseEventListener: BaseEventListener{
 			Name: "BattleEventListener",
 			EventTypes: []string{
-				EventBattleStart,
-				EventBattleEnd,
-				EventAttack,
-				EventDamage,
-				EventHeal,
+				events.EventBattleStart,
+				events.EventBattleEnd,
+				events.EventAttack,
+				events.EventDamage,
+				events.EventHeal,
 			},
 			Priority: 25,
 		},
@@ -343,15 +218,15 @@ func NewBattleEventListener() *BattleEventListener {
 
 func (b *BattleEventListener) HandleEvent(eventType string, data interface{}) {
 	switch eventType {
-	case EventBattleStart:
+	case events.EventBattleStart:
 		b.handleBattleStart(data)
-	case EventBattleEnd:
+	case events.EventBattleEnd:
 		b.handleBattleEnd(data)
-	case EventAttack:
+	case events.EventAttack:
 		b.handleAttack(data)
-	case EventDamage:
+	case events.EventDamage:
 		b.handleDamage(data)
-	case EventHeal:
+	case events.EventHeal:
 		b.handleHeal(data)
 	default:
 		log.Printf("BattleEventListener: Unknown event type: %s", eventType)
@@ -359,7 +234,7 @@ func (b *BattleEventListener) HandleEvent(eventType string, data interface{}) {
 }
 
 func (b *BattleEventListener) handleBattleStart(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		log.Printf("⚔️ Battle Started in room %s", eventData.RoomID)
 
 		// 初始化战斗状态
@@ -369,7 +244,7 @@ func (b *BattleEventListener) handleBattleStart(data interface{}) {
 }
 
 func (b *BattleEventListener) handleBattleEnd(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		winner, _ := eventData.GetString("winner")
 		log.Printf("🏆 Battle Ended - Winner: %s", winner)
 
@@ -380,7 +255,7 @@ func (b *BattleEventListener) handleBattleEnd(data interface{}) {
 }
 
 func (b *BattleEventListener) handleAttack(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		attacker, _ := eventData.GetString("attacker")
 		target, _ := eventData.GetString("target")
 		log.Printf("⚔️ Attack - %s attacks %s", attacker, target)
@@ -392,7 +267,7 @@ func (b *BattleEventListener) handleAttack(data interface{}) {
 }
 
 func (b *BattleEventListener) handleDamage(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		target, _ := eventData.GetString("target")
 		damage, _ := eventData.GetFloat64("damage")
 		source, _ := eventData.GetString("source")
@@ -405,18 +280,18 @@ func (b *BattleEventListener) handleDamage(data interface{}) {
 
 		// 检查是否死亡
 		if currentHP, exists := eventData.GetFloat64("current_hp"); exists && currentHP <= 0 {
-			deathData := NewEventData(EventPlayerDeath, "battle_system", map[string]interface{}{
+			deathData := events.NewEventData(events.EventPlayerDeath, "battle_system", map[string]interface{}{
 				"player_name": target,
 				"killer":      eventData.Data["attacker"],
 			})
 			deathData.SetRoom(eventData.RoomID).SetUser(target)
-			Publish(EventPlayerDeath, deathData)
+			events.Publish(events.EventPlayerDeath, deathData)
 		}
 	}
 }
 
 func (b *BattleEventListener) handleHeal(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		target, _ := eventData.GetString("target")
 		healAmount, _ := eventData.GetFloat64("heal_amount")
 		source, _ := eventData.GetString("source")
@@ -439,10 +314,10 @@ func NewSystemEventListener() *SystemEventListener {
 		BaseEventListener: BaseEventListener{
 			Name: "SystemEventListener",
 			EventTypes: []string{
-				EventSystemStart,
-				EventSystemShutdown,
-				EventSystemError,
-				EventServerMaintenance,
+				events.EventSystemStart,
+				events.EventSystemShutdown,
+				events.EventSystemError,
+				events.EventServerMaintenance,
 			},
 			Priority: 5, // 最高优先级
 		},
@@ -451,13 +326,13 @@ func NewSystemEventListener() *SystemEventListener {
 
 func (s *SystemEventListener) HandleEvent(eventType string, data interface{}) {
 	switch eventType {
-	case EventSystemStart:
+	case events.EventSystemStart:
 		s.handleSystemStart(data)
-	case EventSystemShutdown:
+	case events.EventSystemShutdown:
 		s.handleSystemShutdown(data)
-	case EventSystemError:
+	case events.EventSystemError:
 		s.handleSystemError(data)
-	case EventServerMaintenance:
+	case events.EventServerMaintenance:
 		s.handleServerMaintenance(data)
 	default:
 		log.Printf("SystemEventListener: Unknown event type: %s", eventType)
@@ -465,18 +340,33 @@ func (s *SystemEventListener) HandleEvent(eventType string, data interface{}) {
 }
 
 func (s *SystemEventListener) handleSystemStart(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		log.Printf("🚀 System Start - %s", eventData.Data["message"])
 
 		// 系统启动逻辑
 		// 初始化全局状态
 		// 加载配置
 		// 启动服务
+
+		// 加载响应码配置文件
+		if err := tools.LoadResponseCodes(); err != nil {
+			log.Printf("Failed to load response codes from database: %v", err)
+		} else {
+			log.Println("Response codes loaded successfully")
+		}
+
+		// 初始化卡牌池
+		if err := cards.InitCardPool(); err != nil {
+			log.Printf("Failed to initialize card pool: %v", err)
+		} else {
+			log.Println("Card pool initialized successfully")
+		}
+
 	}
 }
 
 func (s *SystemEventListener) handleSystemShutdown(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		log.Printf("🔴 System Shutdown - %s", eventData.Data["message"])
 
 		// 系统关闭逻辑
@@ -487,7 +377,7 @@ func (s *SystemEventListener) handleSystemShutdown(data interface{}) {
 }
 
 func (s *SystemEventListener) handleSystemError(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		errorMsg, _ := eventData.GetString("error")
 		severity, _ := eventData.GetString("severity")
 
@@ -501,7 +391,7 @@ func (s *SystemEventListener) handleSystemError(data interface{}) {
 }
 
 func (s *SystemEventListener) handleServerMaintenance(data interface{}) {
-	if eventData, ok := data.(*EventData); ok {
+	if eventData, ok := data.(*events.EventData); ok {
 		maintenanceType, _ := eventData.GetString("type")
 		log.Printf("🔧 Server Maintenance - %s", maintenanceType)
 
@@ -509,6 +399,80 @@ func (s *SystemEventListener) handleServerMaintenance(data interface{}) {
 		// 通知玩家
 		// 暂停新连接
 		// 执行维护任务
+	}
+}
+
+// RoomEventListener 房间事件监听器
+type RoomEventListener struct {
+	BaseEventListener
+}
+
+func NewRoomEventListener() *RoomEventListener {
+	return &RoomEventListener{
+		BaseEventListener: BaseEventListener{
+			Name: "RoomEventListener",
+			EventTypes: []string{
+				events.EventRoomCreate,
+				events.EventRoomDestroy,
+				events.EventRoomFull,
+				events.EventRoomEmpty,
+			},
+			Priority: 15, // 中等优先级
+		},
+	}
+}
+
+func (r *RoomEventListener) HandleEvent(eventType string, data interface{}) {
+	switch eventType {
+	case events.EventRoomCreate:
+		r.handleRoomCreate(data)
+	case events.EventRoomDestroy:
+		r.handleRoomDestroy(data)
+	case events.EventRoomFull:
+		r.handleRoomFull(data)
+	case events.EventRoomEmpty:
+		r.handleRoomEmpty(data)
+	default:
+		log.Printf("RoomEventListener: Unknown event type: %s", eventType)
+	}
+}
+
+func (r *RoomEventListener) handleRoomCreate(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		log.Printf("🏠 Room Create Event - Room: %s", eventData.RoomID)
+
+	}
+}
+
+func (r *RoomEventListener) handleRoomDestroy(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		log.Printf("🏚️ Room Destroy - Room: %s", eventData.RoomID)
+
+		// 处理房间销毁逻辑
+		// 清理房间资源
+		// 通知相关玩家
+		// 保存房间数据
+	}
+}
+
+func (r *RoomEventListener) handleRoomFull(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		log.Printf("🔒 Room Full - Room: %s", eventData.RoomID)
+
+		// 处理房间已满逻辑
+		// 拒绝新玩家加入
+		// 可能触发游戏开始
+	}
+}
+
+func (r *RoomEventListener) handleRoomEmpty(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		log.Printf("🕳️ Room Empty - Room: %s", eventData.RoomID)
+
+		// 处理房间为空逻辑
+		// 准备销毁房间
+		destroyData := events.CreateRoomEventData(events.EventRoomDestroy, eventData.RoomID, 0)
+		events.Publish(events.EventRoomDestroy, destroyData)
 	}
 }
 
@@ -532,7 +496,7 @@ func (lm *ListenerManager) RegisterListener(listener EventListener) {
 	// 为监听器订阅所有相关事件
 	subscriptionIDs := make([]string, 0)
 	for _, eventType := range listener.GetEventTypes() {
-		subscriptionID := Subscribe(eventType, func(data interface{}) {
+		subscriptionID := events.Subscribe(eventType, func(data interface{}) {
 			listener.HandleEvent(eventType, data)
 		}, listener.GetPriority())
 
@@ -549,7 +513,7 @@ func (lm *ListenerManager) UnregisterListener(listenerName string) bool {
 	if subscriptionIDs, exists := lm.subscriptionIDs[listenerName]; exists {
 		// 取消所有订阅
 		for _, subscriptionID := range subscriptionIDs {
-			Unsubscribe(subscriptionID)
+			events.Unsubscribe(subscriptionID)
 		}
 
 		// 从列表中移除
@@ -581,9 +545,9 @@ func (lm *ListenerManager) GetListenerCount() int {
 func (lm *ListenerManager) RegisterAllDefaultListeners() {
 	lm.RegisterListener(NewSystemEventListener())
 	lm.RegisterListener(NewGameEventListener())
-	lm.RegisterListener(NewPlayerEventListener())
 	lm.RegisterListener(NewBattleEventListener())
 	lm.RegisterListener(NewCardEventListener())
+	lm.RegisterListener(NewRoomEventListener())
 
 	log.Printf("Registered %d default event listeners", lm.GetListenerCount())
 }
@@ -608,8 +572,8 @@ func InitializeEventSystem() {
 	listenerManager.RegisterAllDefaultListeners()
 
 	// 发布系统启动事件
-	systemStartData := CreateSystemEventData(EventSystemStart, "Event system initialized successfully")
-	Publish(EventSystemStart, systemStartData)
+	systemStartData := events.CreateSystemEventData(events.EventSystemStart, "Event system initialized successfully")
+	events.Publish(events.EventSystemStart, systemStartData)
 
 	log.Printf("Event system initialized with %d listeners", listenerManager.GetListenerCount())
 }
@@ -619,11 +583,11 @@ func ShutdownEventSystem() {
 	log.Println("Shutting down event system...")
 
 	// 发布系统关闭事件
-	systemShutdownData := CreateSystemEventData(EventSystemShutdown, "Event system shutting down")
-	PublishSync(EventSystemShutdown, systemShutdownData) // 同步发布，确保处理完成
+	systemShutdownData := events.CreateSystemEventData(events.EventSystemShutdown, "Event system shutting down")
+	events.PublishSync(events.EventSystemShutdown, systemShutdownData) // 同步发布，确保处理完成
 
 	// 清空所有订阅
-	Clear()
+	events.Clear()
 
 	log.Println("Event system shutdown complete")
 }

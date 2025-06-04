@@ -8,6 +8,7 @@ import (
 // Card 卡牌模型，存储在共享池中的值类型
 type Card struct {
 	UID        int64   `json:"uid"`        // 卡牌唯一实例ID，实例化时赋值
+	ID         int     `json:"id"`         // 卡牌ID，数据库中唯一标识
 	Name       string  `json:"name"`       // 卡牌名称
 	Damage     float64 `json:"damage"`     // 伤害值
 	TargetName *string `json:"targetname"` // 目标名称（可能为空）
@@ -18,10 +19,11 @@ type Card struct {
 var cardUIDCounter int64
 
 // NewCard 创建新的卡牌实例
-func NewCard(name string, damage float64, targetName *string, level int) Card {
+func NewCard(id int, name string, damage float64, targetName *string, level int) Card {
 	uid := atomic.AddInt64(&cardUIDCounter, 1)
 	return Card{
 		UID:        uid,
+		ID:         id,
 		Name:       name,
 		Damage:     damage,
 		TargetName: targetName,
