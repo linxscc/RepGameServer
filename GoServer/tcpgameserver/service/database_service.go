@@ -162,7 +162,6 @@ func ValidateUserLogin(username, password string) (bool, error) {
 		return true, nil
 	}
 
-	log.Printf("User login failed: invalid password for %s", username)
 	return false, nil
 }
 
@@ -191,4 +190,75 @@ func CreateUserAccount(username, password string) error {
 	}
 	log.Printf("User account created successfully: %s", username)
 	return nil
+}
+
+// GetAllBonds 获取所有羁绊数据（包含关联的卡牌）
+func GetAllBonds() ([]models.BondModel, error) {
+	db, err := GetDBConnection()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	// 查询羁绊基本信息
+	bondsQuery := `
+		SELECT id, name, level, damage, 
+		       COALESCE(skill, '') as skill, 
+		       description 
+		FROM Bonds ORDER BY id`
+
+	bondRows, err := db.Query(bondsQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query bonds: %v", err)
+	}
+	defer bondRows.Close()
+	var bonds []models.BondModel
+	bondIndexMap := make(map[int]int)
+	// 读取羁绊基本信息
+	for bondRows.Next() {
+		var bond models.BondModel
+		err := bondRows.Scan(
+			&bond.ID,
+			&bond.Name,
+			&bond.Level,
+			&bond.Damage,
+			&bond.Skill,
+			&bond.Description,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan bond: %v", err)
+		}
+
+		// 初始化卡牌切片
+		bond.CardNames = make([]string, 0)
+		bonds = append(bonds, bond)
+		bondIndexMap[bond.ID] = len(bonds) - 1
+	}
+	// 查询羁绊关联的卡牌
+	cardQuery := `
+		SELECT br.bond_id, br.card_name
+		FROM BondCards br
+		ORDER BY br.bond_id, br.card_name`
+	cardRows, err := db.Query(cardQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query BondCards: %v", err)
+	}
+	defer cardRows.Close() // 读取羁绊关联的卡牌信息
+	for cardRows.Next() {
+		var bondID int
+		var cardName string
+		err := cardRows.Scan(&bondID, &cardName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan BondCards: %v", err)
+		}
+
+		// 将卡牌名称添加到对应的羁绊中，直接修改bonds切片
+		if index, exists := bondIndexMap[bondID]; exists {
+			bonds[index].CardNames = append(bonds[index].CardNames, cardName)
+		} else {
+			log.Printf("Warning: Bond ID %d not found for card %s", bondID, cardName)
+		}
+	}
+
+	return bonds, nil
 }

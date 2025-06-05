@@ -36,25 +36,24 @@ func handleConnection(conn net.Conn) {
 	// 使用连接管理器处理新连接
 	clientID := messagehandle.HandleNewConnection(conn)
 	clientAddr := conn.RemoteAddr().String()
-
 	defer func() {
 		messagehandle.HandleConnectionClose(clientID)
 
 		conn.Close()
 	}()
 
-	buf := make([]byte, 1024)
+	buf := make([]byte, 8192) // 8KB buffer to handle 6KB data with safety margin
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
 			// 发布连接超时或错误事件
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				timeoutData := events.NewEventData(events.EventClientTimeout, "tcp_server", map[string]interface{}{
+				timeoutData := events.NewEventData(events.EventClientDisconnect, "tcp_server", map[string]interface{}{
 					"client_id":      clientID,
 					"client_address": clientAddr,
 					"error":          err.Error(),
 				})
-				events.Publish(events.EventClientTimeout, timeoutData)
+				events.Publish(events.EventClientDisconnect, timeoutData)
 			}
 			break // 连接断开或出错，退出循环
 		}

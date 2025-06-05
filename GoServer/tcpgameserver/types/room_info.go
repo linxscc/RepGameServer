@@ -3,18 +3,21 @@ package types
 import (
 	"GoServer/tcpgameserver/models"
 	"fmt"
+	"math/rand"
 	"sync"
 )
 
 // PlayerInfo 房间内玩家信息
 type PlayerInfo struct {
-	Username       string        `json:"username"`        // 玩家用户名
-	HandCards      []models.Card `json:"hand_cards"`      // 手牌列表
-	MaxHealth      int           `json:"max_health"`      // 总血量
-	CurrentHealth  int           `json:"current_health"`  // 当前血量
-	DamageDealt    float64       `json:"damage_dealt"`    // 造成的伤害
-	DamageReceived float64       `json:"damage_received"` // 承受的伤害
-	IsReady        bool          `json:"is_ready"`        // 是否准备就绪
+	Username       string             `json:"username"`        // 玩家用户名
+	HandCards      []models.Card      `json:"hand_cards"`      // 手牌列表
+	MaxHealth      float64            `json:"max_health"`      // 总血量
+	CurrentHealth  float64            `json:"current_health"`  // 当前血量
+	DamageDealt    float64            `json:"damage_dealt"`    // 造成的伤害
+	DamageReceived float64            `json:"damage_received"` // 承受的伤害
+	IsReady        bool               `json:"is_ready"`        // 是否准备就绪
+	Round          string             `json:"round"`           // 是否是当前回合玩家
+	TriggeredBonds []models.BondModel `json:"TriggeredBonds"`  // 触发的羁绊列表
 }
 
 // RoomInfo 游戏房间信息
@@ -34,8 +37,8 @@ type RoomInfo struct {
 	Level3CardPool []models.Card `json:"level3_card_pool"` // 3级共享卡牌池
 
 	// 游戏设置
-	InitialHealth int `json:"initial_health"` // 初始血量
-	MaxHandCards  int `json:"max_hand_cards"` // 最大手牌数量
+	InitialHealth float64 `json:"initial_health"` // 初始血量
+	MaxHandCards  int     `json:"max_hand_cards"` // 最大手牌数量
 
 	// 内部使用
 	mutex sync.RWMutex `json:"-"` // 读写锁
@@ -53,7 +56,7 @@ func NewRoomInfo(roomID, roomName string, maxPlayers int) *RoomInfo {
 		Level2CardPool: make([]models.Card, 0),
 		Level3CardPool: make([]models.Card, 0),
 		InitialHealth:  100, // 默认初始血量
-		MaxHandCards:   7,   // 默认最大手牌数量
+		MaxHandCards:   6,   // 默认最大手牌数量
 	}
 }
 
@@ -97,6 +100,7 @@ func (r *RoomInfo) AddPlayer(username string) error {
 		MaxHealth:     r.InitialHealth,
 		CurrentHealth: r.InitialHealth,
 		IsReady:       false,
+		Round:         "waiting",
 	}
 
 	r.Players[username] = player
@@ -133,7 +137,7 @@ func (r *RoomInfo) GetPlayerHandCards(username string) ([]models.Card, error) {
 }
 
 // GetPlayerCurrentHealth 获取指定玩家的当前血量
-func (r *RoomInfo) GetPlayerCurrentHealth(username string) (int, error) {
+func (r *RoomInfo) GetPlayerCurrentHealth(username string) (float64, error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 
@@ -158,9 +162,10 @@ func (r *RoomInfo) GetPlayerInfo(username string) (*PlayerInfo, error) {
 	// 返回玩家信息副本
 	playerCopy := &PlayerInfo{
 		Username:      player.Username,
-		HandCards:     make([]models.Card, len(player.HandCards)),
+		HandCards:     player.HandCards,
 		MaxHealth:     player.MaxHealth,
 		CurrentHealth: player.CurrentHealth,
+		Round:         player.Round,
 		IsReady:       player.IsReady,
 	}
 	copy(playerCopy.HandCards, player.HandCards)
@@ -169,7 +174,7 @@ func (r *RoomInfo) GetPlayerInfo(username string) (*PlayerInfo, error) {
 }
 
 // SetPlayerHealth 设置玩家血量
-func (r *RoomInfo) SetPlayerHealth(username string, health int) error {
+func (r *RoomInfo) SetPlayerHealth(username string, health float64) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -187,6 +192,48 @@ func (r *RoomInfo) SetPlayerHealth(username string, health int) error {
 	}
 
 	player.CurrentHealth = health
+	return nil
+}
+
+// SetPlayerHealth 设置玩家触发的羁绊
+func (r *RoomInfo) SetPlayerBonds(username string, BondModels []models.BondModel) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	player, exists := r.Players[username]
+	if !exists {
+		return fmt.Errorf("player %s not found in room", username)
+	}
+
+	player.TriggeredBonds = BondModels
+	return nil
+}
+
+// GetPlayerBonds 获取玩家触发的羁绊
+func (r *RoomInfo) GetPlayerBonds(username string) (BondModels []models.BondModel, err error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	player, exists := r.Players[username]
+	if !exists {
+		return nil, fmt.Errorf("player %s not found in room", username)
+	}
+
+	return player.TriggeredBonds, nil
+}
+
+// SetPlayerHealth 设置玩家回合状态
+func (r *RoomInfo) SetPlayerRound(username string, round string) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	player, exists := r.Players[username]
+	if !exists {
+		return fmt.Errorf("player %s not found in room", username)
+	}
+
+	// 设置玩家的回合状态
+	player.Round = round
 	return nil
 }
 
@@ -209,8 +256,8 @@ func (r *RoomInfo) AddCardToPlayer(username string, card models.Card) error {
 	return nil
 }
 
-// RemoveCardFromPlayer 从玩家手牌中移除卡牌
-func (r *RoomInfo) RemoveCardFromPlayer(username string, cardIndex int) error {
+// RemoveCardsFromPlayerByUID 从玩家手牌中移除指定UID的卡牌
+func (r *RoomInfo) RemoveCardsFromPlayerByUID(username string, cardUIDs []int64) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -219,12 +266,31 @@ func (r *RoomInfo) RemoveCardFromPlayer(username string, cardIndex int) error {
 		return fmt.Errorf("player %s not found in room", username)
 	}
 
-	if cardIndex < 0 || cardIndex >= len(player.HandCards) {
-		return fmt.Errorf("invalid card index %d", cardIndex)
+	// 创建UID映射用于快速查找
+	uidMap := make(map[int64]bool)
+	for _, uid := range cardUIDs {
+		uidMap[uid] = true
 	}
 
-	// 移除指定索引的卡牌
-	player.HandCards = append(player.HandCards[:cardIndex], player.HandCards[cardIndex+1:]...)
+	// 过滤出不在移除列表中的卡牌
+	var remainingCards []models.Card
+	removedCount := 0
+
+	for _, card := range player.HandCards {
+		if uidMap[card.UID] {
+			removedCount++
+		} else {
+			remainingCards = append(remainingCards, card)
+		}
+	}
+
+	// 检查是否所有要移除的卡牌都找到了
+	if removedCount != len(cardUIDs) {
+		return fmt.Errorf("could not find all cards to remove: expected %d, found %d", len(cardUIDs), removedCount)
+	}
+
+	// 更新玩家手牌
+	player.HandCards = remainingCards
 	return nil
 }
 
@@ -319,4 +385,67 @@ func (r *RoomInfo) IsAllPlayersReady() bool {
 		}
 	}
 	return true
+}
+
+// DrawRandomCardFromLevel1Pool 从一级卡牌池随机抽取一张卡牌
+func (r *RoomInfo) DrawRandomCardFromLevel1Pool() (*models.Card, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if len(r.Level1CardPool) == 0 {
+		return nil, fmt.Errorf("level 1 card pool is empty")
+	}
+
+	// 随机选择一个索引
+	randomIndex := rand.Intn(len(r.Level1CardPool))
+
+	// 获取选中的卡牌
+	selectedCard := r.Level1CardPool[randomIndex]
+
+	// 从卡牌池中移除该卡牌
+	r.Level1CardPool = append(r.Level1CardPool[:randomIndex], r.Level1CardPool[randomIndex+1:]...)
+
+	return &selectedCard, nil
+}
+
+// DrawRandomCardsFromLevel1Pool 从一级卡牌池随机抽取多张卡牌
+func (r *RoomInfo) DrawRandomCardsFromLevel1Pool(count int) ([]models.Card, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if count <= 0 {
+		return nil, fmt.Errorf("count must be greater than 0")
+	}
+
+	if len(r.Level1CardPool) < count {
+		return nil, fmt.Errorf("not enough cards in level 1 pool: requested %d, available %d", count, len(r.Level1CardPool))
+	}
+
+	var drawnCards []models.Card
+
+	// 抽取指定数量的卡牌
+	for i := 0; i < count; i++ {
+		if len(r.Level1CardPool) == 0 {
+			break
+		}
+
+		// 随机选择一个索引
+		randomIndex := rand.Intn(len(r.Level1CardPool))
+
+		// 获取选中的卡牌
+		selectedCard := r.Level1CardPool[randomIndex]
+		drawnCards = append(drawnCards, selectedCard)
+
+		// 从卡牌池中移除该卡牌
+		r.Level1CardPool = append(r.Level1CardPool[:randomIndex], r.Level1CardPool[randomIndex+1:]...)
+	}
+
+	return drawnCards, nil
+}
+
+// GetLevel1CardPoolSize 获取一级卡牌池大小
+func (r *RoomInfo) GetLevel1CardPoolSize() int {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	return len(r.Level1CardPool)
 }

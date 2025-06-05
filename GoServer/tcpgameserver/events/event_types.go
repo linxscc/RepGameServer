@@ -1,13 +1,13 @@
 package events
 
 // 预定义的事件类型常量
-const (
-	// 游戏相关事件
-	EventGameStart  = "game.start"  // 游戏开始
-	EventGameEnd    = "game.end"    // 游戏结束
-	EventGamePause  = "game.pause"  // 游戏暂停
-	EventGameResume = "game.resume" // 游戏恢复
-	EventGameReset  = "game.reset"  // 游戏重置
+const ( // 游戏相关事件
+	EventGameStart       = "game.start"        // 游戏开始
+	EventGameEnd         = "game.end"          // 游戏结束
+	EventGamePause       = "game.pause"        // 游戏暂停
+	EventGameResume      = "game.resume"       // 游戏恢复
+	EventGameReset       = "game.reset"        // 游戏重置
+	EventGameStateUpdate = "game.state_update" // 游戏状态更新
 
 	// 玩家相关事件
 	EventPlayerJoin   = "player.join"   // 玩家加入
@@ -16,12 +16,13 @@ const (
 	EventPlayerAction = "player.action" // 玩家行动
 	EventPlayerDeath  = "player.death"  // 玩家死亡
 	EventPlayerRevive = "player.revive" // 玩家复活
-
 	// 卡牌相关事件
 	EventCardDraw    = "card.draw"    // 抽卡
+	EventCardBonds   = "card.bonds"   // 羁绊
 	EventCardPlay    = "card.play"    // 出牌
 	EventCardDiscard = "card.discard" // 弃牌
 	EventCardShuffle = "card.shuffle" // 洗牌
+	EventCardCompose = "card.compose" // 卡牌合成
 	EventDeckEmpty   = "deck.empty"   // 牌库为空
 
 	// 战斗相关事件
@@ -37,11 +38,15 @@ const (
 	EventRoomDestroy = "room.destroy" // 房间销毁
 	EventRoomFull    = "room.full"    // 房间已满
 	EventRoomEmpty   = "room.empty"   // 房间为空
-
 	// 连接相关事件
-	EventClientConnect    = "client.connect"    // 客户端连接
-	EventClientDisconnect = "client.disconnect" // 客户端断开
-	EventClientTimeout    = "client.timeout"    // 客户端超时
+	EventClientConnect     = "client.connect"     // 客户端连接
+	EventClientDisconnect  = "client.disconnect"  // 客户端断开
+	EventClientTimeout     = "client.timeout"     // 客户端超时
+	EventClientBind        = "client.bind"        // 客户端绑定用户
+	EventClientUnbind      = "client.unbind"      // 客户端解绑用户
+	EventClientKicked      = "client.kicked"      // 客户端被踢出
+	EventClientReconnect   = "client.reconnect"   // 客户端重连
+	EventConnectionCleanup = "connection.cleanup" // 连接清理
 
 	// 系统相关事件
 	EventSystemStart       = "system.start"       // 系统启动

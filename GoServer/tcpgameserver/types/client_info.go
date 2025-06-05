@@ -10,11 +10,12 @@ import (
 type PlayerStatus string
 
 const (
-	StatusConnected    PlayerStatus = "connected"    // 已连接
-	StatusLoggedIn     PlayerStatus = "logged_in"    // 已登录
-	StatusReady        PlayerStatus = "ready"        // 准备就绪
-	StatusInGame       PlayerStatus = "in_game"      // 游戏中
-	StatusDisconnected PlayerStatus = "disconnected" // 已断开连接
+	StatusConnected        PlayerStatus = "connected"         // 已连接
+	StatusLoggedIn         PlayerStatus = "logged_in"         // 已登录
+	StatusReady            PlayerStatus = "ready"             // 准备就绪
+	StatusInGame           PlayerStatus = "in_game"           // 游戏中
+	StatusWaitingReconnect PlayerStatus = "waiting_reconnect" // 等待重连
+	StatusDisconnected     PlayerStatus = "disconnected"      // 已断开连接
 )
 
 // ClientInfo 客户端连接信息

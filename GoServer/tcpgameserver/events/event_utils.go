@@ -51,3 +51,24 @@ func CreateSystemEventData(eventType, message string) *EventData {
 
 	return NewEventData(eventType, "system", data)
 }
+
+// CreateConnectionEventData 创建连接相关事件数据
+func CreateConnectionEventData(eventType, clientID, remoteAddr string) *EventData {
+	data := make(map[string]interface{})
+	data["client_id"] = clientID
+	data["remote_addr"] = remoteAddr
+	data["connection_time"] = time.Now().Format("2006-01-02 15:04:05")
+
+	return NewEventData(eventType, "connection_manager", data)
+}
+
+// CreateUserConnectionEventData 创建用户连接相关事件数据
+func CreateUserConnectionEventData(eventType, clientID, username, remoteAddr string) *EventData {
+	data := make(map[string]interface{})
+	data["client_id"] = clientID
+	data["username"] = username
+	data["remote_addr"] = remoteAddr
+	data["connection_time"] = time.Now().Format("2006-01-02 15:04:05")
+
+	return NewEventData(eventType, "connection_manager", data).SetUser(username)
+}

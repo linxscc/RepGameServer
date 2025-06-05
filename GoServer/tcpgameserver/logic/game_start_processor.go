@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"net"
 	"time"
 )
@@ -29,7 +28,6 @@ func (g *GameStartProcessor) ProcessGameStart(eventData interface{}) error {
 	if data, ok := eventData.(*events.EventData); ok {
 		// 检查是否是匹配触发的游戏开始事件
 		if triggerSource, exists := data.GetString("trigger_source"); exists && triggerSource == "user_ready_handler" {
-			log.Printf("🎮 接收到游戏开始事件，开始执行匹配逻辑")
 
 			// 执行匹配逻辑
 			err := g.performMatchmaking()
@@ -105,7 +103,6 @@ func (g *GameStartProcessor) AddPlayersToRoom(room *types.RoomInfo, players []*t
 		log.Printf("Added player %s to room %s", player.Username, room.RoomID)
 	}
 
-	log.Printf("Successfully added %d players to room %s", len(players), room.RoomID)
 	return nil
 }
 
@@ -118,7 +115,6 @@ func (g *GameStartProcessor) DealInitialCardsToAllPlayers(room *types.RoomInfo) 
 		}
 	}
 
-	log.Printf("Dealt initial cards to all players in room %s", room.RoomID)
 	return nil
 }
 
@@ -130,30 +126,11 @@ func (g *GameStartProcessor) DealInitialCardsToPlayer(room *types.RoomInfo, user
 		return fmt.Errorf("player %s not found in room", username)
 	}
 
-	// 从1级卡牌池中随机抽取6张卡牌
-	if len(room.Level1CardPool) < 6 {
-		return fmt.Errorf("insufficient cards in level 1 pool")
-	}
-
-	// 创建随机数生成器
-	randGen := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	// 随机选择6张卡牌
-	for i := 0; i < 6; i++ {
-		if len(room.Level1CardPool) == 0 {
-			break
-		}
-
-		// 随机选择一张卡牌
-		randomIndex := randGen.Intn(len(room.Level1CardPool))
-		selectedCard := room.Level1CardPool[randomIndex]
-
-		// 将卡牌添加到玩家手牌
-		player.HandCards = append(player.HandCards, selectedCard)
-
-		// 从房间卡牌池中移除已分发的卡牌
-		room.Level1CardPool = append(room.Level1CardPool[:randomIndex], room.Level1CardPool[randomIndex+1:]...)
-	}
+	// 初始化玩家手牌
+	// 从房间的1级卡牌池中抽取6张卡牌
+	var initCards []models.Card
+	initCards, _ = room.DrawRandomCardsFromLevel1Pool(6)
+	player.HandCards = initCards
 
 	log.Printf("Dealt %d cards to player %s", len(player.HandCards), username)
 	return nil
@@ -169,31 +146,43 @@ func (g *GameStartProcessor) InitializePlayersHealthAndNotify(room *types.RoomIn
 		}
 	}
 
+	// 获取所有羁绊数据
+	bondPoolManager := cards.GetBondPoolManager()
+	allBonds := bondPoolManager.GetAllBonds()
 	// 为每个玩家设置初始血量并发送游戏开始消息
-	for _, player := range players {
+	for i, player := range players {
 		if player.Username == "" {
 			continue
 		}
 
 		// 设置玩家初始血量
-		err := g.SetPlayerInitialHealth(room, player.Username, 100)
+		err := g.SetPlayerInitialHealth(room, player.Username)
 		if err != nil {
 			return fmt.Errorf("failed to set initial health for player %s: %v", player.Username, err)
 		}
+		// 设置先手回合
+		if isFirstPlayer := (i == 0); isFirstPlayer {
+			g.SetPlayerRound(room, player.Username)
+		}
 
-		// 发送游戏开始通知
+		// 先发送羁绊数据消息 (5002)
+		err = g.SendBondDataNotification(player, allBonds, connManager)
+		if err != nil {
+			return fmt.Errorf("failed to send bond data notification to player %s: %v", player.Username, err)
+		}
+
+		// 再发送游戏开始通知 (5001)
 		err = g.SendGameStartNotification(room, player, playerUsernames, connManager)
 		if err != nil {
 			return fmt.Errorf("failed to send game start notification to player %s: %v", player.Username, err)
 		}
 	}
 
-	log.Printf("Initialized health and sent notifications to all players in room %s", room.RoomID)
 	return nil
 }
 
 // SetPlayerInitialHealth 设置玩家初始血量
-func (g *GameStartProcessor) SetPlayerInitialHealth(room *types.RoomInfo, username string, health int) error {
+func (g *GameStartProcessor) SetPlayerInitialHealth(room *types.RoomInfo, username string) error {
 	// 获取房间中的玩家信息
 	roomPlayer, exists := room.Players[username]
 	if !exists {
@@ -201,12 +190,23 @@ func (g *GameStartProcessor) SetPlayerInitialHealth(room *types.RoomInfo, userna
 	}
 
 	// 设置初始血量
-	roomPlayer.MaxHealth = health
-	roomPlayer.CurrentHealth = health
 	roomPlayer.DamageDealt = 0
 	roomPlayer.DamageReceived = 0
 
-	log.Printf("Set initial health for player %s to %d", username, health)
+	return nil
+}
+
+// SetPlayerRound 设置玩家回合状态
+func (g *GameStartProcessor) SetPlayerRound(room *types.RoomInfo, username string) error {
+	// 获取房间中的玩家信息
+	roomPlayer, exists := room.Players[username]
+	if !exists {
+		return fmt.Errorf("player %s not found in room", username)
+	}
+
+	// 设置回合状态：true表示先手，false表示后手
+	roomPlayer.Round = "current"
+
 	return nil
 }
 
@@ -226,8 +226,31 @@ func (g *GameStartProcessor) SendGameStartNotification(room *types.RoomInfo, pla
 
 	g.sendTCPResponse(clientInfo.Conn, response)
 
-	roomPlayer := room.Players[player.Username]
-	log.Printf("Sent game start message to player %s (Health: %d)", player.Username, roomPlayer.CurrentHealth)
+	return nil
+}
+
+// SendBondDataNotification 发送羁绊数据通知
+func (g *GameStartProcessor) SendBondDataNotification(player *types.ClientInfo, allBonds map[int]*models.BondModel, connManager *service.ConnectionManager) error {
+	// 将羁绊数据转换为切片格式，便于序列化
+	bondList := make([]*models.BondModel, 0, len(allBonds))
+	for _, bond := range allBonds {
+		bondList = append(bondList, bond)
+	}
+
+	// 发送羁绊数据消息 (5002)
+	response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(5002, map[string]interface{}{
+		"bonds": bondList,
+		"count": len(bondList),
+	})
+
+	// 获取玩家连接并发送消息
+	clientInfo, exists := connManager.GetConnectionByClientID(player.ClientID)
+	if !exists || clientInfo == nil || clientInfo.Conn == nil {
+		return fmt.Errorf("player connection not found or invalid")
+	}
+
+	g.sendTCPResponse(clientInfo.Conn, response)
+
 	return nil
 }
 
@@ -301,10 +324,11 @@ func (g *GameStartProcessor) createPlayerGameInfo(room *types.RoomInfo, username
 	return &models.PlayerGameInfo{
 		RoomId:         room.RoomID,
 		Username:       username,
+		Round:          room.Players[username].Round,
 		Health:         float64(roomPlayer.CurrentHealth),
 		DamageDealt:    roomPlayer.DamageDealt,
 		DamageReceived: roomPlayer.DamageReceived,
-		BondModels:     make([]models.BondModel, 0), // 暂时为空，后续可以添加羁绊系统
+		TriggeredBonds: make([]models.BondModel, 0),
 		SelfCards:      roomPlayer.HandCards,
 		OtherCards:     otherCards,
 	}

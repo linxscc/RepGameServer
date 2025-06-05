@@ -1,9 +1,16 @@
 package logic
 
 import (
+	"encoding/json"
+	"net"
+	"time"
+
 	"GoServer/tcpgameserver/cards"
 	"GoServer/tcpgameserver/events"
+	"GoServer/tcpgameserver/models"
+	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/tools"
+	"GoServer/tcpgameserver/types"
 	"log"
 )
 
@@ -48,6 +55,7 @@ func NewGameEventListener() *GameEventListener {
 				events.EventGameEnd,
 				events.EventGamePause,
 				events.EventGameResume,
+				events.EventGameStateUpdate,
 			},
 			Priority: 10, // 高优先级
 		},
@@ -64,6 +72,8 @@ func (g *GameEventListener) HandleEvent(eventType string, data interface{}) {
 		g.handleGamePause(data)
 	case events.EventGameResume:
 		g.handleGameResume(data)
+	case events.EventGameStateUpdate:
+		g.handleGameStateUpdate(data)
 	default:
 		log.Printf("GameEventListener: Unknown event type: %s", eventType)
 	}
@@ -111,6 +121,28 @@ func (g *GameEventListener) handleGameResume(data interface{}) {
 	}
 }
 
+func (g *GameEventListener) handleGameStateUpdate(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		log.Printf("🔄 Game State Updated - Room: %s", eventData.RoomID)
+
+		// 获取连接管理器
+		connManager := service.GetConnectionManager()
+		roomManager := service.GetRoomManager()
+
+		// 获取房间信息
+		room, err := roomManager.GetRoom(eventData.RoomID)
+		if err != nil {
+			log.Printf("Failed to get room %s for state update: %v", eventData.RoomID, err)
+			return
+		}
+
+		// 向房间内所有玩家发送游戏状态更新
+		// g.broadcastGameStateToRoom(room, eventData, connManager)
+		broadcaster := NewGameStateBroadcaster()
+		broadcaster.BroadcastGameStateToRoom(room, eventData, connManager)
+	}
+}
+
 // CardEventListener 卡牌事件监听器
 type CardEventListener struct {
 	BaseEventListener
@@ -125,6 +157,7 @@ func NewCardEventListener() *CardEventListener {
 				events.EventCardPlay,
 				events.EventCardDiscard,
 				events.EventCardShuffle,
+				events.EventCardCompose,
 				events.EventDeckEmpty,
 			},
 			Priority: 30,
@@ -138,6 +171,8 @@ func (c *CardEventListener) HandleEvent(eventType string, data interface{}) {
 		c.handleCardDraw(data)
 	case events.EventCardPlay:
 		c.handleCardPlay(data)
+	case events.EventCardCompose:
+		c.handleCardCompose(data)
 	case events.EventDeckEmpty:
 		c.handleDeckEmpty(data)
 	default:
@@ -160,26 +195,103 @@ func (c *CardEventListener) handleCardDraw(data interface{}) {
 
 func (c *CardEventListener) handleCardPlay(data interface{}) {
 	if eventData, ok := data.(*events.EventData); ok {
-		cardName, _ := eventData.GetString("card_name")
-		playerName, _ := eventData.GetString("player_name")
-		target, _ := eventData.GetString("target")
+		log.Printf("🎯 Received card play event, processing with PlayCardProcessor")
 
-		log.Printf("🎯 Card Play - %s played %s on %s", playerName, cardName, target)
+		// 获取玩家名称
+		player, exists := eventData.GetString("player")
+		if !exists {
+			log.Printf("❌ Player name not found in event data")
+			return
+		}
 
-		// 处理出牌逻辑
-		// 执行卡牌效果
-		// 消耗资源
-		// 移动卡牌到弃牌堆
+		// 获取玩家发送的自身卡牌数据
+		selfCardsData, exists := eventData.GetData("self_cards")
+		if !exists {
+			log.Printf("❌ Self cards data not found in event data")
+			return
+		}
 
-		// 如果是攻击卡牌，触发伤害事件
-		if damage, exists := eventData.GetFloat64("damage"); exists && damage > 0 {
-			damageData := events.NewEventData(events.EventDamage, "card_system", map[string]interface{}{
-				"target":   target,
-				"damage":   damage,
-				"source":   cardName,
-				"attacker": playerName,
-			})
-			events.Publish(events.EventDamage, damageData)
+		// 转换为卡牌切片
+		receivedSelfCards, ok := selfCardsData.([]models.Card)
+		if !ok {
+			log.Printf("❌ Failed to convert self_cards data to []models.Card")
+			return
+		}
+
+		// 获取房间管理器来查找房间ID
+		roomManager := service.GetRoomManager()
+		room, err := roomManager.FindRoomByPlayer(player)
+		if err != nil {
+			log.Printf("❌ Failed to get room for player %s: %v", player, err)
+			return
+		}
+		// 构建出牌数据（所有验证交给ProcessPlayCard处理）
+		playCardData := &PlayCardData{
+			RoomID:      room.RoomID,
+			Player:      player,
+			CardsToPlay: receivedSelfCards, // 直接传递接收到的卡牌数据
+			TargetType:  "opponent",        // 默认目标为对手
+		}
+
+		// 提取卡牌信息用于日志记录
+		cardNames := make([]string, len(receivedSelfCards))
+		cardUIDs := make([]int64, len(receivedSelfCards))
+		for i, card := range receivedSelfCards {
+			cardNames[i] = card.Name
+			cardUIDs[i] = card.UID
+		}
+
+		log.Printf("🎯 Card Play - %s attempting to play %d cards: %v (UIDs: %v)",
+			player, len(receivedSelfCards), cardNames, cardUIDs)
+
+		// 使用PlayCardProcessor处理出牌逻辑（包含所有验证）
+		processor := NewPlayCardProcessor()
+		err = processor.ProcessPlayCard(playCardData)
+		if err != nil {
+			log.Printf("❌ Failed to process card play: %v", err)
+		} else {
+			log.Printf("✅ Card play processed successfully")
+		}
+	}
+}
+
+func (c *CardEventListener) handleCardCompose(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		log.Printf("🔧 Received card compose event, processing with CardComposeProcessor")
+
+		// 获取玩家名称
+		player, _ := eventData.GetString("player")
+		// 获取房间ID
+		roomID, _ := eventData.GetString("room_id")
+		// 获取客户端ID
+		clientID, _ := eventData.GetString("client_id")
+		// 获取卡牌数据
+		cardsData, _ := eventData.GetData("cards")
+		// 转换为卡牌切片
+		cards, ok := cardsData.([]models.Card)
+		if !ok {
+			log.Printf("❌ Failed to convert cards data to []models.Card")
+			return
+		}
+
+		log.Printf("🔧 Card Compose - %s attempting to compose %d cards in room %s",
+			player, len(cards), roomID)
+
+		// 构建合成数据
+		composeData := &CardComposeData{
+			RoomID:   roomID,
+			Player:   player,
+			Cards:    cards,
+			ClientID: clientID,
+		}
+
+		// 使用CardComposeProcessor处理合成逻辑
+		processor := NewCardComposeProcessor()
+		err := processor.ProcessCardCompose(composeData)
+		if err != nil {
+			log.Printf("❌ Failed to process card compose: %v", err)
+		} else {
+			log.Printf("✅ Card compose processed successfully")
 		}
 	}
 }
@@ -362,6 +474,13 @@ func (s *SystemEventListener) handleSystemStart(data interface{}) {
 			log.Println("Card pool initialized successfully")
 		}
 
+		// 初始化羁绊池
+		if err := cards.InitBondPool(); err != nil {
+			log.Printf("Failed to initialize bond pool: %v", err)
+		} else {
+			log.Println("Bond pool initialized successfully")
+		}
+
 	}
 }
 
@@ -476,6 +595,259 @@ func (r *RoomEventListener) handleRoomEmpty(data interface{}) {
 	}
 }
 
+// ConnectionEventListener 连接事件监听器
+type ConnectionEventListener struct {
+	BaseEventListener
+}
+
+func NewConnectionEventListener() *ConnectionEventListener {
+	return &ConnectionEventListener{
+		BaseEventListener: BaseEventListener{
+			Name: "ConnectionEventListener",
+			EventTypes: []string{
+				events.EventClientConnect,
+				events.EventClientDisconnect,
+				events.EventClientTimeout,
+				events.EventClientBind,
+				events.EventClientUnbind,
+				events.EventClientKicked,
+				events.EventClientReconnect,
+				events.EventConnectionCleanup,
+			},
+			Priority: 20, // 中等优先级
+		},
+	}
+}
+
+func (c *ConnectionEventListener) HandleEvent(eventType string, data interface{}) {
+	switch eventType {
+	case events.EventClientConnect:
+		c.handleClientConnect(data)
+	case events.EventClientDisconnect:
+		c.handleClientDisconnect(data)
+	case events.EventClientTimeout:
+		c.handleClientTimeout(data)
+	case events.EventClientBind:
+		c.handleClientBind(data)
+	case events.EventClientUnbind:
+		c.handleClientUnbind(data)
+	case events.EventClientKicked:
+		c.handleClientKicked(data)
+	case events.EventClientReconnect:
+		c.handleClientReconnect(data)
+	case events.EventConnectionCleanup:
+		c.handleConnectionCleanup(data)
+	default:
+		log.Printf("ConnectionEventListener: Unknown event type: %s", eventType)
+	}
+}
+
+func (c *ConnectionEventListener) handleClientConnect(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		clientID, _ := eventData.GetString("client_id")
+		connectionType, _ := eventData.GetString("connection_type")
+		userAgent, _ := eventData.GetString("user_agent")
+		version, _ := eventData.GetString("version")
+
+		// 获取连接管理器来设置连接元数据
+		connManager := service.GetConnectionManager()
+		if clientInfo, exists := connManager.GetConnectionByClientID(clientID); exists {
+			// 设置连接元数据
+			clientInfo.SetMetadata("connection_type", connectionType)
+			clientInfo.SetMetadata("user_agent", userAgent)
+			clientInfo.SetMetadata("version", version)
+			if firstConnectTime, exists := eventData.GetData("first_connect_time"); exists {
+				clientInfo.SetMetadata("first_connect_time", firstConnectTime)
+			}
+
+			// 发送欢迎消息
+			welcomeResponse := tools.GlobalResponseHelper.CreateSuccessTcpResponse(1001, map[string]interface{}{
+				"client_id":   clientID,
+				"server_time": time.Now().Unix(),
+				"status":      "connected",
+				"message":     "Welcome to the game server!",
+			})
+
+			// 通过连接发送欢迎消息
+			if welcomeData, err := json.Marshal(welcomeResponse); err == nil {
+				welcomeData = append(welcomeData, '\n')
+				if _, writeErr := clientInfo.Conn.Write(welcomeData); writeErr != nil {
+					log.Printf("Failed to send welcome message to client %s: %v", clientID, writeErr)
+				}
+			}
+		}
+
+		// 处理客户端连接逻辑
+		// 初始化连接状态
+		// 记录连接统计
+		// 发送欢迎消息已完成
+	}
+}
+
+func (c *ConnectionEventListener) handleClientDisconnect(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		clientID, _ := eventData.GetString("client_id")
+		username, _ := eventData.GetString("username")
+		reason, _ := eventData.GetString("reason")
+
+		handler := NewDisconnectHandler()
+		err := handler.HandlePlayerDisconnect(clientID, username, reason)
+		if err != nil {
+			log.Printf("❌ Failed to handle client disconnect for user %s: %v", username, err)
+		} else {
+			log.Printf("✅ Successfully handled disconnect for client %s", clientID)
+		}
+	}
+}
+
+func (c *ConnectionEventListener) handleClientTimeout(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		clientID, _ := eventData.GetString("client_id")
+		username, _ := eventData.GetString("username")
+		lastActivity, _ := eventData.GetString("last_activity")
+
+		log.Printf("⏰ Client Timeout - ID: %s, User: %s, Last Activity: %s",
+			clientID, username, lastActivity)
+
+		// 处理客户端超时逻辑
+		// 标记为超时状态
+		// 给予短暂重连时间
+		// 或直接断开连接
+
+		// 触发断开连接事件
+		disconnectData := events.CreateUserConnectionEventData(
+			events.EventClientDisconnect, clientID, username, "")
+		disconnectData.AddData("reason", "timeout")
+		disconnectData.AddData("last_activity", lastActivity)
+		events.Publish(events.EventClientDisconnect, disconnectData)
+	}
+}
+
+func (c *ConnectionEventListener) handleClientBind(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		clientID, _ := eventData.GetString("client_id")
+		username, _ := eventData.GetString("username")
+		remoteAddr, _ := eventData.GetString("remote_addr")
+
+		log.Printf("👤 Client Bound - ID: %s, User: %s, Address: %s",
+			clientID, username, remoteAddr)
+
+		// 处理用户绑定逻辑
+		// 加载用户数据
+		// 设置在线状态
+		// 发送登录成功消息
+		// 同步游戏状态
+	}
+}
+
+func (c *ConnectionEventListener) handleClientUnbind(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		clientID, _ := eventData.GetString("client_id")
+		username, _ := eventData.GetString("username")
+		reason, _ := eventData.GetString("reason")
+
+		log.Printf("👥 Client Unbound - ID: %s, User: %s, Reason: %s",
+			clientID, username, reason)
+
+		// 处理用户解绑逻辑
+		// 保存用户数据
+		// 设置离线状态
+		// 清理用户相关状态
+	}
+}
+
+func (c *ConnectionEventListener) handleClientKicked(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		clientID, _ := eventData.GetString("client_id")
+		username, _ := eventData.GetString("username")
+		kickReason, _ := eventData.GetString("kick_reason")
+		kickedBy, _ := eventData.GetString("kicked_by")
+		newClientID, _ := eventData.GetString("new_client_id")
+
+		// 获取连接管理器
+		connManager := service.GetConnectionManager()
+
+		// 先触发断开连接事件处理原客户端
+		disconnectData := events.CreateUserConnectionEventData(
+			events.EventClientDisconnect, clientID, username, "")
+		disconnectData.AddData("reason", "kicked")
+		disconnectData.AddData("kick_reason", kickReason)
+		disconnectData.AddData("kicked_by", kickedBy)
+		events.Publish(events.EventClientDisconnect, disconnectData) // 处理新客户端绑定
+		if newClientID != "" {
+			// 获取新客户端连接
+			newClient, exists := connManager.GetConnectionByClientID(newClientID)
+			if exists && newClient != nil {
+				// 绑定用户到新连接
+				err := connManager.BindUser(newClientID, username)
+				if err != nil {
+					log.Printf("❌ Failed to bind user %s to new client %s: %v", username, newClientID, err)
+					return
+				}
+
+				// 设置新客户端状态为已登录
+				connManager.SetPlayerStatus(newClientID, types.StatusLoggedIn)
+
+				// 发送登录成功响应给新客户端
+				if newClient.Conn != nil {
+					response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(2001, map[string]interface{}{
+						"username": username,
+					})
+					sendTCPResponse(newClient.Conn, response)
+					log.Printf("✅ User %s successfully bound to new client %s after kick", username, newClientID)
+				}
+			} else {
+				log.Printf("❌ New client %s not found during kick handling", newClientID)
+			}
+		}
+	}
+}
+
+func (c *ConnectionEventListener) handleClientReconnect(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		clientID, _ := eventData.GetString("client_id")
+		username, _ := eventData.GetString("username")
+
+		handler := NewReconnectionHandler()
+		err := handler.HandlePlayerReconnection(clientID, username)
+		if err != nil {
+			log.Printf("❌ Failed to handle client reconnection for user %s: %v", username, err)
+		} else {
+			log.Printf("✅ Successfully handled reconnection for user %s", username)
+		}
+	}
+}
+
+func (c *ConnectionEventListener) handleConnectionCleanup(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+		cleanedCount, _ := eventData.GetInt("cleaned_count")
+		totalConnections, _ := eventData.GetInt("total_connections")
+		cleanupDuration, _ := eventData.GetString("cleanup_duration")
+
+		log.Printf("🧹 Connection Cleanup - Cleaned: %d, Total: %d, Duration: %s",
+			cleanedCount, totalConnections, cleanupDuration)
+
+		// 处理连接清理逻辑
+		// 记录清理统计
+		// 优化内存使用
+		// 更新连接监控数据
+	}
+}
+
+// sendTCPResponse 发送TCP响应消息
+func sendTCPResponse(conn net.Conn, resp *models.TcpResponse) {
+	jsonBytes, err := json.Marshal(resp)
+	if err != nil {
+		log.Printf("Failed to marshal response: %v", err)
+		return
+	}
+	jsonBytes = append(jsonBytes, '\n')
+	_, err = conn.Write(jsonBytes)
+	if err != nil {
+		log.Printf("Failed to write response to connection: %v", err)
+	}
+}
+
 // ListenerManager 监听器管理器
 type ListenerManager struct {
 	listeners       []EventListener
@@ -548,6 +920,7 @@ func (lm *ListenerManager) RegisterAllDefaultListeners() {
 	lm.RegisterListener(NewBattleEventListener())
 	lm.RegisterListener(NewCardEventListener())
 	lm.RegisterListener(NewRoomEventListener())
+	lm.RegisterListener(NewConnectionEventListener())
 
 	log.Printf("Registered %d default event listeners", lm.GetListenerCount())
 }
@@ -574,8 +947,6 @@ func InitializeEventSystem() {
 	// 发布系统启动事件
 	systemStartData := events.CreateSystemEventData(events.EventSystemStart, "Event system initialized successfully")
 	events.Publish(events.EventSystemStart, systemStartData)
-
-	log.Printf("Event system initialized with %d listeners", listenerManager.GetListenerCount())
 }
 
 // ShutdownEventSystem 关闭事件系统
@@ -588,6 +959,4 @@ func ShutdownEventSystem() {
 
 	// 清空所有订阅
 	events.Clear()
-
-	log.Println("Event system shutdown complete")
 }

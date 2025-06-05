@@ -1,6 +1,7 @@
 package service
 
 import (
+	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/types"
 	"fmt"
 	"log"
@@ -157,11 +158,158 @@ func (rm *RoomManager) GetRoomStats() map[string]interface{} {
 			playingRooms++
 		}
 	}
-
 	return map[string]interface{}{
 		"total_rooms":   len(rm.rooms),
 		"waiting_rooms": waitingRooms,
 		"playing_rooms": playingRooms,
 		"total_players": totalPlayers,
 	}
+}
+
+// GetPlayerGameInfo 获取玩家游戏信息
+func (rm *RoomManager) GetPlayerGameInfo(username string) (*models.PlayerGameInfo, error) {
+	room, err := rm.FindRoomByPlayer(username)
+	if err != nil {
+		return nil, err
+	}
+
+	// 检查房间是否在游戏状态
+	if room.Status != "playing" {
+		return nil, nil // 不在游戏中
+	}
+
+	// 获取房间内所有玩家
+	allPlayers := make([]string, 0, len(room.Players))
+	for username := range room.Players {
+		allPlayers = append(allPlayers, username)
+	}
+
+	// 创建游戏信息
+	return rm.createPlayerGameInfo(room, username, allPlayers), nil
+}
+
+// createPlayerGameInfo 创建玩家游戏信息
+func (rm *RoomManager) createPlayerGameInfo(room *types.RoomInfo, username string, allPlayers []string) *models.PlayerGameInfo {
+	roomPlayer := room.Players[username]
+
+	// 获取对方玩家的卡牌列表
+	otherCards := make([]models.Card, 0)
+	for _, playerName := range allPlayers {
+		if playerName != username {
+			if otherPlayer, exists := room.Players[playerName]; exists {
+				otherCards = append(otherCards, otherPlayer.HandCards...)
+			}
+		}
+	}
+
+	return &models.PlayerGameInfo{
+		RoomId:         room.RoomID,
+		Username:       username,
+		Round:          roomPlayer.Round,
+		Health:         float64(roomPlayer.CurrentHealth),
+		DamageDealt:    roomPlayer.DamageDealt,
+		DamageReceived: roomPlayer.DamageReceived,
+		TriggeredBonds: make([]models.BondModel, 0),
+		SelfCards:      roomPlayer.HandCards,
+		OtherCards:     otherCards,
+	}
+}
+
+// DrawCardFromLevel1Pool 从指定房间的一级卡牌池中抽取一张卡牌
+func (rm *RoomManager) DrawCardFromLevel1Pool(roomID string) (*models.Card, error) {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	return room.DrawRandomCardFromLevel1Pool()
+}
+
+// DrawCardsFromLevel1Pool 从指定房间的一级卡牌池中抽取多张卡牌
+func (rm *RoomManager) DrawCardsFromLevel1Pool(roomID string, count int) ([]models.Card, error) {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	return room.DrawRandomCardsFromLevel1Pool(count)
+}
+
+// DrawCardForPlayer 为指定玩家从一级卡牌池抽取一张卡牌并添加到手牌
+func (rm *RoomManager) DrawCardForPlayer(roomID, username string) error {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return err
+	}
+
+	// 从一级卡牌池抽取卡牌
+	card, err := room.DrawRandomCardFromLevel1Pool()
+	if err != nil {
+		return fmt.Errorf("failed to draw card from level 1 pool: %v", err)
+	}
+
+	// 将卡牌添加到玩家手牌
+	err = room.AddCardToPlayer(username, *card)
+	if err != nil {
+		// 如果添加失败，需要将卡牌放回卡牌池
+		room.Level1CardPool = append(room.Level1CardPool, *card)
+		return fmt.Errorf("failed to add card to player %s: %v", username, err)
+	}
+
+	log.Printf("Drew card %s (UID: %d) for player %s in room %s", card.Name, card.UID, username, roomID)
+	return nil
+}
+
+// DrawCardsForPlayer 为指定玩家从一级卡牌池抽取多张卡牌并添加到手牌
+func (rm *RoomManager) DrawCardsForPlayer(roomID, username string, count int) error {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return err
+	}
+
+	// 检查玩家当前手牌数量
+	playerInfo, err := room.GetPlayerInfo(username)
+	if err != nil {
+		return err
+	}
+
+	// 检查是否有足够空间添加卡牌
+	if len(playerInfo.HandCards)+count > room.MaxHandCards {
+		return fmt.Errorf("player %s cannot hold %d more cards (current: %d, max: %d)",
+			username, count, len(playerInfo.HandCards), room.MaxHandCards)
+	}
+
+	// 从一级卡牌池抽取卡牌
+	cards, err := room.DrawRandomCardsFromLevel1Pool(count)
+	if err != nil {
+		return fmt.Errorf("failed to draw %d cards from level 1 pool: %v", count, err)
+	}
+
+	// 将卡牌添加到玩家手牌
+	successCount := 0
+	for _, card := range cards {
+		err = room.AddCardToPlayer(username, card)
+		if err != nil {
+			// 如果添加失败，将已抽取但未添加的卡牌放回卡牌池
+			for i := successCount; i < len(cards); i++ {
+				room.Level1CardPool = append(room.Level1CardPool, cards[i])
+			}
+			return fmt.Errorf("failed to add card %s to player %s after %d successful additions: %v",
+				card.Name, username, successCount, err)
+		}
+		successCount++
+	}
+
+	log.Printf("Drew %d cards for player %s in room %s", count, username, roomID)
+	return nil
+}
+
+// GetLevel1CardPoolSize 获取指定房间一级卡牌池的大小
+func (rm *RoomManager) GetLevel1CardPoolSize(roomID string) (int, error) {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return 0, err
+	}
+
+	return room.GetLevel1CardPoolSize(), nil
 }
