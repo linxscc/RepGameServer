@@ -42,7 +42,7 @@ func handleConnection(conn net.Conn) {
 		conn.Close()
 	}()
 
-	buf := make([]byte, 8192) // 8KB buffer to handle 6KB data with safety margin
+	buf := make([]byte, 4096) // 8KB buffer to handle 6KB data with safety margin
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {

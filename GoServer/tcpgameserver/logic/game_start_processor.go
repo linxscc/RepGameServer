@@ -238,10 +238,7 @@ func (g *GameStartProcessor) SendBondDataNotification(player *types.ClientInfo, 
 	}
 
 	// 发送羁绊数据消息 (5002)
-	response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(5002, map[string]interface{}{
-		"bonds": bondList,
-		"count": len(bondList),
-	})
+	response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(5002, bondList)
 
 	// 获取玩家连接并发送消息
 	clientInfo, exists := connManager.GetConnectionByClientID(player.ClientID)

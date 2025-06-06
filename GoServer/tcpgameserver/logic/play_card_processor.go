@@ -321,8 +321,6 @@ func (p *PlayCardProcessor) applyEffectToAll(room *types.RoomInfo, playerName st
 				log.Printf("Failed to set player %s health: %v", player.Username, err)
 				continue
 			}
-
-			log.Printf("Applied %.1f AOE damage to player %s (health: %d -> %d)", playedCard.Damage, player.Username, currentHealth, newHealth)
 		}
 	}
 
