@@ -142,9 +142,8 @@ func (bc *BondCalculator) findOptimalBondCombination(cards []models.Card, possib
 		UnusedCards:    cards,
 		UsedCards:      []models.Card{},
 	}
-
 	// 使用贪心算法，优先选择高伤害羁绊
-	usedCardUIDs := make(map[int64]bool)
+	usedCardUIDs := make(map[string]bool)
 	var triggeredBonds []TriggeredBond
 	var allUsedCards []models.Card
 	totalBondDamage := 0.0

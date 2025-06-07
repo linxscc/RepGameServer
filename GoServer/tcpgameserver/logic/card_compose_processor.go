@@ -46,84 +46,25 @@ type ComposeResult struct {
 func (ccp *CardComposeProcessor) ProcessCardCompose(data *CardComposeData) error {
 	log.Printf("CardComposeProcessor: Processing card compose for player %s in room %s", data.Player, data.RoomID)
 
-	// 获取房间管理器
-	roomManager := service.GetRoomManager()
-
-	// 获取房间信息
-	room, err := roomManager.GetRoom(data.RoomID)
+	// 步骤1: 验证卡牌信息
+	room, validatedCardGroups, err := ccp.validateComposeRequest(data)
 	if err != nil {
-		return fmt.Errorf("failed to get room %s: %v", data.RoomID, err)
+		return fmt.Errorf("validation failed: %v", err)
 	}
 
-	// 验证房间状态
-	if room.Status != "playing" {
-		return fmt.Errorf("room %s is not in playing state: %s", data.RoomID, room.Status)
-	}
-
-	// 获取玩家信息
-	playerInfo, err := room.GetPlayerInfo(data.Player)
-	if err != nil {
-		return fmt.Errorf("failed to get player info for %s: %v", data.Player, err)
-	}
-
-	// 验证卡牌数量（必须是3的倍数）
-	if len(data.Cards)%3 != 0 {
-		return fmt.Errorf("invalid card count for composition: %d (must be multiple of 3)", len(data.Cards))
-	}
-
-	// 构建手牌UID映射用于快速查找和验证
-	handCardMap := make(map[int64]models.Card)
-	for _, handCard := range playerInfo.HandCards {
-		handCardMap[handCard.UID] = handCard
-	}
-
-	// 验证所有要合成的卡牌都在玩家手牌中
-	var validatedCards []models.Card
-	for _, cardToCompose := range data.Cards {
-		if handCard, exists := handCardMap[cardToCompose.UID]; exists {
-			// 验证卡牌详细信息匹配
-			if handCard.Name != cardToCompose.Name || handCard.ID != cardToCompose.ID {
-				return fmt.Errorf("card information mismatch for UID %d: expected %s (ID: %d), got %s (ID: %d)",
-					cardToCompose.UID, handCard.Name, handCard.ID, cardToCompose.Name, cardToCompose.ID)
-			}
-			validatedCards = append(validatedCards, cardToCompose)
-		} else {
-			return fmt.Errorf("card UID %d not found in player %s's hand", cardToCompose.UID, data.Player)
-		}
-	}
-
-	// 按照卡牌名称分组
-	cardGroups := make(map[string][]models.Card)
-	for _, card := range validatedCards {
-		cardGroups[card.Name] = append(cardGroups[card.Name], card)
-	}
-
-	// 验证合成条件并执行合成
-	composeResult := ccp.performComposition(cardGroups)
+	// 步骤2: 进行合成
+	composeResult := ccp.performComposition(room, validatedCardGroups)
 	if !composeResult.Success {
 		return fmt.Errorf("composition failed: %s", composeResult.Message)
 	}
 
-	// 从玩家手牌中移除已合成的卡牌
-	var cardUIDs []int64
-	for _, card := range composeResult.RemovedCards {
-		cardUIDs = append(cardUIDs, card.UID)
-	}
-
-	err = room.RemoveCardsFromPlayerByUID(data.Player, cardUIDs)
+	// 步骤3: 更新房间内玩家信息
+	err = ccp.updatePlayerInfo(room, data.Player, &composeResult)
 	if err != nil {
-		return fmt.Errorf("failed to remove composed cards from player %s: %v", data.Player, err)
+		return fmt.Errorf("failed to update player info: %v", err)
 	}
-	// 将新合成的卡牌添加到玩家手牌
-	for _, newCard := range composeResult.NewCards {
-		err = room.AddCardToPlayer(data.Player, newCard)
-		if err != nil {
-			return fmt.Errorf("failed to add new card %s to player: %v", newCard.Name, err)
-		}
-	}
-
-	// 发布游戏状态更新事件
-	ccp.publishComposeResult(room, data.Player, &composeResult)
+	// 步骤4: 发布游戏状态更新事件
+	ccp.publishComposeResult(room)
 
 	log.Printf("CardComposeProcessor: Successfully composed %d new cards for player %s, removed %d cards",
 		len(composeResult.NewCards), data.Player, len(composeResult.RemovedCards))
@@ -131,7 +72,7 @@ func (ccp *CardComposeProcessor) ProcessCardCompose(data *CardComposeData) error
 }
 
 // performComposition 执行卡牌合成逻辑
-func (ccp *CardComposeProcessor) performComposition(cardGroups map[string][]models.Card) ComposeResult {
+func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGroups map[string][]models.Card) ComposeResult {
 	var removedCards []models.Card
 	var newCards []models.Card
 	composedCount := 0
@@ -152,7 +93,9 @@ func (ccp *CardComposeProcessor) performComposition(cardGroups map[string][]mode
 		if templateCard.TargetName == nil || *templateCard.TargetName == "" {
 			log.Printf("Card %s cannot be composed (TargetName is empty)", cardName)
 			continue
-		} // 获取目标卡牌信息
+		}
+
+		// 获取目标卡牌信息
 		targetCard, err := ccp.cardPoolManager.GetCardByName(*templateCard.TargetName)
 		if err != nil {
 			log.Printf("Failed to get target card %s for composition: %v", *templateCard.TargetName, err)
@@ -166,19 +109,21 @@ func (ccp *CardComposeProcessor) performComposition(cardGroups map[string][]mode
 			cardsToRemove := cards[startIdx:endIdx]
 			removedCards = append(removedCards, cardsToRemove...)
 
-			// 创建新的高级卡牌
-			newCard := models.NewCard(
-				targetCard.ID,
-				targetCard.Name,
-				targetCard.Damage,
-				targetCard.TargetName,
-				targetCard.Level,
-			)
-			newCards = append(newCards, newCard)
+			// 从对应等级的卡牌池中抽取目标卡牌
+			drawnCard, err := room.DrawCardByNameFromPool(*templateCard.TargetName, targetCard.Level)
+			if err != nil {
+				log.Printf("Failed to draw card %s from level %d pool: %v", *templateCard.TargetName, targetCard.Level, err)
+
+				// 如果抽取失败，将已移除的卡牌放回原组
+				// 这里简化处理，可以根据需要实现更复杂的回滚逻辑
+				continue
+			}
+
+			newCards = append(newCards, *drawnCard)
 			composedCount++
 
-			log.Printf("Composed new card: %s (Level %d) from 3x %s",
-				newCard.Name, newCard.Level, cardName)
+			log.Printf("Composed new card: %s (Level %d) from 3x %s, drawn from level %d pool",
+				drawnCard.Name, drawnCard.Level, cardName, targetCard.Level)
 		}
 	}
 
@@ -199,33 +144,7 @@ func (ccp *CardComposeProcessor) performComposition(cardGroups map[string][]mode
 }
 
 // publishComposeResult 发布合成结果事件
-func (ccp *CardComposeProcessor) publishComposeResult(room *types.RoomInfo, player string, result *ComposeResult) {
-	// 构建移除的卡牌信息
-	var removedCardsInfo []map[string]interface{}
-	for _, card := range result.RemovedCards {
-		cardInfo := map[string]interface{}{
-			"uid":    card.UID,
-			"id":     card.ID,
-			"name":   card.Name,
-			"damage": card.Damage,
-			"level":  card.Level,
-		}
-		removedCardsInfo = append(removedCardsInfo, cardInfo)
-	}
-
-	// 构建新卡牌信息
-	var newCardsInfo []map[string]interface{}
-	for _, card := range result.NewCards {
-		cardInfo := map[string]interface{}{
-			"uid":    card.UID,
-			"id":     card.ID,
-			"name":   card.Name,
-			"damage": card.Damage,
-			"level":  card.Level,
-		}
-		newCardsInfo = append(newCardsInfo, cardInfo)
-	}
-
+func (ccp *CardComposeProcessor) publishComposeResult(room *types.RoomInfo) {
 	// 获取玩家状态信息
 	var playersState []map[string]interface{}
 	for _, p := range room.Players {
@@ -239,17 +158,91 @@ func (ccp *CardComposeProcessor) publishComposeResult(room *types.RoomInfo, play
 	}
 
 	// 发布游戏状态更新事件
-	stateUpdateData := events.NewEventData(events.EventGameStateUpdate, "card_compose_processor", map[string]interface{}{
-		"room_id":        room.RoomID,
-		"player":         player,
-		"action":         "card_compose",
-		"success":        result.Success,
-		"message":        result.Message,
-		"removed_cards":  removedCardsInfo,
-		"new_cards":      newCardsInfo,
-		"composed_count": len(result.NewCards),
-		"removed_count":  len(result.RemovedCards),
-		"players":        playersState,
-	})
+	stateUpdateData := events.NewEventData(events.EventGameStateUpdate, "card_compose_processor", map[string]interface{}{})
+	stateUpdateData.SetRoom(room.RoomID)
 	events.Publish(events.EventGameStateUpdate, stateUpdateData)
+}
+
+// validateComposeRequest 验证合成请求信息
+func (ccp *CardComposeProcessor) validateComposeRequest(data *CardComposeData) (*types.RoomInfo, map[string][]models.Card, error) {
+	// 获取房间管理器
+	roomManager := service.GetRoomManager()
+
+	// 获取房间信息
+	room, err := roomManager.GetRoom(data.RoomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get room %s: %v", data.RoomID, err)
+	}
+
+	// 验证房间状态
+	if room.Status != "playing" {
+		return nil, nil, fmt.Errorf("room %s is not in playing state: %s", data.RoomID, room.Status)
+	}
+
+	// 获取玩家信息
+	playerInfo, err := room.GetPlayerInfo(data.Player)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get player info for %s: %v", data.Player, err)
+	}
+
+	// 验证卡牌数量（必须是3的倍数）
+	if len(data.Cards)%3 != 0 {
+		return nil, nil, fmt.Errorf("invalid card count for composition: %d (must be multiple of 3)", len(data.Cards))
+	}
+
+	// 构建手牌UID映射用于快速查找和验证
+	handCardMap := make(map[string]models.Card)
+	for _, handCard := range playerInfo.HandCards {
+		handCardMap[handCard.UID] = handCard
+	}
+
+	// 验证所有要合成的卡牌都在玩家手牌中
+	var validatedCards []models.Card
+	for _, cardToCompose := range data.Cards {
+		if handCard, exists := handCardMap[cardToCompose.UID]; exists {
+			// 验证卡牌详细信息匹配
+			if handCard.Name != cardToCompose.Name || handCard.ID != cardToCompose.ID {
+				return nil, nil, fmt.Errorf("card information mismatch for UID %d: expected %s (ID: %d), got %s (ID: %d)",
+					cardToCompose.UID, handCard.Name, handCard.ID, cardToCompose.Name, cardToCompose.ID)
+			}
+			validatedCards = append(validatedCards, cardToCompose)
+		} else {
+			return nil, nil, fmt.Errorf("card UID %d not found in player %s's hand", cardToCompose.UID, data.Player)
+		}
+	}
+
+	// 按照卡牌名称分组
+	cardGroups := make(map[string][]models.Card)
+	for _, card := range validatedCards {
+		cardGroups[card.Name] = append(cardGroups[card.Name], card)
+	}
+
+	return room, cardGroups, nil
+}
+
+// updatePlayerInfo 更新玩家信息（移除旧卡牌，添加新卡牌）
+func (ccp *CardComposeProcessor) updatePlayerInfo(room *types.RoomInfo, playerName string, result *ComposeResult) error {
+	// 1. 从玩家手牌中移除已合成的卡牌
+	var cardUIDs []string
+	for _, card := range result.RemovedCards {
+		cardUIDs = append(cardUIDs, card.UID)
+	}
+
+	err := room.RemoveCardsFromPlayerByUID(playerName, cardUIDs)
+	if err != nil {
+		return fmt.Errorf("failed to remove composed cards from player %s: %v", playerName, err)
+	}
+
+	// 2. 将新合成的卡牌添加到玩家手牌
+	for _, newCard := range result.NewCards {
+		err = room.AddCardToPlayer(playerName, newCard)
+		if err != nil {
+			// 如果添加失败，需要考虑回滚已移除的卡牌
+			return fmt.Errorf("failed to add new card %s to player %s: %v", newCard.Name, playerName, err)
+		}
+	}
+
+	log.Printf("Updated player %s info: removed %d cards, added %d new cards",
+		playerName, len(result.RemovedCards), len(result.NewCards))
+	return nil
 }

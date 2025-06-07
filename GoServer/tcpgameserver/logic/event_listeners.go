@@ -93,17 +93,15 @@ func (g *GameEventListener) handleGameStart(data interface{}) {
 }
 
 func (g *GameEventListener) handleGameEnd(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		log.Printf("🏁 Game Ended - Room: %s", eventData.RoomID)
+	log.Printf("🏁 Received game end event, processing with GameEndProcessor")
 
-		// 执行游戏结束逻辑
-		if winner, exists := eventData.GetString("winner"); exists {
-			log.Printf("Winner: %s", winner)
-		}
-
-		// 清理游戏状态
-		// 计算积分
-		// 保存游戏记录
+	// 直接创建并使用GameEndProcessor处理游戏结束逻辑
+	processor := NewGameEndProcessor()
+	err := processor.ProcessGameEnd(data)
+	if err != nil {
+		log.Printf("Game end processing failed: %v", err)
+	} else {
+		log.Printf("Game end processing completed successfully")
 	}
 }
 
@@ -235,14 +233,11 @@ func (c *CardEventListener) handleCardPlay(data interface{}) {
 
 		// 提取卡牌信息用于日志记录
 		cardNames := make([]string, len(receivedSelfCards))
-		cardUIDs := make([]int64, len(receivedSelfCards))
+		cardUIDs := make([]string, len(receivedSelfCards))
 		for i, card := range receivedSelfCards {
 			cardNames[i] = card.Name
 			cardUIDs[i] = card.UID
 		}
-
-		log.Printf("🎯 Card Play - %s attempting to play %d cards: %v (UIDs: %v)",
-			player, len(receivedSelfCards), cardNames, cardUIDs)
 
 		// 使用PlayCardProcessor处理出牌逻辑（包含所有验证）
 		processor := NewPlayCardProcessor()

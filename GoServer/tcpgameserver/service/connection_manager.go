@@ -35,7 +35,7 @@ func NewConnectionManager() *ConnectionManager {
 		userConns:        make(map[string]string),
 		addrConns:        make(map[string]string),
 		heartbeatTimeout: 30 * time.Second,
-		cleanupInterval:  60 * time.Second,
+		cleanupInterval:  60 * time.Hour,
 		stopChan:         make(chan struct{}),
 	}
 }

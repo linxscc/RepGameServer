@@ -73,16 +73,24 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(room *types.RoomInfo, 
 			failCount++
 			continue
 		}
-
 		// 如果玩家不在游戏中，跳过
 		if playerGameInfo == nil {
 			log.Printf("Player %s is not in game state", playerName)
 			continue
 		}
 
-		// 创建游戏状态响应消息 (消息码5013)
-		response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(5013, playerGameInfo)
+		// 根据事件源确定消息码
+		var messageCode int
+		if eventData.Source == "card_compose_processor" {
+			messageCode = 9001
+		} else if eventData.Source == "play_card_processor" {
+			messageCode = 8001
+		} else {
+			messageCode = 8001 // 默认消息码
+		}
 
+		// 创建游戏状态响应消息
+		response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(messageCode, playerGameInfo)
 		// 发送消息
 		if err := gsb.SendTCPMessage(clientInfo.Conn, response); err != nil {
 			log.Printf("Failed to send game state to player %s: %v", playerName, err)
@@ -92,6 +100,35 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(room *types.RoomInfo, 
 			successCount++
 		}
 	}
+
+	// 在广播完成后重置所有玩家的战斗统计信息
+	gsb.resetPlayerBattleStats(room)
+
 	log.Printf("Game state broadcast completed for room %s: %d success, %d failed",
 		room.RoomID, successCount, failCount)
+}
+
+// resetPlayerBattleStats 重置房间内所有玩家的战斗统计信息
+func (gsb *GameStateBroadcaster) resetPlayerBattleStats(room *types.RoomInfo) {
+	log.Printf("Resetting battle stats for all players in room %s", room.RoomID)
+
+	for playerName := range room.Players {
+		// 重置玩家的伤害统计信息
+		err := room.SetPlayerDamageStats(playerName, 0, 0)
+		if err != nil {
+			log.Printf("Failed to reset damage stats for player %s: %v", playerName, err)
+			continue
+		}
+
+		// 重置玩家的触发羁绊列表
+		err = room.SetPlayerBonds(playerName, []models.BondModel{})
+		if err != nil {
+			log.Printf("Failed to reset bonds for player %s: %v", playerName, err)
+			continue
+		}
+
+		log.Printf("Reset battle stats for player %s", playerName)
+	}
+
+	log.Printf("Completed resetting battle stats for room %s", room.RoomID)
 }

@@ -256,7 +256,7 @@ func (rm *RoomManager) DrawCardForPlayer(roomID, username string) error {
 		return fmt.Errorf("failed to add card to player %s: %v", username, err)
 	}
 
-	log.Printf("Drew card %s (UID: %d) for player %s in room %s", card.Name, card.UID, username, roomID)
+	log.Printf("Drew card %s (UID: %s) for player %s in room %s", card.Name, card.UID, username, roomID)
 	return nil
 }
 
@@ -302,14 +302,4 @@ func (rm *RoomManager) DrawCardsForPlayer(roomID, username string, count int) er
 
 	log.Printf("Drew %d cards for player %s in room %s", count, username, roomID)
 	return nil
-}
-
-// GetLevel1CardPoolSize 获取指定房间一级卡牌池的大小
-func (rm *RoomManager) GetLevel1CardPoolSize(roomID string) (int, error) {
-	room, err := rm.GetRoom(roomID)
-	if err != nil {
-		return 0, err
-	}
-
-	return room.GetLevel1CardPoolSize(), nil
 }

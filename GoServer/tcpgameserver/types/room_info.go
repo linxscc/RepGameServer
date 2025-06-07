@@ -56,7 +56,7 @@ func NewRoomInfo(roomID, roomName string, maxPlayers int) *RoomInfo {
 		Level2CardPool: make([]models.Card, 0),
 		Level3CardPool: make([]models.Card, 0),
 		InitialHealth:  100, // 默认初始血量
-		MaxHandCards:   6,   // 默认最大手牌数量
+		MaxHandCards:   10,  // 默认最大手牌数量
 	}
 }
 
@@ -257,7 +257,7 @@ func (r *RoomInfo) AddCardToPlayer(username string, card models.Card) error {
 }
 
 // RemoveCardsFromPlayerByUID 从玩家手牌中移除指定UID的卡牌
-func (r *RoomInfo) RemoveCardsFromPlayerByUID(username string, cardUIDs []int64) error {
+func (r *RoomInfo) RemoveCardsFromPlayerByUID(username string, cardUIDs []string) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -267,7 +267,7 @@ func (r *RoomInfo) RemoveCardsFromPlayerByUID(username string, cardUIDs []int64)
 	}
 
 	// 创建UID映射用于快速查找
-	uidMap := make(map[int64]bool)
+	uidMap := make(map[string]bool)
 	for _, uid := range cardUIDs {
 		uidMap[uid] = true
 	}
@@ -443,9 +443,135 @@ func (r *RoomInfo) DrawRandomCardsFromLevel1Pool(count int) ([]models.Card, erro
 	return drawnCards, nil
 }
 
-// GetLevel1CardPoolSize 获取一级卡牌池大小
-func (r *RoomInfo) GetLevel1CardPoolSize() int {
+// DrawRandomCardsFromLevel2Pool 从二级卡牌池随机抽取多张卡牌
+func (r *RoomInfo) DrawRandomCardsFromLevel2Pool(count int) ([]models.Card, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if count <= 0 {
+		return nil, fmt.Errorf("count must be greater than 0")
+	}
+
+	if len(r.Level2CardPool) < count {
+		return nil, fmt.Errorf("not enough cards in level 2 pool: requested %d, available %d", count, len(r.Level2CardPool))
+	}
+
+	var drawnCards []models.Card
+
+	// 抽取指定数量的卡牌
+	for i := 0; i < count; i++ {
+		if len(r.Level2CardPool) == 0 {
+			break
+		}
+
+		// 随机选择一个索引
+		randomIndex := rand.Intn(len(r.Level2CardPool))
+
+		// 获取选中的卡牌
+		selectedCard := r.Level2CardPool[randomIndex]
+		drawnCards = append(drawnCards, selectedCard)
+
+		// 从卡牌池中移除该卡牌
+		r.Level2CardPool = append(r.Level2CardPool[:randomIndex], r.Level2CardPool[randomIndex+1:]...)
+	}
+
+	return drawnCards, nil
+}
+
+// DrawRandomCardsFromLevel3Pool 从三级卡牌池随机抽取多张卡牌
+func (r *RoomInfo) DrawRandomCardsFromLevel3Pool(count int) ([]models.Card, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if count <= 0 {
+		return nil, fmt.Errorf("count must be greater than 0")
+	}
+
+	if len(r.Level3CardPool) < count {
+		return nil, fmt.Errorf("not enough cards in level 3 pool: requested %d, available %d", count, len(r.Level3CardPool))
+	}
+
+	var drawnCards []models.Card
+
+	// 抽取指定数量的卡牌
+	for i := 0; i < count; i++ {
+		if len(r.Level3CardPool) == 0 {
+			break
+		}
+
+		// 随机选择一个索引
+		randomIndex := rand.Intn(len(r.Level3CardPool))
+
+		// 获取选中的卡牌
+		selectedCard := r.Level3CardPool[randomIndex]
+		drawnCards = append(drawnCards, selectedCard)
+
+		// 从卡牌池中移除该卡牌
+		r.Level3CardPool = append(r.Level3CardPool[:randomIndex], r.Level3CardPool[randomIndex+1:]...)
+	}
+
+	return drawnCards, nil
+}
+
+// DrawCardByNameFromPool 根据卡牌名称从指定等级的卡牌池中抽取一张卡牌
+func (r *RoomInfo) DrawCardByNameFromPool(cardName string, level int) (*models.Card, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	var cardPool *[]models.Card
+	var poolName string
+
+	switch level {
+	case 1:
+		cardPool = &r.Level1CardPool
+		poolName = "level 1"
+	case 2:
+		cardPool = &r.Level2CardPool
+		poolName = "level 2"
+	case 3:
+		cardPool = &r.Level3CardPool
+		poolName = "level 3"
+	default:
+		return nil, fmt.Errorf("invalid card level: %d", level)
+	}
+
+	// 在指定等级的卡牌池中查找匹配的卡牌
+	for i, card := range *cardPool {
+		if card.Name == cardName {
+			// 找到匹配的卡牌，从池中移除并返回
+			selectedCard := card
+			*cardPool = append((*cardPool)[:i], (*cardPool)[i+1:]...)
+			return &selectedCard, nil
+		}
+	}
+
+	return nil, fmt.Errorf("card '%s' not found in %s pool", cardName, poolName)
+}
+
+// SetPlayerDamageStats 设置玩家伤害统计信息
+func (r *RoomInfo) SetPlayerDamageStats(username string, damageDealt, damageReceived float64) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	player, exists := r.Players[username]
+	if !exists {
+		return fmt.Errorf("player %s not found in room", username)
+	}
+
+	player.DamageDealt = damageDealt
+	player.DamageReceived = damageReceived
+	return nil
+}
+
+// GetPlayerDamageStats 获取玩家伤害统计信息
+func (r *RoomInfo) GetPlayerDamageStats(username string) (damageDealt, damageReceived float64, err error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	return len(r.Level1CardPool)
+
+	player, exists := r.Players[username]
+	if !exists {
+		return 0, 0, fmt.Errorf("player %s not found in room", username)
+	}
+
+	return player.DamageDealt, player.DamageReceived, nil
 }
