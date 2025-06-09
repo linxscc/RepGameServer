@@ -40,7 +40,8 @@ func HandleUserPlayCard(req models.TcpRequest, conn net.Conn, clientID string, c
 	// 发布出牌事件，让事件系统处理实际的游戏逻辑和验证
 	playCardEventData := events.NewEventData(events.EventCardPlay, "user_play_card_handler", map[string]interface{}{
 		"player":     clientInfo.Username,
-		"self_cards": playCardData.SelfCards, // 用户发送的自身卡牌数据
+		"self_cards": playCardData.SelfCards,
+		"room_id":    playCardData.RoomId,
 		"client_id":  clientID,
 		"connection": conn,
 	})

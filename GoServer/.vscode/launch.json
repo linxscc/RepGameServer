@@ -1,0 +1,44 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug GoServer (完整服务器)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/main.go",
+            "env": {
+                "GO_ENV": "debug"
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "showLog": true,
+            "console": "integratedTerminal",
+            "stopOnEntry": false
+        },
+        {
+            "name": "Debug TCP Server Only (仅TCP服务器)",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}",
+            "env": {
+                "GO_ENV": "debug"
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "showLog": true,
+            "console": "integratedTerminal",
+            "stopOnEntry": false,
+            "buildFlags": "-tags=debug"
+        },
+        {
+            "name": "Attach to Process (附加到进程)",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "processId": 0,
+            "showLog": true
+        }
+    ]
+}

@@ -11,7 +11,7 @@ import (
 )
 
 // HandleUserReady 处理用户准备
-func HandleUserReady(conn net.Conn, clientID string, connManager *service.ConnectionManager) {
+func HandleUserRestart(conn net.Conn, clientID string, connManager *service.ConnectionManager) {
 	// 获取客户端信息
 	clientInfo, exists := connManager.GetConnectionByClientID(clientID)
 	if !exists {
@@ -29,15 +29,7 @@ func HandleUserReady(conn net.Conn, clientID string, connManager *service.Connec
 
 	// 设置玩家状态为准备就绪
 	connManager.SetPlayerStatus(clientID, types.StatusReady)
-	stats := connManager.GetConnectionStats()
-
-	// 提前发送游戏预准备数据
-	gameStartData := events.CreateRoomEventData(events.EventCardBonds, "", int(stats["ready"]))
-	gameStartData.AddData("client_id", clientID)
-
-	// 发布羁绊数据，让事件监听器处理匹配逻辑
-	events.Publish(events.EventCardBonds, gameStartData)
-
+	stats := connManager.GetConnectionStats() // 匹配逻辑 - 当有足够玩家准备就绪时发送游戏开始事件
 	if stats["ready"] >= 2 {
 
 		// 创建游戏开始事件数据

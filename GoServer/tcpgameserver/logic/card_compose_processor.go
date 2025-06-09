@@ -43,32 +43,61 @@ type ComposeResult struct {
 }
 
 // ProcessCardCompose 处理卡牌合成逻辑
-func (ccp *CardComposeProcessor) ProcessCardCompose(data *CardComposeData) error {
+func (ccp *CardComposeProcessor) ProcessCardCompose(eventData *events.EventData) {
+
+	log.Printf("🔧 Received card compose event, processing with CardComposeProcessor")
+
+	// 获取玩家名称
+	player, _ := eventData.GetString("player")
+	// 获取房间ID
+	roomID, _ := eventData.GetString("room_id")
+	// 获取客户端ID
+	clientID, _ := eventData.GetString("client_id")
+	// 获取卡牌数据
+	cardsData, _ := eventData.GetData("cards")
+	// 转换为卡牌切片
+	cards, ok := cardsData.([]models.Card)
+	if !ok {
+		log.Printf("❌ Failed to convert cards data to []models.Card")
+		return
+	}
+
+	log.Printf("🔧 Card Compose - %s attempting to compose %d cards in room %s",
+		player, len(cards), roomID)
+
+	// 构建合成数据
+	data := &CardComposeData{
+		RoomID:   roomID,
+		Player:   player,
+		Cards:    cards,
+		ClientID: clientID,
+	}
+
 	log.Printf("CardComposeProcessor: Processing card compose for player %s in room %s", data.Player, data.RoomID)
 
 	// 步骤1: 验证卡牌信息
 	room, validatedCardGroups, err := ccp.validateComposeRequest(data)
 	if err != nil {
-		return fmt.Errorf("validation failed: %v", err)
+		return
 	}
 
 	// 步骤2: 进行合成
 	composeResult := ccp.performComposition(room, validatedCardGroups)
 	if !composeResult.Success {
-		return fmt.Errorf("composition failed: %s", composeResult.Message)
+		return
 	}
 
 	// 步骤3: 更新房间内玩家信息
 	err = ccp.updatePlayerInfo(room, data.Player, &composeResult)
 	if err != nil {
-		return fmt.Errorf("failed to update player info: %v", err)
+		return
 	}
 	// 步骤4: 发布游戏状态更新事件
 	ccp.publishComposeResult(room)
 
 	log.Printf("CardComposeProcessor: Successfully composed %d new cards for player %s, removed %d cards",
 		len(composeResult.NewCards), data.Player, len(composeResult.RemovedCards))
-	return nil
+	return
 }
 
 // performComposition 执行卡牌合成逻辑
@@ -145,17 +174,6 @@ func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGr
 
 // publishComposeResult 发布合成结果事件
 func (ccp *CardComposeProcessor) publishComposeResult(room *types.RoomInfo) {
-	// 获取玩家状态信息
-	var playersState []map[string]interface{}
-	for _, p := range room.Players {
-		playerState := map[string]interface{}{
-			"username":   p.Username,
-			"health":     p.CurrentHealth,
-			"hand_count": len(p.HandCards),
-			"round":      p.Round,
-		}
-		playersState = append(playersState, playerState)
-	}
 
 	// 发布游戏状态更新事件
 	stateUpdateData := events.NewEventData(events.EventGameStateUpdate, "card_compose_processor", map[string]interface{}{})
@@ -202,12 +220,12 @@ func (ccp *CardComposeProcessor) validateComposeRequest(data *CardComposeData) (
 		if handCard, exists := handCardMap[cardToCompose.UID]; exists {
 			// 验证卡牌详细信息匹配
 			if handCard.Name != cardToCompose.Name || handCard.ID != cardToCompose.ID {
-				return nil, nil, fmt.Errorf("card information mismatch for UID %d: expected %s (ID: %d), got %s (ID: %d)",
+				return nil, nil, fmt.Errorf("card information mismatch for UID %s: expected %s (ID: %d), got %s (ID: %d)",
 					cardToCompose.UID, handCard.Name, handCard.ID, cardToCompose.Name, cardToCompose.ID)
 			}
 			validatedCards = append(validatedCards, cardToCompose)
 		} else {
-			return nil, nil, fmt.Errorf("card UID %d not found in player %s's hand", cardToCompose.UID, data.Player)
+			return nil, nil, fmt.Errorf("card UID %s not found in player %s's hand", cardToCompose.UID, data.Player)
 		}
 	}
 

@@ -1,8 +1,6 @@
 package config
 
-import (
-	"os"
-)
+import "os"
 
 // DBConfig 数据库配置信息
 type DBConfig struct {

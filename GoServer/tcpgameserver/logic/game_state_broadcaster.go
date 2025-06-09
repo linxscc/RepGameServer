@@ -41,11 +41,18 @@ func (gsb *GameStateBroadcaster) SendTCPMessage(conn net.Conn, response *models.
 }
 
 // BroadcastGameStateToRoom 向房间内所有玩家广播游戏状态（统一方法）
-func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(room *types.RoomInfo, eventData *events.EventData, connManager *service.ConnectionManager) {
-	log.Printf("Broadcasting game state to room %s with %d players", room.RoomID, len(room.Players))
+func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(eventData *events.EventData) {
 
-	// 获取房间管理器
+	// 获取连接管理器
+	connManager := service.GetConnectionManager()
 	roomManager := service.GetRoomManager()
+
+	// 获取房间信息
+	room, err := roomManager.GetRoom(eventData.RoomID)
+	if err != nil {
+		log.Printf("Failed to get room %s for state update: %v", eventData.RoomID, err)
+		return
+	}
 
 	// 向房间内每个玩家发送其个人游戏信息
 	successCount := 0
@@ -67,7 +74,7 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(room *types.RoomInfo, 
 		}
 
 		// 从房间管理器获取该玩家的游戏信息
-		playerGameInfo, err := roomManager.GetPlayerGameInfo(playerName)
+		playerGameInfo, err := roomManager.GetPlayerGameInfo(eventData.RoomID, playerName)
 		if err != nil {
 			log.Printf("Failed to get game info for player %s: %v", playerName, err)
 			failCount++
@@ -110,25 +117,13 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(room *types.RoomInfo, 
 
 // resetPlayerBattleStats 重置房间内所有玩家的战斗统计信息
 func (gsb *GameStateBroadcaster) resetPlayerBattleStats(room *types.RoomInfo) {
-	log.Printf("Resetting battle stats for all players in room %s", room.RoomID)
-
+	roomManager := service.GetRoomManager()
 	for playerName := range room.Players {
 		// 重置玩家的伤害统计信息
-		err := room.SetPlayerDamageStats(playerName, 0, 0)
+		err := roomManager.CleanPlayerDamage(room.RoomID, playerName)
 		if err != nil {
 			log.Printf("Failed to reset damage stats for player %s: %v", playerName, err)
 			continue
 		}
-
-		// 重置玩家的触发羁绊列表
-		err = room.SetPlayerBonds(playerName, []models.BondModel{})
-		if err != nil {
-			log.Printf("Failed to reset bonds for player %s: %v", playerName, err)
-			continue
-		}
-
-		log.Printf("Reset battle stats for player %s", playerName)
 	}
-
-	log.Printf("Completed resetting battle stats for room %s", room.RoomID)
 }

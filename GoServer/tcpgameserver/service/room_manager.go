@@ -40,13 +40,77 @@ func (rm *RoomManager) CreateRoom(roomName string, maxPlayers int) (*types.RoomI
 	// 创建房间
 	room := types.NewRoomInfo(roomID, roomName, maxPlayers)
 
-	// 注意：卡牌池初始化将在逻辑层处理，避免循环依赖
-
 	// 添加到房间列表
 	rm.rooms[roomID] = room
 
 	log.Printf("Created room: %s (%s) with max players: %d", roomID, roomName, maxPlayers)
 	return room, nil
+}
+
+// InitCardPool 初始化房间的卡牌池
+func (rm *RoomManager) InitCardPool(roomID string, level1Cards, level2Cards, level3Cards []models.Card) error {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return err
+	}
+
+	return room.InitializeCardPools(level1Cards, level2Cards, level3Cards)
+
+}
+
+// InitCardPool 初始化玩家手牌
+func (rm *RoomManager) InitPlayerHandCard(roomID string, count int) ([]models.Card, error) {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	return room.DrawRandomCardsFromLevel1Pool(count)
+
+}
+
+// SetPlayerHealth 设置玩家血量
+func (rm *RoomManager) SetPlayerHealth(roomID string, username string, health float64) error {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return err
+	}
+
+	return room.SetPlayerHealth(username, health)
+
+}
+
+// SetPlayerRound 设置玩家回合
+func (rm *RoomManager) SetPlayerRound(roomID string, username string, round string) error {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return err
+	}
+
+	return room.SetPlayerRound(username, round)
+
+}
+
+// SetOpponentPlayerDamage 设置玩家伤害信息
+func (rm *RoomManager) SetPlayerDamage(roomID string, username string, damageInfo models.DamageInfo) error {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return err
+	}
+	room.SetPlayerDamage(username, damageInfo)
+
+	return nil
+}
+
+// SetOpponentPlayerDamage 清理玩家伤害信息
+func (rm *RoomManager) CleanPlayerDamage(roomID string, username string) error {
+	room, err := rm.GetRoom(roomID)
+	if err != nil {
+		return err
+	}
+	room.CleanPlayerDamage(username)
+
+	return nil
 }
 
 // GetRoom 获取指定房间
@@ -167,8 +231,8 @@ func (rm *RoomManager) GetRoomStats() map[string]interface{} {
 }
 
 // GetPlayerGameInfo 获取玩家游戏信息
-func (rm *RoomManager) GetPlayerGameInfo(username string) (*models.PlayerGameInfo, error) {
-	room, err := rm.FindRoomByPlayer(username)
+func (rm *RoomManager) GetPlayerGameInfo(roomID string, username string) (*models.PlayerGameInfo, error) {
+	room, err := rm.GetRoom(roomID)
 	if err != nil {
 		return nil, err
 	}
@@ -192,26 +256,29 @@ func (rm *RoomManager) GetPlayerGameInfo(username string) (*models.PlayerGameInf
 func (rm *RoomManager) createPlayerGameInfo(room *types.RoomInfo, username string, allPlayers []string) *models.PlayerGameInfo {
 	roomPlayer := room.Players[username]
 
-	// 获取对方玩家的卡牌列表
-	otherCards := make([]models.Card, 0)
+	OtherPlayers := make([]models.OtherPlayerGameInfo, 0, len(allPlayers)-1)
 	for _, playerName := range allPlayers {
 		if playerName != username {
 			if otherPlayer, exists := room.Players[playerName]; exists {
-				otherCards = append(otherCards, otherPlayer.HandCards...)
+				OtherPlayerGameInfo := models.OtherPlayerGameInfo{
+					Username:   otherPlayer.Username,
+					Round:      otherPlayer.Round,
+					Health:     otherPlayer.CurrentHealth,
+					CardsCount: len(otherPlayer.HandCards),
+				}
+				OtherPlayers = append(OtherPlayers, OtherPlayerGameInfo)
 			}
 		}
 	}
 
 	return &models.PlayerGameInfo{
-		RoomId:         room.RoomID,
-		Username:       username,
-		Round:          roomPlayer.Round,
-		Health:         float64(roomPlayer.CurrentHealth),
-		DamageDealt:    roomPlayer.DamageDealt,
-		DamageReceived: roomPlayer.DamageReceived,
-		TriggeredBonds: make([]models.BondModel, 0),
-		SelfCards:      roomPlayer.HandCards,
-		OtherCards:     otherCards,
+		RoomId:       room.RoomID,
+		Username:     username,
+		Round:        roomPlayer.Round,
+		Health:       roomPlayer.CurrentHealth,
+		SelfCards:    roomPlayer.HandCards,
+		OtherPlayers: OtherPlayers,
+		DamageInfo:   roomPlayer.DamageInfo,
 	}
 }
 

@@ -30,8 +30,6 @@ func (gep *GameEndProcessor) ProcessGameEnd(data interface{}) error {
 		return nil
 	}
 
-	log.Printf("GameEndProcessor: Processing game end for room %s", eventData.RoomID)
-
 	// 步骤1: 获取房间信息
 	roomManager := service.GetRoomManager()
 	room, err := roomManager.GetRoom(eventData.RoomID)
@@ -46,6 +44,8 @@ func (gep *GameEndProcessor) ProcessGameEnd(data interface{}) error {
 		log.Printf("GameEndProcessor: Failed to send player info: %v", err)
 		return err
 	}
+
+	room.Status = "finished"
 
 	// 步骤3: 清理房间信息
 	err = gep.cleanupRoomInfo(room)
@@ -97,15 +97,16 @@ func (gep *GameEndProcessor) sendPlayerInfoToAll(room *types.RoomInfo) error {
 		}
 
 		// 获取该玩家的游戏信息
-		playerGameInfo, err := roomManager.GetPlayerGameInfo(playerName)
+		playerGameInfo, err := roomManager.GetPlayerGameInfo(room.RoomID, playerName)
 		if err != nil {
-			log.Printf("GameEndProcessor: Failed to get game info for player %s: %v", playerName, err)
+			log.Printf("GameEndProcessor: Failed to get player game info for %s: %v", playerName, err)
 			failCount++
 			continue
 		}
 
 		if playerGameInfo == nil {
-			log.Printf("GameEndProcessor: Player %s is not in game state", playerName)
+			log.Printf("GameEndProcessor: Player game info is nil for %s", playerName)
+			failCount++
 			continue
 		}
 
@@ -130,7 +131,6 @@ func (gep *GameEndProcessor) sendPlayerInfoToAll(room *types.RoomInfo) error {
 
 // cleanupRoomInfo 清理房间信息
 func (gep *GameEndProcessor) cleanupRoomInfo(room *types.RoomInfo) error {
-	log.Printf("GameEndProcessor: Cleaning up room %s", room.RoomID)
 
 	// 清理房间状态
 	room.UpdateRoomStatus("finished")
@@ -141,20 +141,15 @@ func (gep *GameEndProcessor) cleanupRoomInfo(room *types.RoomInfo) error {
 	room.Level3CardPool = []models.Card{}
 
 	// 重置所有玩家的游戏内状态
-	for playerName, player := range room.Players {
+	for _, player := range room.Players {
 		// 清理手牌
 		player.HandCards = []models.Card{}
 
 		// 重置游戏状态
 		player.IsReady = false
 		player.Round = ""
-
-		// 清理战斗统计
-		player.DamageDealt = 0
-		player.DamageReceived = 0
-		player.TriggeredBonds = []models.BondModel{}
-
-		log.Printf("GameEndProcessor: Cleaned up player %s in room %s", playerName, room.RoomID)
+		player.OtherPlayers = []models.OtherPlayerGameInfo{}
+		player.DamageInfo = []models.DamageInfo{}
 	}
 
 	log.Printf("GameEndProcessor: Room %s cleanup completed", room.RoomID)

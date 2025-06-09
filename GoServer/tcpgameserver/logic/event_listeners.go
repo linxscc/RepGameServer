@@ -97,12 +97,7 @@ func (g *GameEventListener) handleGameEnd(data interface{}) {
 
 	// 直接创建并使用GameEndProcessor处理游戏结束逻辑
 	processor := NewGameEndProcessor()
-	err := processor.ProcessGameEnd(data)
-	if err != nil {
-		log.Printf("Game end processing failed: %v", err)
-	} else {
-		log.Printf("Game end processing completed successfully")
-	}
+	processor.ProcessGameEnd(data)
 }
 
 func (g *GameEventListener) handleGamePause(data interface{}) {
@@ -123,21 +118,9 @@ func (g *GameEventListener) handleGameStateUpdate(data interface{}) {
 	if eventData, ok := data.(*events.EventData); ok {
 		log.Printf("🔄 Game State Updated - Room: %s", eventData.RoomID)
 
-		// 获取连接管理器
-		connManager := service.GetConnectionManager()
-		roomManager := service.GetRoomManager()
-
-		// 获取房间信息
-		room, err := roomManager.GetRoom(eventData.RoomID)
-		if err != nil {
-			log.Printf("Failed to get room %s for state update: %v", eventData.RoomID, err)
-			return
-		}
-
 		// 向房间内所有玩家发送游戏状态更新
-		// g.broadcastGameStateToRoom(room, eventData, connManager)
 		broadcaster := NewGameStateBroadcaster()
-		broadcaster.BroadcastGameStateToRoom(room, eventData, connManager)
+		broadcaster.BroadcastGameStateToRoom(eventData)
 	}
 }
 
@@ -157,6 +140,7 @@ func NewCardEventListener() *CardEventListener {
 				events.EventCardShuffle,
 				events.EventCardCompose,
 				events.EventDeckEmpty,
+				events.EventCardBonds,
 			},
 			Priority: 30,
 		},
@@ -173,6 +157,8 @@ func (c *CardEventListener) HandleEvent(eventType string, data interface{}) {
 		c.handleCardCompose(data)
 	case events.EventDeckEmpty:
 		c.handleDeckEmpty(data)
+	case events.EventCardBonds:
+		c.handleCardBonds(data)
 	default:
 		log.Printf("CardEventListener: Unknown event type: %s", eventType)
 	}
@@ -193,101 +179,18 @@ func (c *CardEventListener) handleCardDraw(data interface{}) {
 
 func (c *CardEventListener) handleCardPlay(data interface{}) {
 	if eventData, ok := data.(*events.EventData); ok {
-		log.Printf("🎯 Received card play event, processing with PlayCardProcessor")
-
-		// 获取玩家名称
-		player, exists := eventData.GetString("player")
-		if !exists {
-			log.Printf("❌ Player name not found in event data")
-			return
-		}
-
-		// 获取玩家发送的自身卡牌数据
-		selfCardsData, exists := eventData.GetData("self_cards")
-		if !exists {
-			log.Printf("❌ Self cards data not found in event data")
-			return
-		}
-
-		// 转换为卡牌切片
-		receivedSelfCards, ok := selfCardsData.([]models.Card)
-		if !ok {
-			log.Printf("❌ Failed to convert self_cards data to []models.Card")
-			return
-		}
-
-		// 获取房间管理器来查找房间ID
-		roomManager := service.GetRoomManager()
-		room, err := roomManager.FindRoomByPlayer(player)
-		if err != nil {
-			log.Printf("❌ Failed to get room for player %s: %v", player, err)
-			return
-		}
-		// 构建出牌数据（所有验证交给ProcessPlayCard处理）
-		playCardData := &PlayCardData{
-			RoomID:      room.RoomID,
-			Player:      player,
-			CardsToPlay: receivedSelfCards, // 直接传递接收到的卡牌数据
-			TargetType:  "opponent",        // 默认目标为对手
-		}
-
-		// 提取卡牌信息用于日志记录
-		cardNames := make([]string, len(receivedSelfCards))
-		cardUIDs := make([]string, len(receivedSelfCards))
-		for i, card := range receivedSelfCards {
-			cardNames[i] = card.Name
-			cardUIDs[i] = card.UID
-		}
-
 		// 使用PlayCardProcessor处理出牌逻辑（包含所有验证）
 		processor := NewPlayCardProcessor()
-		err = processor.ProcessPlayCard(playCardData)
-		if err != nil {
-			log.Printf("❌ Failed to process card play: %v", err)
-		} else {
-			log.Printf("✅ Card play processed successfully")
-		}
+		processor.ProcessPlayCard(eventData)
 	}
 }
 
 func (c *CardEventListener) handleCardCompose(data interface{}) {
 	if eventData, ok := data.(*events.EventData); ok {
-		log.Printf("🔧 Received card compose event, processing with CardComposeProcessor")
-
-		// 获取玩家名称
-		player, _ := eventData.GetString("player")
-		// 获取房间ID
-		roomID, _ := eventData.GetString("room_id")
-		// 获取客户端ID
-		clientID, _ := eventData.GetString("client_id")
-		// 获取卡牌数据
-		cardsData, _ := eventData.GetData("cards")
-		// 转换为卡牌切片
-		cards, ok := cardsData.([]models.Card)
-		if !ok {
-			log.Printf("❌ Failed to convert cards data to []models.Card")
-			return
-		}
-
-		log.Printf("🔧 Card Compose - %s attempting to compose %d cards in room %s",
-			player, len(cards), roomID)
-
-		// 构建合成数据
-		composeData := &CardComposeData{
-			RoomID:   roomID,
-			Player:   player,
-			Cards:    cards,
-			ClientID: clientID,
-		}
-
 		// 使用CardComposeProcessor处理合成逻辑
 		processor := NewCardComposeProcessor()
-		err := processor.ProcessCardCompose(composeData)
-		if err != nil {
-			log.Printf("❌ Failed to process card compose: %v", err)
-		} else {
-			log.Printf("✅ Card compose processed successfully")
-		}
+		processor.ProcessCardCompose(eventData)
+
 	}
 }
 
@@ -298,6 +201,33 @@ func (c *CardEventListener) handleDeckEmpty(data interface{}) {
 		// 处理牌库为空
 		// 将弃牌堆洗入牌库
 		// 或者触发特殊规则
+
+	}
+}
+
+func (c *CardEventListener) handleCardBonds(data interface{}) {
+	if eventData, ok := data.(*events.EventData); ok {
+
+		connManager := service.GetConnectionManager()
+		ClientID, _ := eventData.GetString("client_id")
+		// 将羁绊数据转换为切片格式，便于序列化
+		bondPoolManager := cards.GetBondPoolManager()
+		allBonds := bondPoolManager.GetAllBonds()
+		bondList := make([]*models.BondModel, 0, len(allBonds))
+		for _, bond := range allBonds {
+			bondList = append(bondList, bond)
+		}
+
+		// 发送羁绊数据消息 (5002)
+		response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(5002, bondList)
+
+		// 获取玩家连接并发送消息
+		clientInfo, exists := connManager.GetConnectionByClientID(ClientID)
+		if !exists || clientInfo == nil || clientInfo.Conn == nil {
+			return
+		}
+
+		sendTCPResponse(clientInfo.Conn, response)
 
 	}
 }

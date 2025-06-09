@@ -33,13 +33,32 @@ type PlayCardData struct {
 }
 
 // ProcessPlayCard 处理出牌逻辑
-func (p *PlayCardProcessor) ProcessPlayCard(data *PlayCardData) error {
-	log.Printf("PlayCardProcessor: Processing play card for player %s in room %s", data.Player, data.RoomID)
+func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
+
+	log.Printf("🎯 Received card play event, processing with PlayCardProcessor")
+
+	// 获取玩家名称
+	player, _ := eventData.GetString("player")
+	// 获取房间ID
+	roomID, _ := eventData.GetString("room_id")
+	// 获取玩家发送的自身卡牌数据
+	selfCardsData, _ := eventData.GetData("self_cards")
+
+	// 转换为卡牌切片
+	receivedSelfCards, _ := selfCardsData.([]models.Card)
+
+	// 构建出牌数据（所有验证交给ProcessPlayCard处理）
+	data := &PlayCardData{
+		RoomID:      roomID,
+		Player:      player,
+		CardsToPlay: receivedSelfCards,
+		TargetType:  "opponent",
+	}
 
 	// 步骤1: 验证出牌信息是否正确
 	room, validatedCards, err := p.validatePlayCardRequest(data)
 	if err != nil {
-		return fmt.Errorf("validation failed: %v", err)
+		return
 	}
 
 	// 步骤2: 计算羁绊伤害加成，得到伤害结果和触发羁绊
@@ -48,7 +67,7 @@ func (p *PlayCardProcessor) ProcessPlayCard(data *PlayCardData) error {
 	// 步骤3: 为房间内玩家更新信息（血量、收到伤害、造成伤害等）并为出牌方抽取新卡牌
 	gameEnded, err := p.updateRoomPlayersInfo(room, data.Player, bondResult.TotalDamage, data.TargetType, &bondResult, validatedCards)
 	if err != nil {
-		return fmt.Errorf("failed to update room players info: %v", err)
+		return
 	}
 
 	// 步骤4: 发送游戏状态更新事件（仅在游戏未结束时）
@@ -56,7 +75,7 @@ func (p *PlayCardProcessor) ProcessPlayCard(data *PlayCardData) error {
 		p.publishGameStateUpdateWithBonds(room)
 	}
 
-	return nil
+	return
 }
 
 // validatePlayCardRequest 验证出牌请求信息
@@ -298,12 +317,10 @@ func (p *PlayCardProcessor) switchToNextPlayer(room *types.RoomInfo, currentPlay
 	if nextPlayer == "" {
 		return fmt.Errorf("next player not found")
 	}
+	roomManager := service.GetRoomManager()
+	roomManager.SetPlayerRound(room.RoomID, currentPlayer, "waiting")
+	roomManager.SetPlayerRound(room.RoomID, nextPlayer, "current")
 
-	// 更新回合状态 - 直接修改玩家的Round字段
-	room.Players[currentPlayer].Round = "waiting"
-	room.Players[nextPlayer].Round = "current"
-
-	log.Printf("Switched turn from %s to %s in room %s", currentPlayer, nextPlayer, room.RoomID)
 	return nil
 }
 
@@ -311,27 +328,12 @@ func (p *PlayCardProcessor) switchToNextPlayer(room *types.RoomInfo, currentPlay
 func (p *PlayCardProcessor) checkGameEnd(room *types.RoomInfo) bool {
 	for _, player := range room.Players {
 		if player.CurrentHealth <= 0 {
-			// 游戏结束
-			room.Status = "finished"
-
-			// 确定获胜者
-			var winner string
-			for _, p := range room.Players {
-				if p.CurrentHealth > 0 {
-					winner = p.Username
-					break
-				}
-			}
 
 			// 发布游戏结束事件
-			gameEndData := events.NewEventData(events.EventGameEnd, "play_card_processor", map[string]interface{}{
-				"room_id": room.RoomID,
-				"winner":  winner,
-				"loser":   player.Username,
-			})
+			gameEndData := events.NewEventData(events.EventGameEnd, "play_card_processor", map[string]interface{}{})
+			gameEndData.SetRoom(room.RoomID)
 			events.Publish(events.EventGameEnd, gameEndData)
 
-			log.Printf("Game ended in room %s, winner: %s", room.RoomID, winner)
 			return true // 游戏已结束
 		}
 	}
@@ -417,77 +419,44 @@ func (p *PlayCardProcessor) updatePlayerBattleStats(room *types.RoomInfo, attack
 
 	switch targetType {
 	case "opponent":
-		// 获取对手名称
-		var opponentName string
+		// 为其他玩家设置承受伤害
 		for _, player := range room.Players {
-			if player.Username != attackerName {
-				opponentName = player.Username
-				break
+			DamageInfo := models.DamageInfo{
+				DamageSource:   attackerName,
+				DamageTarget:   player.Username,
+				DamageType:     "Attacked",
+				DamageValue:    totalDamage,
+				TriggeredBonds: triggeredBondModels,
 			}
+			room.SetPlayerDamage(player.Username, DamageInfo)
 		}
-
-		if opponentName == "" {
-			return fmt.Errorf("opponent not found for player %s", attackerName)
-		}
-
-		// 更新攻击方数据
-		err := room.SetPlayerDamageStats(attackerName, totalDamage, 0)
-		if err != nil {
-			return fmt.Errorf("failed to set attacker damage stats: %v", err)
-		}
-
-		err = room.SetPlayerBonds(attackerName, triggeredBondModels)
-		if err != nil {
-			return fmt.Errorf("failed to set attacker bonds: %v", err)
-		}
-
-		// 更新被攻击方数据
-		err = room.SetPlayerDamageStats(opponentName, 0, totalDamage)
-		if err != nil {
-			return fmt.Errorf("failed to set opponent damage stats: %v", err)
-		}
-
-		err = room.SetPlayerBonds(opponentName, triggeredBondModels)
-		if err != nil {
-			return fmt.Errorf("failed to set opponent bonds: %v", err)
-		}
-
 	case "self":
-		// 自我治疗情况，攻击方的DamageDealt设为0，DamageReceived设为负值（表示治疗）
-		err := room.SetPlayerDamageStats(attackerName, 0, -totalDamage)
-		if err != nil {
-			return fmt.Errorf("failed to set self heal stats: %v", err)
-		}
-
-		err = room.SetPlayerBonds(attackerName, triggeredBondModels)
-		if err != nil {
-			return fmt.Errorf("failed to set self bonds: %v", err)
+		// 治疗情况
+		for _, player := range room.Players {
+			DamageInfo := models.DamageInfo{
+				DamageSource:   attackerName,
+				DamageTarget:   attackerName,
+				DamageType:     "Recover",
+				DamageValue:    totalDamage,
+				TriggeredBonds: triggeredBondModels,
+			}
+			room.SetPlayerDamage(player.Username, DamageInfo)
 		}
 
 	case "all":
-		// AOE情况，攻击方造成总伤害，其他所有玩家承受伤害
-		err := room.SetPlayerDamageStats(attackerName, totalDamage, 0)
-		if err != nil {
-			return fmt.Errorf("failed to set AOE attacker stats: %v", err)
-		}
-
-		err = room.SetPlayerBonds(attackerName, triggeredBondModels)
-		if err != nil {
-			return fmt.Errorf("failed to set AOE attacker bonds: %v", err)
-		}
-
 		// 为所有其他玩家设置承受伤害
 		for _, player := range room.Players {
-			if player.Username != attackerName {
-				err = room.SetPlayerDamageStats(player.Username, 0, totalDamage)
-				if err != nil {
-					log.Printf("Failed to set AOE damage stats for player %s: %v", player.Username, err)
-				}
-
-				err = room.SetPlayerBonds(player.Username, triggeredBondModels)
-				if err != nil {
-					log.Printf("Failed to set AOE bonds for player %s: %v", player.Username, err)
-				}
+			// 更新被攻击方数据
+			DamageInfo := models.DamageInfo{
+				DamageSource:   attackerName,
+				DamageTarget:   player.Username,
+				DamageType:     "AOE",
+				DamageValue:    totalDamage,
+				TriggeredBonds: triggeredBondModels,
+			}
+			err := room.SetPlayerDamage(player.Username, DamageInfo)
+			if err != nil {
+				return fmt.Errorf("failed to set attacker bonds: %v", err)
 			}
 		}
 

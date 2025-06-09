@@ -38,7 +38,8 @@ func (r *ReconnectionHandler) HandlePlayerReconnection(clientID, username string
 	}
 
 	// 获取玩家的游戏信息
-	playerGameInfo, err := roomManager.GetPlayerGameInfo(username)
+	room, _ := roomManager.FindRoomByPlayer(username)
+	playerGameInfo, err := roomManager.GetPlayerGameInfo(room.RoomID, username)
 	if err != nil || playerGameInfo == nil {
 		return r.sendReconnectionFailure(clientID, "No active game found", connManager)
 	}

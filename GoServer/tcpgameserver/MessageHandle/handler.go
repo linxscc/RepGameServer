@@ -53,6 +53,8 @@ func HandleTCPMessage(msg string, conn net.Conn, clientID string) {
 		HandleUserPlayCard(req, conn, clientID, connManager)
 	case "UserComposeCard":
 		HandleUserComposeCard(req, conn, clientID, connManager)
+	case "UserRestart":
+		HandleUserComposeCard(req, conn, clientID, connManager)
 	default:
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(9999))
 	}

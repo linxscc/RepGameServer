@@ -9,15 +9,14 @@ import (
 
 // PlayerInfo 房间内玩家信息
 type PlayerInfo struct {
-	Username       string             `json:"username"`        // 玩家用户名
-	HandCards      []models.Card      `json:"hand_cards"`      // 手牌列表
-	MaxHealth      float64            `json:"max_health"`      // 总血量
-	CurrentHealth  float64            `json:"current_health"`  // 当前血量
-	DamageDealt    float64            `json:"damage_dealt"`    // 造成的伤害
-	DamageReceived float64            `json:"damage_received"` // 承受的伤害
-	IsReady        bool               `json:"is_ready"`        // 是否准备就绪
-	Round          string             `json:"round"`           // 是否是当前回合玩家
-	TriggeredBonds []models.BondModel `json:"TriggeredBonds"`  // 触发的羁绊列表
+	Username      string                       `json:"username"`       // 玩家用户名
+	HandCards     []models.Card                `json:"hand_cards"`     // 手牌列表
+	MaxHealth     float64                      `json:"max_health"`     // 总血量
+	CurrentHealth float64                      `json:"current_health"` // 当前血量
+	IsReady       bool                         `json:"is_ready"`       // 是否准备就绪
+	Round         string                       `json:"round"`          // 是否是当前回合玩家
+	OtherPlayers  []models.OtherPlayerGameInfo `json:"OtherPlayer"`    // 其他玩家信息
+	DamageInfo    []models.DamageInfo          `json:"DamageInfo"`     // 伤害信息列表
 }
 
 // RoomInfo 游戏房间信息
@@ -99,8 +98,10 @@ func (r *RoomInfo) AddPlayer(username string) error {
 		HandCards:     make([]models.Card, 0),
 		MaxHealth:     r.InitialHealth,
 		CurrentHealth: r.InitialHealth,
-		IsReady:       false,
+		IsReady:       true,
 		Round:         "waiting",
+		OtherPlayers:  make([]models.OtherPlayerGameInfo, 0),
+		DamageInfo:    make([]models.DamageInfo, 0),
 	}
 
 	r.Players[username] = player
@@ -195,8 +196,8 @@ func (r *RoomInfo) SetPlayerHealth(username string, health float64) error {
 	return nil
 }
 
-// SetPlayerHealth 设置玩家触发的羁绊
-func (r *RoomInfo) SetPlayerBonds(username string, BondModels []models.BondModel) error {
+// SetOpponentPlayerDamage 设置其他玩家触发的伤害信息
+func (r *RoomInfo) SetPlayerDamage(username string, DamageInfo models.DamageInfo) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -205,12 +206,26 @@ func (r *RoomInfo) SetPlayerBonds(username string, BondModels []models.BondModel
 		return fmt.Errorf("player %s not found in room", username)
 	}
 
-	player.TriggeredBonds = BondModels
+	player.DamageInfo = append(player.DamageInfo, DamageInfo)
 	return nil
 }
 
-// GetPlayerBonds 获取玩家触发的羁绊
-func (r *RoomInfo) GetPlayerBonds(username string) (BondModels []models.BondModel, err error) {
+// SetOpponentPlayerDamage 设置其他玩家触发的伤害信息
+func (r *RoomInfo) CleanPlayerDamage(username string) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	player, exists := r.Players[username]
+	if !exists {
+		return fmt.Errorf("player %s not found in room", username)
+	}
+
+	player.DamageInfo = []models.DamageInfo{} // 清空伤害信息
+	return nil
+}
+
+// GetPlayerBonds 获取玩家触发的伤害信息
+func (r *RoomInfo) GetPlayerBonds(username string) (damageInfo []models.DamageInfo, err error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -219,10 +234,10 @@ func (r *RoomInfo) GetPlayerBonds(username string) (BondModels []models.BondMode
 		return nil, fmt.Errorf("player %s not found in room", username)
 	}
 
-	return player.TriggeredBonds, nil
+	return player.DamageInfo, nil
 }
 
-// SetPlayerHealth 设置玩家回合状态
+// SetPlayerRound 设置玩家回合状态
 func (r *RoomInfo) SetPlayerRound(username string, round string) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -546,32 +561,4 @@ func (r *RoomInfo) DrawCardByNameFromPool(cardName string, level int) (*models.C
 	}
 
 	return nil, fmt.Errorf("card '%s' not found in %s pool", cardName, poolName)
-}
-
-// SetPlayerDamageStats 设置玩家伤害统计信息
-func (r *RoomInfo) SetPlayerDamageStats(username string, damageDealt, damageReceived float64) error {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	player, exists := r.Players[username]
-	if !exists {
-		return fmt.Errorf("player %s not found in room", username)
-	}
-
-	player.DamageDealt = damageDealt
-	player.DamageReceived = damageReceived
-	return nil
-}
-
-// GetPlayerDamageStats 获取玩家伤害统计信息
-func (r *RoomInfo) GetPlayerDamageStats(username string) (damageDealt, damageReceived float64, err error) {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
-
-	player, exists := r.Players[username]
-	if !exists {
-		return 0, 0, fmt.Errorf("player %s not found in room", username)
-	}
-
-	return player.DamageDealt, player.DamageReceived, nil
 }
