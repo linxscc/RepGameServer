@@ -130,7 +130,7 @@ ZHOUKern
 ```
 ## RepGame 部署指南
 #ec2连接
-ssh -i RepGameKey.pem ubuntu@13.237.148.137  
+ssh -i RepGameKey.pem ubuntu@13.237.148.137  # 弹性IP，不随实例重启变化
 #EC2拉取docker
 #第一次
 docker login
@@ -154,7 +154,7 @@ sudo docker compose up -d
 
 #查看Docker容器的日志
 镜像日志
-ssh -i "RepGameKey.pem" ubuntu@13.237.148.137 "sudo docker logs -f repgame"
+ssh -i "RepGameKey.pem" ubuntu@52.62.195.43 "sudo docker logs -f repgame"
 实时查看
 sudo docker logs -f repgame_allinone
 

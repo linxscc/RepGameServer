@@ -1,8 +1,8 @@
-# 前端构建阶段
+# 前端构建阶段 - 使用新的Vite TypeScript项目
 FROM node:20 AS frontend-build
 WORKDIR /app/front
-COPY Front/myrepapp ./myrepapp
-WORKDIR /app/front/myrepapp
+COPY Front/myrepapp-vite ./myrepapp-vite
+WORKDIR /app/front/myrepapp-vite
 RUN npm install && npm run build
 
 # 后端构建阶段
@@ -16,8 +16,8 @@ RUN go build -o server main.go
 # 生产镜像
 FROM nginx:1.25
 WORKDIR /app
-# 拷贝前端静态资源到 nginx html 目录
-COPY --from=frontend-build /app/front/myrepapp/build /usr/share/nginx/html
+# 拷贝前端静态资源到 nginx html 目录 - Vite构建输出目录为dist
+COPY --from=frontend-build /app/front/myrepapp-vite/dist /usr/share/nginx/html
 # 拷贝 nginx 配置
 COPY nginx/conf/nginx.conf /etc/nginx/nginx.conf
 # 拷贝后端可执行文件

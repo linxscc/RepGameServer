@@ -1,0 +1,52 @@
+/* ZsWorkExperience.css */
+.work-experience-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 2rem 0;
+}
+
+.work-experience-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.work-experience-header {
+  text-align: center;
+  margin-bottom: 3rem;
+  color: white;
+}
+
+.work-experience-header h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  font-weight: 700;
+}
+
+.work-experience-header p {
+  font-size: 1.2rem;
+  opacity: 0.9;
+}
+
+.experience-content {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .work-experience-header h1 {
+    font-size: 2rem;
+  }
+  
+  .work-experience-container {
+    padding: 0 0.5rem;
+  }
+  
+  .experience-content {
+    padding: 1rem;
+  }
+}

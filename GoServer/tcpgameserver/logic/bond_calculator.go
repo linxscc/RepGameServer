@@ -79,15 +79,40 @@ func (bc *BondCalculator) findPossibleBonds(cards []models.Card, allBonds map[in
 		cardNameCount[card.Name] = append(cardNameCount[card.Name], card)
 	}
 
-	// 检查每个羁绊是否可以触发
+	// 检查每个羁绊是否可以触发，包括多次触发
 	for _, bond := range allBonds {
-		usedCards := bc.checkBondRequirement(bond, cardNameCount)
-		if len(usedCards) > 0 {
+		// 复制卡牌映射用于多次检查
+		tempCardCount := make(map[string][]models.Card)
+		for name, cards := range cardNameCount {
+			tempCardCount[name] = make([]models.Card, len(cards))
+			copy(tempCardCount[name], cards)
+		}
+
+		// 持续检查该羁绊是否可以被多次触发
+		for {
+			usedCards := bc.checkBondRequirement(bond, tempCardCount)
+			if len(usedCards) == 0 {
+				break // 无法再次触发该羁绊
+			}
+
+			// 添加一次羁绊触发
 			possibleBonds = append(possibleBonds, PossibleBond{
 				Bond:      bond,
 				UsedCards: usedCards,
 				Damage:    bond.Damage,
 			})
+
+			// 从临时卡牌映射中移除已使用的卡牌
+			for _, usedCard := range usedCards {
+				for cardName, availableCards := range tempCardCount {
+					for i, card := range availableCards {
+						if card.UID == usedCard.UID {
+							tempCardCount[cardName] = append(availableCards[:i], availableCards[i+1:]...)
+							break
+						}
+					}
+				}
+			}
 		}
 	}
 

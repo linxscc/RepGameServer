@@ -43,7 +43,8 @@ func HandleUserLogin(req models.TcpRequest, conn net.Conn, clientID string, conn
 	if !isValid {
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(2005))
 		return
-	} // 检查用户是否已经登录
+	}
+	// 检查用户是否已经登录
 	if existingClient, isLoggedIn := connManager.GetConnectionByUsername(loginData.Username); isLoggedIn {
 		// 检查用户状态是否在等待重连
 		if existingClient.GetStatus() == types.StatusWaitingReconnect {

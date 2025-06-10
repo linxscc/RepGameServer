@@ -1,0 +1,49 @@
+# Node.js
+Front/myrepapp-vite/node_modules
+Front/myrepapp-vite/dist
+Front/myrepapp-vite/.vite
+Front/myrepapp/node_modules
+Front/myrepapp/build
+
+# Go
+GoServer/*.exe
+GoServer/tmp
+GoServer/.env
+GoServer/logs
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+*.md
+
+# AWS credentials
+*.pem
+.aws
+
+# Build artifacts
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production

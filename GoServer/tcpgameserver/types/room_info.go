@@ -54,8 +54,8 @@ func NewRoomInfo(roomID, roomName string, maxPlayers int) *RoomInfo {
 		Level1CardPool: make([]models.Card, 0),
 		Level2CardPool: make([]models.Card, 0),
 		Level3CardPool: make([]models.Card, 0),
-		InitialHealth:  100, // 默认初始血量
-		MaxHandCards:   10,  // 默认最大手牌数量
+		InitialHealth:  10, // 默认初始血量
+		MaxHandCards:   10, // 默认最大手牌数量
 	}
 }
 
