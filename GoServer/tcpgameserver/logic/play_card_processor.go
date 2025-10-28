@@ -74,8 +74,6 @@ func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
 	if !gameEnded {
 		p.publishGameStateUpdateWithBonds(room)
 	}
-
-	return
 }
 
 // validatePlayCardRequest 验证出牌请求信息
@@ -390,23 +388,6 @@ func (p *PlayCardProcessor) drawCardsForPlayer(room *types.RoomInfo, playerName 
 
 	log.Printf("Drew %d cards for player %s after playing cards", count, playerName)
 	return nil
-}
-
-// buildPlayersState 构建玩家状态信息
-func (p *PlayCardProcessor) buildPlayersState(room *types.RoomInfo) []map[string]interface{} {
-	var playersState []map[string]interface{}
-
-	for _, player := range room.Players {
-		playerState := map[string]interface{}{
-			"username":   player.Username,
-			"health":     player.CurrentHealth,
-			"hand_count": len(player.HandCards),
-			"round":      player.Round,
-		}
-		playersState = append(playersState, playerState)
-	}
-
-	return playersState
 }
 
 // updatePlayerBattleStats 更新双方玩家的战斗数据

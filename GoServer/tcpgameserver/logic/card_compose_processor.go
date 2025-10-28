@@ -94,10 +94,6 @@ func (ccp *CardComposeProcessor) ProcessCardCompose(eventData *events.EventData)
 	}
 	// 步骤4: 发布游戏状态更新事件
 	ccp.publishComposeResult(room)
-
-	log.Printf("CardComposeProcessor: Successfully composed %d new cards for player %s, removed %d cards",
-		len(composeResult.NewCards), data.Player, len(composeResult.RemovedCards))
-	return
 }
 
 // performComposition 执行卡牌合成逻辑

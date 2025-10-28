@@ -9,10 +9,10 @@ const Navigation: React.FC = () => {
     <nav className="navigation">
       <div className="nav-container">
         <Link to="/" className="nav-logo">
-          Kern Zhou Portfolio
-        </Link>
+          Kern
+        </Link>        
         <div className="nav-links">
-          <Link 
+          {/* <Link 
             to="/" 
             className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
           >
@@ -23,13 +23,7 @@ const Navigation: React.FC = () => {
             className={`nav-link ${location.pathname === '/download' ? 'active' : ''}`}
           >
             下载客户端
-          </Link>
-          <Link 
-            to="/zsworkexperience" 
-            className={`nav-link ${location.pathname === '/zsworkexperience' ? 'active' : ''}`}
-          >
-            工作经验
-          </Link>
+          </Link> */}
         </div>
       </div>
     </nav>

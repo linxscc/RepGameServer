@@ -236,9 +236,10 @@ func GetAllBonds() ([]models.BondModel, error) {
 	}
 	// 查询羁绊关联的卡牌
 	cardQuery := `
-		SELECT br.bond_id, br.card_name
+		SELECT br.bond_id, br.card_name1, br.card_name2, br.card_name3, 
+		       br.card_name4, br.card_name5, br.card_name6, br.card_name7
 		FROM BondCards br
-		ORDER BY br.bond_id, br.card_name`
+		ORDER BY br.bond_id`
 	cardRows, err := db.Query(cardQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query BondCards: %v", err)
@@ -246,19 +247,23 @@ func GetAllBonds() ([]models.BondModel, error) {
 	defer cardRows.Close() // 读取羁绊关联的卡牌信息
 	for cardRows.Next() {
 		var bondID int
-		var cardName string
-		err := cardRows.Scan(&bondID, &cardName)
+		var cardName1, cardName2, cardName3, cardName4, cardName5, cardName6, cardName7 sql.NullString
+		err := cardRows.Scan(&bondID, &cardName1, &cardName2, &cardName3, &cardName4, &cardName5, &cardName6, &cardName7)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan BondCards: %v", err)
 		}
 
-		// 将卡牌名称添加到对应的羁绊中，直接修改bonds切片
+		// 将非空的卡牌名称添加到对应的羁绊中
 		if index, exists := bondIndexMap[bondID]; exists {
-			bonds[index].CardNames = append(bonds[index].CardNames, cardName)
+			cardNames := []sql.NullString{cardName1, cardName2, cardName3, cardName4, cardName5, cardName6, cardName7}
+			for _, cardName := range cardNames {
+				if cardName.Valid && cardName.String != "" {
+					bonds[index].CardNames = append(bonds[index].CardNames, cardName.String)
+				}
+			}
 		} else {
-			log.Printf("Warning: Bond ID %d not found for card %s", bondID, cardName)
+			log.Printf("Warning: Bond ID %d not found in bonds", bondID)
 		}
 	}
-
 	return bonds, nil
 }

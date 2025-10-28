@@ -88,11 +88,14 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(eventData *events.Even
 
 		// 根据事件源确定消息码
 		var messageCode int
-		if eventData.Source == "card_compose_processor" {
+		switch eventData.Source {
+		case "card_compose_processor":
 			messageCode = 9001
-		} else if eventData.Source == "play_card_processor" {
+		case "play_card_processor":
 			messageCode = 8001
-		} else {
+		case "force_cardplay_processor":
+			messageCode = 7001
+		default:
 			messageCode = 8001 // 默认消息码
 		}
 

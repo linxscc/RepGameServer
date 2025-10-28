@@ -155,11 +155,6 @@ func (g *GameStartProcessor) InitializePlayersHealthAndNotify(room *types.RoomIn
 		if player.Username == "" {
 			continue
 		}
-		// // 先发送羁绊数据消息 (5002)
-		// err := g.SendBondDataNotification(player, allBonds, connManager)
-		// if err != nil {
-		// 	return fmt.Errorf("failed to send bond data notification to player %s: %v", player.Username, err)
-		// }
 
 		// 设置玩家初始血量
 		err := roomManager.SetPlayerHealth(room.RoomID, player.Username, room.Players[player.Username].MaxHealth)
@@ -179,6 +174,8 @@ func (g *GameStartProcessor) InitializePlayersHealthAndNotify(room *types.RoomIn
 			return fmt.Errorf("failed to send game start notification to player %s: %v", player.Username, err)
 		}
 	}
+
+	GlobalRoomTimerProcessor.StartRoomTimer(room.RoomID)
 
 	return nil
 }
@@ -205,28 +202,6 @@ func (g *GameStartProcessor) SendGameStartNotification(room *types.RoomInfo, pla
 
 	return nil
 }
-
-// // SendBondDataNotification 发送羁绊数据通知
-// func (g *GameStartProcessor) SendBondDataNotification(player *types.ClientInfo, allBonds map[int]*models.BondModel, connManager *service.ConnectionManager) error {
-// 	// 将羁绊数据转换为切片格式，便于序列化
-// 	bondList := make([]*models.BondModel, 0, len(allBonds))
-// 	for _, bond := range allBonds {
-// 		bondList = append(bondList, bond)
-// 	}
-
-// 	// 发送羁绊数据消息 (5002)
-// 	response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(5002, bondList)
-
-// 	// 获取玩家连接并发送消息
-// 	clientInfo, exists := connManager.GetConnectionByClientID(player.ClientID)
-// 	if !exists || clientInfo == nil || clientInfo.Conn == nil {
-// 		return fmt.Errorf("player connection not found or invalid")
-// 	}
-
-// 	g.sendTCPResponse(clientInfo.Conn, response)
-
-// 	return nil
-// }
 
 // performMatchmaking 执行匹配逻辑
 func (g *GameStartProcessor) performMatchmaking() error {

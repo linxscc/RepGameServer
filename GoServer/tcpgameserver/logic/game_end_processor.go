@@ -67,7 +67,8 @@ func (gep *GameEndProcessor) ProcessGameEnd(data interface{}) error {
 		return err
 	}
 
-	log.Printf("GameEndProcessor: Successfully processed game end for room %s", eventData.RoomID)
+	// 步骤6: 清理全局计时器
+	GlobalRoomTimerProcessor.StopRoomTimer(room.RoomID)
 	return nil
 }
 
