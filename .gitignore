@@ -1,5 +1,8 @@
 *.md
 *.pem
 *.bat
+*.mod
+*.sum
+*.exe
 Readme.md
 

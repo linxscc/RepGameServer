@@ -1,10 +1,8 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import './Navigation.css';
 
 const Navigation: React.FC = () => {
-  const location = useLocation();
-
   return (
     <nav className="navigation">
       <div className="nav-container">
@@ -12,18 +10,7 @@ const Navigation: React.FC = () => {
           Kern
         </Link>        
         <div className="nav-links">
-          {/* <Link 
-            to="/" 
-            className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
-          >
-            首页
-          </Link>
-          <Link 
-            to="/download" 
-            className={`nav-link ${location.pathname === '/download' ? 'active' : ''}`}
-          >
-            下载客户端
-          </Link> */}
+          {/* 导航链接 */}
         </div>
       </div>
     </nav>
@@ -31,3 +18,4 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
+
