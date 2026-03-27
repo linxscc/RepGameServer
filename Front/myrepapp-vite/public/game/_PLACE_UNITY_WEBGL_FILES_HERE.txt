@@ -1,0 +1,9 @@
+Put Unity WebGL exported files in this folder.
+
+Expected structure:
+- game/index.html
+- game/Build/*
+- game/TemplateData/* (if generated)
+
+After docker build/deploy, access:
+- http://<your-domain>/game/

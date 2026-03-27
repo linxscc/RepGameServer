@@ -37,6 +37,8 @@ docker-compose*.yml
 # AWS credentials
 *.pem
 .aws
+nginx/certs
+nginx/certbot
 
 # Build artifacts
 dist/

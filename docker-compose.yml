@@ -3,9 +3,13 @@ services:
     image: kernzs/repgame:latest
     ports:
       - "80:80"
+      - "443:443"
       - "8000:8000"
       - "9060:9060"
       - "3306:3306"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/certbot:/var/www/certbot
     container_name: repgame_allinone
     environment:
       - DOCKER_BUILD=1
