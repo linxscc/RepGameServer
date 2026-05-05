@@ -4,10 +4,11 @@
 *.mod
 *.sum
 *.exe
-Readme.md
 
 /*.md
 /Readme.md
 
+
+/Read.me
 
 /vpn/
