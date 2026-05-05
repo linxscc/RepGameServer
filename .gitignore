@@ -1,12 +1,11 @@
 *.md
+!Readme.md
 *.pem
 *.bat
 *.mod
 *.sum
 *.exe
 
-/*.md
-/Readme.md
 
 
 /Read.me
