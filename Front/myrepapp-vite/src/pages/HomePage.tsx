@@ -1,62 +1,118 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { getProfileInfo, ProfileInfoResponse } from '@/api/content';
 import './HomePage.css';
 
 const HomePage: React.FC = () => {
+  const heroRef = useRef<HTMLElement>(null);
+  const [profile, setProfile] = useState<ProfileInfoResponse | null>(null);
+
+  useEffect(() => {
+    getProfileInfo().then(setProfile).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) entry.target.classList.add('revealed');
+        });
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+    );
+    document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [profile]);
+
+  const nameParts = (profile?.fullName ?? 'Kern Zhou').split(' ');
+
   return (
-    <div className="app-container">
-      <header className="hero">
-        <h1 className="hero-title">Hi, I'm Kern Zhou</h1>
-        <h2 className="hero-subtitle">Experienced Software Engineer</h2>
-        <p className="hero-desc">专注于企业级系统开发、游戏开发和数据库优化，具备多年跨国项目经验。</p>
-        <a className="hero-btn" href="#contact">Contact Me</a>
-      </header>
-      <main>
-        <section className="about" id="about">
-          <h2>About Me</h2>
-          <p>
-            I'm Kern Zhou, a software engineer with extensive experience in enterprise systems, game development, and database optimization. 
-            I have worked on various projects across different countries including China, Japan, and Australia, 
-            with expertise in Python, C#, Unity, and large-scale data processing.
-          </p>
+    <div className="home">
+      {/* ── Hero ── */}
+      <section className="hero" ref={heroRef}>
+        <div className="hero-bg-glow" />
+        <div className="hero-content">
+          <div className="hero-rule" />
+          <h1 className="hero-name">
+            {nameParts.map((part, i) => (
+              <span key={i} className="hero-name-line">{part}</span>
+            ))}
+          </h1>
+          <p className="hero-title">{profile?.title ?? 'Software Engineer'}</p>
+          <p className="hero-tagline">{profile?.tagline ?? ''}</p>
+          <div className="hero-actions">
+            <a href="#contact" className="btn btn-gold">Get in touch</a>
+          </div>
+        </div>
+        <div className="hero-scroll-hint">
+          <span className="scroll-line" />
+        </div>
+      </section>
+
+      {/* ── About ── */}
+      {profile?.aboutText && (
+        <section className="about section reveal" id="about">
+          <div className="section-inner">
+            <span className="section-num">01</span>
+            <div className="section-content">
+              <h2 className="section-heading">About</h2>
+              <p className="about-text">{profile.aboutText}</p>
+              <div className="about-stats">
+                <div className="stat">
+                  <span className="stat-value">8+</span>
+                  <span className="stat-label">Years experience</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-value">3</span>
+                  <span className="stat-label">Countries worked</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-value">3</span>
+                  <span className="stat-label">Languages</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
-        <section className="projects" id="projects">
-          <h2>Projects</h2>
-          <ul>
-            <li>
-              <strong>RepGameServer</strong> - A scalable backend server built with GoFrame and Nginx.
-              <br />
-              <Link to="/download" className="download-link">
-                📥 下载客户端
-              </Link>
-            </li>
-            <li>
-              <strong>My Personal Blog</strong> - A blog platform built with React and Markdown.
-            </li>
-            <li>
-              <strong>Portfolio Website</strong> - This site! Built with React and inspired by Brittany Chiang.
-            </li>
-            <li>
-              <strong>Work Experience</strong> - My professional journey and technical growth.
-              <br />
-              <Link to="/zsworkexperience" className="download-link">
-                💼 查看工作经验
-              </Link>
-            </li>
-          </ul>
-        </section>
-        <section className="contact" id="contact">
-          <h2>Contact</h2>
-          <p>Email: <a href="mailto:kern.zhou1995@gmail.com">kern.zhou1995@gmail.com</a></p>
-          <p>Phone: +081 80 2484 1107</p>
-          <p>Languages: Chinese (Native), Japanese (N1), English (B1)</p>
-        </section>
-      </main>
+      )}
+
+      {/* ── Contact ── */}
+      <section className="contact section reveal" id="contact">
+        <div className="section-inner">
+          <span className="section-num">02</span>
+          <div className="section-content">
+            <h2 className="section-heading">Contact</h2>
+            <div className="contact-grid">
+              {profile?.email && (
+                <a href={`mailto:${profile.email}`} className="contact-item">
+                  <span className="contact-label">Email</span>
+                  <span className="contact-value">{profile.email}</span>
+                </a>
+              )}
+              {profile?.phone && (
+                <div className="contact-item">
+                  <span className="contact-label">Phone</span>
+                  <span className="contact-value">{profile.phone}</span>
+                </div>
+              )}
+              {profile?.languages && (
+                <div className="contact-item">
+                  <span className="contact-label">Languages</span>
+                  <span className="contact-value">{profile.languages}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ── */}
       <footer className="footer">
-        <p>&copy; {new Date().getFullYear()} Kern Zhou. All rights reserved.</p>
+        <div className="footer-rule" />
+        <p>&copy; {new Date().getFullYear()} {profile?.fullName ?? 'Kern Zhou'}</p>
+        <span className="footer-credit">Designed with precision</span>
       </footer>
     </div>
   );
-}
+};
 
 export default HomePage;

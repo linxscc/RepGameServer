@@ -65,9 +65,13 @@ func main() {
 	})
 
 	s.Group("/", func(group *ghttp.RouterGroup) {
+		group.Middleware(ghttp.MiddlewareHandlerResponse)
 		group.Bind(
 			new(controller.Normal),
 			new(controller.ProductDocs),
+			new(controller.Download),
+			new(controller.Profile),
+			new(controller.WorkExperience),
 		)
 	})
 

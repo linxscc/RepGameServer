@@ -1,3 +1,4 @@
+/* Steps2 — Career Timeline */
 .steps2-container1 {
   width: 100%;
   display: flex;
@@ -6,220 +7,133 @@
   flex-direction: column;
   justify-content: center;
 }
- 
+
 .steps2-max-width {
-  gap: var(--dl-layout-space-fourunits);
+  gap: 0;
   width: 100%;
+  max-width: 900px;
   display: flex;
   align-items: flex-start;
-  flex-direction: row;
+  flex-direction: column;
 }
- 
-.steps2-container2 {
-  align-items: start;
-}
- 
+
+.steps2-container2 { align-items: start; }
+
 .steps2-section-header {
-  gap: var(--dl-layout-space-oneandhalfunits);
+  gap: 1.5rem;
   top: 10%;
   display: flex;
   position: sticky;
   align-items: flex-start;
   flex-direction: column;
 }
- 
+
 .steps2-actions {
   gap: var(--dl-layout-space-unit);
   display: flex;
   align-items: flex-start;
 }
- 
+
 .steps2-container3 {
-  grid-area: span 1/span 1/span 1/span 1;
-}
- 
-.steps2-container4 {
-  top: 10%;
-  position: sticky;
-  transform: rotate(-2deg);
-  margin-bottom: var(--dl-layout-space-twounits);
-  background-color: var(--dl-color-theme-accent1);
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border-radius: 8px;
-  padding: 1.5rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding-left: 3rem;
 }
 
-.steps2-container4:hover {
-  transform: rotate(-2deg) scale(1.05);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-}
- 
-.steps2-text14 {
-  text-align: center;
-}
- 
-.steps2-text15 {
-  top: var(--dl-layout-space-unit);
-  right: var(--dl-layout-space-unit);
+.steps2-container3::before {
+  content: '';
   position: absolute;
-  font-size: 40px;
-  font-style: normal;
-  font-weight: 700;
-}
- 
-.steps2-container5 {
-  top: 10%;
-  position: sticky;
-  transform: rotate(2deg);
-  margin-bottom: var(--dl-layout-space-twounits);
-  background-color: var(--dl-color-theme-accent2);
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border-radius: 8px;
-  padding: 1.5rem;
+  top: 0; left: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(to bottom,
+    var(--color-gold), var(--color-gold-dim),
+    var(--color-gold-dim), var(--color-gold));
+  opacity: 0.5;
 }
 
-.steps2-container5:hover {
-  transform: rotate(2deg) scale(1.05);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-}
- 
-.steps2-text17 {
-  text-align: center;
-}
- 
-.steps2-text18 {
-  top: var(--dl-layout-space-unit);
-  right: var(--dl-layout-space-unit);
-  position: absolute;
-  font-size: 40px;
-  font-style: normal;
-  font-weight: 700;
-}
- 
-.steps2-container6 {
-  top: 10%;
-  position: sticky;
-  transform: rotate(-2deg);
-  margin-bottom: var(--dl-layout-space-twounits);
-  background-color: var(--dl-color-theme-accent1);
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border-radius: 8px;
-  padding: 1.5rem;
-}
-
-.steps2-container6:hover {
-  transform: rotate(-2deg) scale(1.05);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-}
- 
-.steps2-text20 {
-  text-align: center;
-}
- 
-.steps2-text21 {
-  top: var(--dl-layout-space-unit);
-  right: var(--dl-layout-space-unit);
-  position: absolute;
-  font-size: 40px;
-  font-style: normal;
-  font-weight: 700;
-}
- 
+.steps2-container4,
+.steps2-container5,
+.steps2-container6,
 .steps2-container7 {
-  top: 10%;
-  position: sticky;
-  transform: rotate(2deg);
-  background-color: var(--dl-color-theme-accent2);
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border-radius: 8px;
-  padding: 1.5rem;
+  position: relative;
+  padding: 2rem 0 2.5rem 2.5rem;
+  cursor: default;
+  border-radius: 0;
+  background: transparent;
+  transform: none;
+  transition: all 0.35s ease;
+  margin-bottom: 0;
 }
 
-.steps2-container7:hover {
-  transform: rotate(2deg) scale(1.05);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-}
- 
-.steps2-text23 {
-  text-align: center;
-}
- 
-.steps2-text24 {
-  top: var(--dl-layout-space-unit);
-  right: var(--dl-layout-space-unit);
+.steps2-container4::before,
+.steps2-container5::before,
+.steps2-container6::before,
+.steps2-container7::before {
+  content: '';
   position: absolute;
-  font-size: 40px;
-  font-style: normal;
-  font-weight: 700;
+  top: 2.5rem; left: -3.5rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-gold);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 0 3px var(--color-gold-dim);
 }
- 
-.steps2-text25 {
-  display: inline-block;
+
+.steps2-container4:hover,
+.steps2-container5:hover,
+.steps2-container6:hover,
+.steps2-container7:hover {
+  transform: none;
+  box-shadow: none;
+  background: rgba(201, 168, 76, 0.02);
 }
- 
-.steps2-text26 {
-  display: inline-block;
+
+.steps2-container4 h2,
+.steps2-container5 h2,
+.steps2-container6 h2,
+.steps2-container7 h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--color-text);
+  margin-bottom: 0.5rem;
 }
- 
-.steps2-text27 {
-  display: inline-block;
+
+.steps2-container4 span,
+.steps2-container5 span,
+.steps2-container6 span,
+.steps2-container7 span {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--color-text-dim);
+  line-height: 1.7;
 }
- 
-.steps2-text28 {
-  display: inline-block;
-}
- 
-.steps2-text29 {
-  display: inline-block;
-}
- 
-.steps2-text30 {
-  display: inline-block;
-}
- 
-.steps2-text31 {
-  display: inline-block;
-}
- 
-.steps2-text32 {
-  display: inline-block;
-}
- 
-@media(max-width: 991px) {
-  .steps2-max-width {
-    flex-direction: column;
+
+.steps2-text15,
+.steps2-text18,
+.steps2-text21,
+.steps2-text24 { display: none; }
+
+@media (max-width: 767px) {
+  .steps2-container3 { padding-left: 2rem; }
+  .steps2-container4,
+  .steps2-container5,
+  .steps2-container6,
+  .steps2-container7 {
+    padding-left: 1.5rem;
   }
-}
- 
-@media(max-width: 767px) {
+  .steps2-container4::before,
+  .steps2-container5::before,
+  .steps2-container6::before,
+  .steps2-container7::before {
+    left: -2.5rem;
+  }
   .steps2-section-header {
     position: static;
-    margin-bottom: var(--dl-layout-space-twounits);
-  }
-  .steps2-actions {
-    width: 100%;
-    align-self: flex-start;
-  }
-  .steps2-container4 {
-    width: 100%;
-  }
-  .steps2-container5 {
-    width: 100%;
-  }
-  .steps2-container6 {
-    width: 100%;
-  }
-  .steps2-container7 {
-    width: 100%;
-  }
-}
- 
-@media(max-width: 479px) {
-  .steps2-button {
-    width: 100%;
+    margin-bottom: 2rem;
   }
 }

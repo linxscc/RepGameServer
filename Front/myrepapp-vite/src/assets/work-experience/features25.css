@@ -1,224 +1,102 @@
+/* Features25 — Core Strengths Tabs */
 .features25-container2 {
   width: 100%;
   display: grid;
-  grid-gap: var(--dl-layout-space-fiveunits);
+  grid-gap: 5rem;
   position: relative;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
 }
- 
+
+.features25-image-container { display: none; }
+.features25-image1,
+.features25-image2,
+.features25-image3 { display: none; }
+
 .features25-tabs-menu {
-  gap: var(--dl-layout-space-twounits);
+  gap: 0;
   width: 100%;
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
 }
 
-/* 改善大屏幕显示效果 */
-@media(min-width: 1200px) {
-  .features25-tabs-menu {
-    flex-direction: row;
-    justify-content: space-between;
-    gap: var(--dl-layout-space-threeunits);
-  }
-  
-  .features25-tab-horizontal1,
-  .features25-tab-horizontal2, 
-  .features25-tab-horizontal3 {
-    flex: 1;
-    max-width: 300px;
-  }
-  
-  .features25-container2 {
-    grid-template-columns: 1fr;
-    gap: var(--dl-layout-space-fiveunits);
-  }
-}
- 
-.features25-tab-horizontal1 {
-  gap: var(--dl-layout-space-twounits);
-  cursor: pointer;
-  display: flex;
-  overflow: hidden;
-  align-self: stretch;
-  align-items: flex-start;
-  flex-shrink: 0;
-  transition: all 0.3s ease;
-  border-radius: 8px;
-  padding: 1rem;
-  margin: 0.5rem 0;
-}
-
-.features25-tab-horizontal1:hover {
-  transform: rotate(2deg) scale(1.02);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-  background-color: rgba(102, 126, 234, 0.05);
-}
- 
-.features25-divider-container1 {
-  display: none;
-}
- 
-.features25-container3 {
-  display: none;
-}
- 
-.features25-content1 {
-  gap: 16px;
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  flex-grow: 1;
-  align-items: flex-start;
-  flex-shrink: 0;
-  flex-direction: column;
-  justify-content: center;
-}
- 
-.features25-tab-horizontal2 {
-  gap: var(--dl-layout-space-twounits);
-  cursor: pointer;
-  display: flex;
-  overflow: hidden;
-  align-self: stretch;
-  align-items: flex-start;
-  flex-shrink: 0;
-  transition: all 0.3s ease;
-  border-radius: 8px;
-  padding: 1rem;
-  margin: 0.5rem 0;
-}
-
-.features25-tab-horizontal2:hover {
-  transform: rotate(-2deg) scale(1.02);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-  background-color: rgba(102, 126, 234, 0.05);
-}
- 
-.features25-divider-container2 {
-  display: none;
-}
- 
-.features25-container4 {
-  display: none;
-}
- 
-.features25-content2 {
-  gap: 16px;
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  flex-grow: 1;
-  align-items: flex-start;
-  flex-shrink: 0;
-  flex-direction: column;
-  justify-content: center;
-}
- 
+.features25-tab-horizontal1,
+.features25-tab-horizontal2,
 .features25-tab-horizontal3 {
-  gap: var(--dl-layout-space-twounits);
-  cursor: pointer;
+  gap: 0;
+  cursor: default;
   display: flex;
-  overflow: hidden;
-  align-self: stretch;
   align-items: flex-start;
-  flex-shrink: 0;
-  transition: all 0.3s ease;
-  border-radius: 8px;
-  padding: 1rem;
-  margin: 0.5rem 0;
+  padding: 2.5rem;
+  border-right: 1px solid var(--color-border);
+  transition: background 0.4s ease;
 }
 
+.features25-tab-horizontal3 { border-right: none; }
+
+.features25-tab-horizontal1:hover,
+.features25-tab-horizontal2:hover,
 .features25-tab-horizontal3:hover {
-  transform: rotate(2deg) scale(1.02);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-  background-color: rgba(102, 126, 234, 0.05);
+  background: rgba(201, 168, 76, 0.03);
 }
- 
-.features25-divider-container3 {
-  display: none;
-}
- 
-.features25-container5 {
-  display: none;
-}
- 
+
+.features25-divider-container1,
+.features25-divider-container2,
+.features25-divider-container3,
+.features25-container3,
+.features25-container4,
+.features25-container5 { display: none; }
+
+.features25-content1,
+.features25-content2,
 .features25-content3 {
-  gap: 16px;
+  gap: 1rem;
   flex: 1;
   display: flex;
-  overflow: hidden;
-  flex-grow: 1;
-  align-items: flex-start;
-  flex-shrink: 0;
   flex-direction: column;
-  justify-content: center;
 }
- 
-.features25-image-container {
-  height: 100%;
-  display: flex;
+
+.features25-content1 h2,
+.features25-content2 h2,
+.features25-content3 h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 400;
+  color: var(--color-text);
+  line-height: 1.3;
   position: relative;
+  padding-bottom: 1.25rem;
 }
- 
-.features25-image1 {
-  animation-name: fadeIn;
-  animation-delay: 0s;
-  animation-duration: 300ms;
-  animation-direction: normal;
-  animation-iteration-count: 1;
-  animation-timing-function: ease;
+
+.features25-content1 h2::after,
+.features25-content2 h2::after,
+.features25-content3 h2::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 20px;
+  height: 1px;
+  background: var(--color-gold);
+  opacity: 0.5;
 }
- 
-.features25-image2 {
-  animation-name: fadeIn;
-  animation-delay: 0s;
-  animation-duration: 300ms;
-  animation-direction: normal;
-  animation-iteration-count: 1;
-  animation-timing-function: ease;
+
+.features25-content1 span,
+.features25-content2 span,
+.features25-content3 span {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--color-text-dim);
+  line-height: 1.75;
 }
- 
-.features25-image3 {
-  animation-name: fadeIn;
-  animation-delay: 0s;
-  animation-duration: 300ms;
-  animation-direction: normal;
-  animation-iteration-count: 1;
-  animation-timing-function: ease;
-}
- 
-.features25-text1 {
-  display: inline-block;
-}
- 
-.features25-text2 {
-  display: inline-block;
-}
- 
-.features25-text3 {
-  display: inline-block;
-}
- 
-.features25-text4 {
-  display: inline-block;
-}
- 
-.features25-text5 {
-  display: inline-block;
-}
- 
-.features25-text6 {
-  display: inline-block;
-}
- 
-@media(max-width: 991px) {
-  .features25-container2 {
-    grid-gap: var(--dl-layout-space-twounits);
+
+@media (max-width: 991px) {
+  .features25-tabs-menu {
     grid-template-columns: 1fr;
   }
-  .features25-tabs-menu {
-    order: 2;
+  .features25-tab-horizontal1,
+  .features25-tab-horizontal2,
+  .features25-tab-horizontal3 {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: 2rem;
   }
 }

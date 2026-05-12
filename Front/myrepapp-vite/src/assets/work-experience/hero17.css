@@ -1,245 +1,124 @@
-/* CSS Animations for hero17 component */
-@keyframes scroll-x {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(calc(-100% - 16px));
-  }
-}
-
-@keyframes scroll-y {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(calc(-100% - 16px));
-  }
-}
-
+/* Hero17 — Editorial Hero for Work Experience */
 .hero17-header78 {
-  gap: var(--dl-layout-space-threeunits);
   width: 100%;
-  height: auto;
+  min-height: 90vh;
   display: flex;
   overflow: hidden;
   position: relative;
   align-items: center;
-  flex-shrink: 0;
+  justify-content: center;
   flex-direction: column;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: var(--dl-layout-space-sixunits) 0;
+  background: var(--color-bg);
+  padding: 0 2rem;
 }
- 
+
+.hero17-header78::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70vw;
+  height: 50vh;
+  background: radial-gradient(ellipse at center, rgba(201, 168, 76, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+}
+
 .hero17-column {
-  gap: var(--dl-layout-space-oneandhalfunits);
-  width: auto;
+  gap: 2rem;
+  max-width: 720px;
   display: flex;
   align-items: center;
   flex-direction: column;
-  padding-bottom: var(--dl-layout-space-unit);
-}
- 
-.hero17-content1 {
-  gap: var(--dl-layout-space-oneandhalfunits);
-  display: flex;
-  align-self: stretch;
-  align-items: center;
-  flex-direction: column;
-}
- 
-.hero17-text1 {
-  text-align: center;
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
- 
-.hero17-text2 {
-  text-align: center;
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
- 
-.hero17-actions {
-  gap: var(--dl-layout-space-unit);
-  display: flex;
-  align-items: flex-start;
-  padding-top: var(--dl-layout-space-unit);
-}
- 
-.hero17-content2 {
-  gap: var(--dl-layout-space-oneandhalfunits);
-  width: 100%;
-  display: flex;
   position: relative;
-  align-items: flex-start;
+  z-index: 1;
+}
+
+.hero17-content1 {
+  gap: 1.5rem;
+  display: flex;
+  align-items: center;
   flex-direction: column;
+  text-align: center;
 }
- 
-.hero17-row-container1 {
-  width: 100%;
+
+.hero17-text1 {
+  font-family: var(--font-display);
+  font-size: clamp(2.8rem, 6vw, 5rem);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--color-text) !important;
+  text-shadow: none !important;
 }
- 
-.hero17-placeholder-image10 {
-  width: 400px;
-  height: 400px;
+
+.hero17-text2 {
+  font-family: var(--font-body);
+  font-size: clamp(1rem, 1.6vw, 1.2rem);
+  font-weight: 300;
+  line-height: 1.75;
+  color: var(--color-text-dim) !important;
+  text-shadow: none !important;
+  max-width: 520px;
 }
- 
-.hero17-placeholder-image11 {
-  width: 400px;
-  height: 400px;
+
+.hero17-actions {
+  gap: 1rem;
+  display: flex;
+  align-items: center;
+  padding-top: 1rem;
 }
- 
-.hero17-placeholder-image12 {
-  width: 400px;
-  height: 400px;
+
+.hero17-button1,
+.hero17-button2 {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.85rem 2rem;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+  border-radius: 0 !important;
 }
- 
-.hero17-placeholder-image13 {
-  width: 400px;
-  height: 400px;
+
+.hero17-button1 {
+  background: linear-gradient(135deg, var(--color-gold-light), var(--color-gold), var(--color-gold-dark));
+  color: var(--color-bg);
+  border: none;
 }
- 
-.hero17-placeholder-image14 {
-  width: 400px;
-  height: 400px;
+
+.hero17-button1:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(201, 168, 76, 0.25);
 }
- 
-.hero17-placeholder-image15 {
-  width: 400px;
-  height: 400px;
+
+.hero17-button2 {
+  background: transparent;
+  color: var(--color-gold);
+  border: 1px solid rgba(201, 168, 76, 0.25);
 }
- 
-.hero17-placeholder-image16 {
-  width: 400px;
-  height: 400px;
+
+.hero17-button2:hover {
+  border-color: var(--color-gold);
+  color: var(--color-gold-light);
+  transform: translateY(-2px);
 }
- 
-.hero17-placeholder-image17 {
-  width: 400px;
-  height: 400px;
+
+.hero17-content2 { display: none; }
+.hero17-container2 { display: none; }
+.hero17-row-container1 { display: none; }
+.hero17-row-container2 { display: none; }
+
+@media (max-width: 767px) {
+  .hero17-header78 { min-height: 80vh; }
 }
- 
-.hero17-placeholder-image18 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image19 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image20 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image21 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-row-container2 {
-  width: 100%;
-}
- 
-.hero17-placeholder-image22 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image23 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image24 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image25 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image26 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image27 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image28 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image29 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image30 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image31 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image32 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-placeholder-image33 {
-  width: 400px;
-  height: 400px;
-}
- 
-.hero17-container2 {
-  display: contents;
-}
- 
-.hero17-text5 {
-  display: inline-block;
-}
- 
-.hero17-text6 {
-  display: inline-block;
-}
- 
-.hero17-text7 {
-  display: inline-block;
-}
- 
-.hero17-text8 {
-  display: inline-block;
-}
- 
-@media(max-width: 767px) {
-  .hero17-content2 {
-    width: 100%;
-  }
-}
- 
-@media(max-width: 479px) {
+
+@media (max-width: 479px) {
   .hero17-actions {
     width: 100%;
     flex-direction: column;
+    align-items: center;
   }
-  .hero17-button1 {
-    width: 100%;
-  }
-  .hero17-button2 {
-    width: 100%;
-  }
+  .hero17-button1,
+  .hero17-button2 { width: 100%; }
 }
