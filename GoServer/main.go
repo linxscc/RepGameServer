@@ -20,13 +20,14 @@ func main() {
 		origin := r.Header.Get("Origin")
 		// 允许的域名列表
 		allowedOrigins := []string{
+			"http://zsdimain.site",
+			"https://zsdimain.site",
 			"http://www.zsdimain.site",
 			"https://www.zsdimain.site",
-			"http://www.www.zsdimain.site",  // 带 www
-			"https://www.www.zsdimain.site", // 带 www (HTTPS)
-			"http://13.237.148.137",         // AWS EC2 公网IP
-			"http://localhost:3000",         // 本地开发
-			"http://localhost:5173",         // Vite 开发服务器
+			"http://13.237.148.137",
+			"https://13.237.148.137",
+			"http://localhost:3000",
+			"http://localhost:5173",
 		}
 
 		// 检查请求来源是否在允许列表中

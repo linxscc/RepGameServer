@@ -7,7 +7,15 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    open: true
+    open: true,
+    proxy: {
+      '/download-items': 'http://localhost:8000',
+      '/system-requirements': 'http://localhost:8000',
+      '/profile-info': 'http://localhost:8000',
+      '/work-experience': 'http://localhost:8000',
+      '/normal': 'http://localhost:8000',
+      '/product': 'http://localhost:8000',
+    }
   },
   build: {
     outDir: 'dist',

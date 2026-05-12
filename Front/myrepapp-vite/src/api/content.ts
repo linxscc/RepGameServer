@@ -1,7 +1,7 @@
 // ── 从后端获取页面内容的 API 封装 ──
 // 复用 productDocs.ts 中的 API_BASE_URL
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 // ═══ 类型定义 ═══
 

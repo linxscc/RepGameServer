@@ -11,27 +11,20 @@ type DBConfig struct {
 	DBName   string
 }
 
-// GetDBConfig 根据环境返回数据库配置
-func GetDBConfig() DBConfig {
-
-	// 检查是否在Docker环境中运行
-	if os.Getenv("DOCKER_BUILD") == "1" {
-		// Docker环境下使用RDS连接配置
-		return DBConfig{
-			Host:     "repgame-database-0.cx2omeoogidr.ap-southeast-2.rds.amazonaws.com",
-			Port:     "3306",
-			User:     "repgameadmin",
-			Password: "repgameadmin",
-			DBName:   "RepGame",
-		}
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
+	return fallback
+}
 
-	// 本地开发环境配置
+// GetDBConfig 从环境变量读取数据库配置
+func GetDBConfig() DBConfig {
 	return DBConfig{
-		Host:     "127.0.0.1",
-		Port:     "13306",
-		User:     "repgameadmin",
-		Password: "repgameadmin",
-		DBName:   "RepGame",
+		Host:     envOrDefault("DB_HOST", "127.0.0.1"),
+		Port:     envOrDefault("DB_PORT", "13306"),
+		User:     envOrDefault("DB_USER", "repgameadmin"),
+		Password: envOrDefault("DB_PASSWORD", "repgameadmin"),
+		DBName:   envOrDefault("DB_NAME", "RepGame"),
 	}
 }
