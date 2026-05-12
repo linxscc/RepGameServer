@@ -6,6 +6,7 @@
 *.sum
 *.exe
 
+/*.md
 
 
 /Read.me
