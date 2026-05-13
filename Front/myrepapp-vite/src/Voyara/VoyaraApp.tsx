@@ -7,6 +7,8 @@ import HomePage from './pages/HomePage';
 import ProductDetail from './pages/ProductDetail';
 import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
+import CartPage from './pages/CartPage';
+import PaymentPage from './pages/PaymentPage';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import SellerDashboard from './pages/seller/Dashboard';
@@ -24,7 +26,9 @@ export default function VoyaraApp() {
           <Routes>
             <Route index element={<HomePage />} />
             <Route path="product/:id" element={<ProductDetail />} />
+            <Route path="cart" element={<CartPage />} />
             <Route path="checkout" element={<Checkout />} />
+            <Route path="payment" element={<PaymentPage />} />
             <Route path="orders" element={<Orders />} />
             <Route path="login" element={<Login />} />
             <Route path="register" element={<Register />} />
