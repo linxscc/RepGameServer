@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { CartProvider } from './contexts/CartContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
@@ -16,7 +17,8 @@ import './Voyara.css';
 export default function VoyaraApp() {
   return (
     <LanguageProvider>
-      <div className="voyara">
+      <CartProvider>
+        <div className="voyara">
         <Navbar />
         <main className="vy-main">
           <Routes>
@@ -32,7 +34,8 @@ export default function VoyaraApp() {
           </Routes>
         </main>
         <Footer />
-      </div>
+        </div>
+      </CartProvider>
     </LanguageProvider>
   );
 }

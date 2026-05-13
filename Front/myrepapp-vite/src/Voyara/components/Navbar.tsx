@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { supportedLangs, type Lang } from '../i18n';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useCart } from '../contexts/CartContext';
 
 export default function Navbar() {
   const location = useLocation();
   const { lang, setLang, t } = useLanguage();
   const [showLang, setShowLang] = useState(false);
+  const { count } = useCart();
   const token = localStorage.getItem('voyara_token');
   const [scrolled, setScrolled] = useState(false);
 
@@ -34,6 +36,9 @@ export default function Navbar() {
         <div className="vy-nav-links">
           <Link to="/voyara" className={`vy-nav-link${isActive('/voyara') ? ' active' : ''}`}>
             {t('nav.browse')}
+          </Link>
+          <Link to="/voyara/cart" className={`vy-nav-link${isActive('/voyara/cart') ? ' active' : ''}`}>
+            Cart {count > 0 && <span className="vy-badge">{count > 99 ? '99+' : count}</span>}
           </Link>
           {token && (
             <Link to="/voyara/orders" className={`vy-nav-link${isActive('/voyara/orders') ? ' active' : ''}`}>
