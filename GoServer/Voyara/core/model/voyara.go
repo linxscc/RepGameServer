@@ -52,6 +52,14 @@ type Category struct {
 	Icon     string        `json:"icon"`
 }
 
+type CartItem struct {
+	ID        int  `json:"id"`
+	UserID    int  `json:"userId"`
+	ProductID int  `json:"productId"`
+	Quantity  int  `json:"quantity"`
+	Selected  bool `json:"selected"`
+}
+
 type Order struct {
 	ID              int            `json:"id"`
 	BuyerID         int            `json:"buyerId"`
