@@ -24,8 +24,7 @@ var publicPaths = []string{
 func isPublic(method, path string) bool {
 	if method == "GET" && (strings.HasPrefix(path, "/voyara/products") ||
 		path == "/voyara/categories" ||
-		path == "/voyara/brands" ||
-		path == "/voyara/categories") {
+		path == "/voyara/brands") {
 		return true
 	}
 	sig := method + " " + path
