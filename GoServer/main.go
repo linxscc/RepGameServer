@@ -6,6 +6,7 @@ import (
 	tcpserver "GoServer/tcpgameserver"
 	voyaraController "GoServer/Voyara/core/controller"
 	voyaraMiddleware "GoServer/Voyara/core/middleware"
+	voyaraService "GoServer/Voyara/core/service"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
@@ -13,6 +14,8 @@ import (
 
 func main() {
 	go tcpserver.StartTCPServer()
+
+	voyaraService.StartPaymentTimeoutScheduler()
 
 	s := g.Server()
 
