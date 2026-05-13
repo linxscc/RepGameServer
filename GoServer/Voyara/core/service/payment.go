@@ -1,5 +1,7 @@
 package service
 
+import "fmt"
+
 type PaymentMethod string
 
 const (
@@ -23,4 +25,23 @@ type PaymentResult struct {
 	ClientSecret      string // Stripe PaymentIntent client_secret
 	PayPalApprovalURL string // PayPal approval URL
 	GatewayOrderID    string
+}
+
+func RecordPayment(orderID, buyerID int, amount float64, method, gatewayID string) error {
+	db, err := GetDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	col := "stripe_payment_intent_id"
+	if method == "paypal" {
+		col = "paypal_order_id"
+	}
+
+	_, err = db.Exec(fmt.Sprintf(`
+		INSERT INTO voyara_payments (order_id, buyer_id, amount, currency, payment_method, payment_status, %s)
+		VALUES (?, ?, ?, 'USD', ?, 'pending', ?)`, col),
+		orderID, buyerID, amount, method, gatewayID)
+	return err
 }
