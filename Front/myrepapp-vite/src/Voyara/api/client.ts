@@ -49,7 +49,17 @@ function put<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, { method: 'PUT', body: JSON.stringify(body) });
 }
 
+function del<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'DELETE' });
+}
+
 export const voyaraApi = {
+  // Generic methods
+  get: <T>(path: string) => get<T>(path),
+  post: <T>(path: string, body: unknown) => post<T>(path, body),
+  put: <T>(path: string, body: unknown) => put<T>(path, body),
+  delete: <T>(path: string) => del<T>(path),
+
   login: (data: LoginPayload) => post<AuthResponse>('/auth/login', data),
   register: (data: RegisterPayload) => post<AuthResponse>('/auth/register', data),
 

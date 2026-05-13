@@ -120,3 +120,16 @@ export interface ProductListResponse {
   page: number;
   pageSize: number;
 }
+
+export interface CartItem {
+  id: number;
+  productId: number;
+  productTitle: string;
+  productPrice: number;
+  productImage: string;
+  quantity: number;
+  selected: boolean;
+  sellerId: number;
+  sellerShopName: string;
+  available: boolean;
+}
