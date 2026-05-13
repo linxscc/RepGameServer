@@ -62,17 +62,31 @@ type CartItem struct {
 
 type Order struct {
 	ID              int            `json:"id"`
+	OrderNo         string         `json:"orderNo"`
 	BuyerID         int            `json:"buyerId"`
+	SellerID        int            `json:"sellerId"`
 	ProductID       int            `json:"productId"`
-	ProductTitle    string         `json:"productTitle,omitempty"`
-	ProductImage    string         `json:"productImage,omitempty"`
+	ItemCount       int            `json:"itemCount"`
 	Amount          float64        `json:"amount"`
+	Subtotal        float64        `json:"subtotal"`
 	Currency        string         `json:"currency"`
 	PaymentStatus   string         `json:"paymentStatus"`
 	ShippingStatus  string         `json:"shippingStatus"`
 	TrackingNumber  string         `json:"trackingNumber"`
 	ShippingAddress sql.NullString `json:"shippingAddress"`
 	CreatedAt       string         `json:"createdAt"`
+	Items           []OrderItem    `json:"items,omitempty"`
+}
+
+type OrderItem struct {
+	ID        int     `json:"id"`
+	OrderID   int     `json:"orderId"`
+	ProductID int     `json:"productId"`
+	Title     string  `json:"title"`
+	Price     float64 `json:"price"`
+	Quantity  int     `json:"quantity"`
+	Total     float64 `json:"total"`
+	ImageURL  string  `json:"imageUrl"`
 }
 
 type VerificationCode struct {
