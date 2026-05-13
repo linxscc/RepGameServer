@@ -4,6 +4,8 @@ package main
 import (
 	"GoServer/internal/controller"
 	tcpserver "GoServer/tcpgameserver"
+	voyaraController "GoServer/Voyara/core/controller"
+	voyaraMiddleware "GoServer/Voyara/core/middleware"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
@@ -73,6 +75,26 @@ func main() {
 			new(controller.Download),
 			new(controller.Profile),
 			new(controller.WorkExperience),
+		)
+	})
+
+	// ── Voyara Marketplace Public Endpoints (no auth/CSRF for auth endpoints) ──
+	s.Group("/", func(group *ghttp.RouterGroup) {
+		group.Middleware(ghttp.MiddlewareHandlerResponse)
+		group.Bind(
+			new(voyaraController.Auth),
+		)
+	})
+
+	// ── Voyara Marketplace Protected Endpoints ──
+	s.Group("/", func(group *ghttp.RouterGroup) {
+		group.Middleware(ghttp.MiddlewareHandlerResponse)
+		group.Middleware(voyaraMiddleware.Auth)
+		group.Middleware(voyaraMiddleware.CSRF())
+		group.Bind(
+			new(voyaraController.Product),
+			new(voyaraController.Category),
+			new(voyaraController.Order),
 		)
 	})
 
