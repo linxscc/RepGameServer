@@ -98,8 +98,17 @@ func main() {
 			new(voyaraController.Product),
 			new(voyaraController.Category),
 			new(voyaraController.Order),
+			new(voyaraController.Cart),
+			new(voyaraController.Payment),
 		)
 	})
+
+	// ── Voyara Payment Webhooks (no auth, raw request body) ──
+	{
+		pay := &voyaraController.Payment{}
+		s.BindHandler("POST:/voyara/payment/stripe-webhook", pay.StripeWebhook)
+		s.BindHandler("POST:/voyara/payment/paypal-webhook", pay.PayPalWebhook)
+	}
 
 	s.Run()
 }
