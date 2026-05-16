@@ -1,7 +1,6 @@
 package events
 
 import (
-	"log"
 	"time"
 )
 
@@ -12,7 +11,6 @@ func getCurrentTimestamp() int64 {
 
 // LogEventData 记录事件数据到日志
 func LogEventData(eventType string, data interface{}) {
-	log.Printf("Event [%s]: %v", eventType, data)
 }
 
 // CreatePlayerEventData 创建玩家相关事件数据

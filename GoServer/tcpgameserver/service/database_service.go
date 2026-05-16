@@ -5,7 +5,6 @@ import (
 	"GoServer/tcpgameserver/models"
 	"database/sql"
 	"fmt"
-	"log"
 
 	_ "github.com/go-sql-driver/mysql" // MySQL驱动
 )
@@ -20,13 +19,11 @@ func GetDBConnection() (*sql.DB, error) {
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.Printf("Failed to connect to database: %v", err)
 		return nil, err
 	}
 
 	// 测试连接
 	if err := db.Ping(); err != nil {
-		log.Printf("Failed to ping database: %v", err)
 		db.Close()
 		return nil, err
 	}
@@ -144,7 +141,6 @@ func GetUserAccount(username string) (*models.UserAccount, error) {
 		return nil, fmt.Errorf("failed to get user account: %v", err)
 	}
 
-	log.Printf("Retrieved user account: %s", username)
 	return &user, nil
 }
 
@@ -158,7 +154,6 @@ func ValidateUserLogin(username, password string) (bool, error) {
 	// 这里应该使用加密密码比较，暂时使用明文比较
 	// 在生产环境中应该使用 bcrypt 等加密方式
 	if user.Password == password {
-		log.Printf("User login successful: %s", username)
 		return true, nil
 	}
 
@@ -188,7 +183,6 @@ func CreateUserAccount(username, password string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create user account: %v", err)
 	}
-	log.Printf("User account created successfully: %s", username)
 	return nil
 }
 
@@ -262,7 +256,6 @@ func GetAllBonds() ([]models.BondModel, error) {
 				}
 			}
 		} else {
-			log.Printf("Warning: Bond ID %d not found in bonds", bondID)
 		}
 	}
 	return bonds, nil

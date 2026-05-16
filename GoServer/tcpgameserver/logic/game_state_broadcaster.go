@@ -2,7 +2,6 @@ package logic
 
 import (
 	"encoding/json"
-	"log"
 	"net"
 
 	"GoServer/tcpgameserver/events"
@@ -24,7 +23,6 @@ func NewGameStateBroadcaster() *GameStateBroadcaster {
 func (gsb *GameStateBroadcaster) SendTCPMessage(conn net.Conn, response *models.TcpResponse) error {
 	jsonBytes, err := json.Marshal(response)
 	if err != nil {
-		log.Printf("Failed to marshal response: %v", err)
 		return err
 	}
 
@@ -33,7 +31,6 @@ func (gsb *GameStateBroadcaster) SendTCPMessage(conn net.Conn, response *models.
 
 	_, err = conn.Write(jsonBytes)
 	if err != nil {
-		log.Printf("Failed to write response to connection: %v", err)
 		return err
 	}
 
@@ -50,7 +47,6 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(eventData *events.Even
 	// 获取房间信息
 	room, err := roomManager.GetRoom(eventData.RoomID)
 	if err != nil {
-		log.Printf("Failed to get room %s for state update: %v", eventData.RoomID, err)
 		return
 	}
 
@@ -62,13 +58,11 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(eventData *events.Even
 		// 获取该玩家的连接信息
 		clientInfo, exists := connManager.GetConnectionByUsername(playerName)
 		if !exists {
-			log.Printf("Player %s not found in connection manager", playerName)
 			failCount++
 			continue
 		}
 
 		if clientInfo.Conn == nil {
-			log.Printf("Connection is nil for player %s", playerName)
 			failCount++
 			continue
 		}
@@ -76,13 +70,11 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(eventData *events.Even
 		// 从房间管理器获取该玩家的游戏信息
 		playerGameInfo, err := roomManager.GetPlayerGameInfo(eventData.RoomID, playerName)
 		if err != nil {
-			log.Printf("Failed to get game info for player %s: %v", playerName, err)
 			failCount++
 			continue
 		}
 		// 如果玩家不在游戏中，跳过
 		if playerGameInfo == nil {
-			log.Printf("Player %s is not in game state", playerName)
 			continue
 		}
 
@@ -103,10 +95,8 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(eventData *events.Even
 		response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(messageCode, playerGameInfo)
 		// 发送消息
 		if err := gsb.SendTCPMessage(clientInfo.Conn, response); err != nil {
-			log.Printf("Failed to send game state to player %s: %v", playerName, err)
 			failCount++
 		} else {
-			log.Printf("Successfully sent game state to player %s", playerName)
 			successCount++
 		}
 	}
@@ -114,8 +104,6 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(eventData *events.Even
 	// 在广播完成后重置所有玩家的战斗统计信息
 	gsb.resetPlayerBattleStats(room)
 
-	log.Printf("Game state broadcast completed for room %s: %d success, %d failed",
-		room.RoomID, successCount, failCount)
 }
 
 // resetPlayerBattleStats 重置房间内所有玩家的战斗统计信息
@@ -125,7 +113,6 @@ func (gsb *GameStateBroadcaster) resetPlayerBattleStats(room *types.RoomInfo) {
 		// 重置玩家的伤害统计信息
 		err := roomManager.CleanPlayerDamage(room.RoomID, playerName)
 		if err != nil {
-			log.Printf("Failed to reset damage stats for player %s: %v", playerName, err)
 			continue
 		}
 	}

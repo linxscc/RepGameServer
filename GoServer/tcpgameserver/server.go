@@ -24,7 +24,6 @@ func StartTCPServer() {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			log.Println("Accept error:", err)
 			continue
 		}
 		go handleConnection(conn)
@@ -79,9 +78,8 @@ func StartUDPServer() {
 	log.Println("UDP server listening on :9060")
 	for {
 		buf := make([]byte, 1024)
-		n, remoteAddr, err := conn.ReadFromUDP(buf)
+		_, remoteAddr, err := conn.ReadFromUDP(buf)
 		if err == nil {
-			log.Printf("UDP received: %s", string(buf[:n]))
 			conn.WriteToUDP([]byte("pong"), remoteAddr)
 		}
 	}

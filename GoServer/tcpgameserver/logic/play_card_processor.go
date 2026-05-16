@@ -2,7 +2,6 @@ package logic
 
 import (
 	"fmt"
-	"log"
 
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
@@ -35,7 +34,6 @@ type PlayCardData struct {
 // ProcessPlayCard 处理出牌逻辑
 func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
 
-	log.Printf("🎯 Received card play event, processing with PlayCardProcessor")
 
 	// 获取玩家名称
 	player, _ := eventData.GetString("player")
@@ -171,7 +169,6 @@ func (p *PlayCardProcessor) updateRoomPlayersInfo(room *types.RoomInfo, playerNa
 	gameEnded := p.checkGameEnd(room)
 	if gameEnded {
 		// 游戏已结束，不再执行后续逻辑
-		log.Printf("Game ended, stopping further processing for room %s", room.RoomID)
 		return true, nil
 	}
 
@@ -179,7 +176,6 @@ func (p *PlayCardProcessor) updateRoomPlayersInfo(room *types.RoomInfo, playerNa
 	if room.Status == "playing" {
 		err = p.drawCardsForPlayer(room, playerName, 3)
 		if err != nil {
-			log.Printf("Warning: Failed to draw cards for player %s: %v", playerName, err)
 		}
 	}
 
@@ -273,7 +269,6 @@ func (p *PlayCardProcessor) applyAOEDamage(room *types.RoomInfo, playerName stri
 			// 获取玩家当前血量
 			currentHealth, err := room.GetPlayerCurrentHealth(player.Username)
 			if err != nil {
-				log.Printf("Failed to get player %s health: %v", player.Username, err)
 				continue
 			}
 
@@ -286,7 +281,6 @@ func (p *PlayCardProcessor) applyAOEDamage(room *types.RoomInfo, playerName stri
 			// 设置新血量
 			err = room.SetPlayerHealth(player.Username, newHealth)
 			if err != nil {
-				log.Printf("Failed to set player %s health: %v", player.Username, err)
 				continue
 			}
 		}
@@ -358,11 +352,9 @@ func (p *PlayCardProcessor) drawCardsForPlayer(room *types.RoomInfo, playerName 
 	if len(playerInfo.HandCards)+count > room.MaxHandCards {
 		availableSlots := room.MaxHandCards - len(playerInfo.HandCards)
 		if availableSlots <= 0 {
-			log.Printf("Player %s hand is full, cannot draw more cards", playerName)
 			return nil // 不返回错误，只是无法抽卡
 		}
 		count = availableSlots // 只抽取可用槽位数量的卡牌
-		log.Printf("Player %s hand nearly full, drawing only %d cards", playerName, count)
 	}
 
 	// 从1级卡牌池抽取卡牌
@@ -386,7 +378,6 @@ func (p *PlayCardProcessor) drawCardsForPlayer(room *types.RoomInfo, playerName 
 		successCount++
 	}
 
-	log.Printf("Drew %d cards for player %s after playing cards", count, playerName)
 	return nil
 }
 
@@ -446,8 +437,6 @@ func (p *PlayCardProcessor) updatePlayerBattleStats(room *types.RoomInfo, attack
 		return p.updatePlayerBattleStats(room, attackerName, totalDamage, "opponent", bondResult)
 	}
 
-	log.Printf("Updated battle stats - Attacker: %s, Damage: %.1f, Target: %s, Bonds: %d",
-		attackerName, totalDamage, targetType, len(triggeredBondModels))
 
 	return nil
 }

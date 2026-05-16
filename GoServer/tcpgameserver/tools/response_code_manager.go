@@ -4,7 +4,6 @@ import (
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/service"
 	"fmt"
-	"log"
 	"sync"
 )
 
@@ -94,7 +93,6 @@ func GetAllResponseCodes() []models.ResponseInfo {
 
 // ReloadResponseCodes 重新加载响应码（用于动态更新）
 func ReloadResponseCodes() error {
-	log.Println("Reloading response codes from database...")
 	return LoadResponseCodes()
 }
 

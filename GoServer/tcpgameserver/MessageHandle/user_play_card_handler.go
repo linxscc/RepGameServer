@@ -2,7 +2,6 @@ package tcpserver
 
 import (
 	"encoding/json"
-	"log"
 	"net"
 
 	"GoServer/tcpgameserver/events"
@@ -20,19 +19,16 @@ func HandleUserPlayCard(req models.TcpRequest, conn net.Conn, clientID string, c
 	var playCardData models.PlayerGameInfo
 	dataBytes, err := json.Marshal(req.Data)
 	if err != nil {
-		log.Printf("Failed to marshal PlayCard data: %v, raw: %v", err, req.Data)
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(4002)) // 数据格式错误
 		return
 	}
 	if err := json.Unmarshal(dataBytes, &playCardData); err != nil {
-		log.Printf("Failed to parse PlayCard data: %v, raw: %v", err, req.Data)
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(4002)) // 数据格式错误
 		return
 	}
 
 	// 基本数据验证
 	if len(playCardData.SelfCards) == 0 {
-		log.Printf("No self cards provided for player %s", clientInfo.Username)
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(5009)) // 没有提供出牌信息
 		return
 	}

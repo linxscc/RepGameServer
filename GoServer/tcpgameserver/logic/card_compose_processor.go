@@ -2,7 +2,6 @@ package logic
 
 import (
 	"fmt"
-	"log"
 
 	"GoServer/tcpgameserver/cards"
 	"GoServer/tcpgameserver/events"
@@ -45,7 +44,6 @@ type ComposeResult struct {
 // ProcessCardCompose 处理卡牌合成逻辑
 func (ccp *CardComposeProcessor) ProcessCardCompose(eventData *events.EventData) {
 
-	log.Printf("🔧 Received card compose event, processing with CardComposeProcessor")
 
 	// 获取玩家名称
 	player, _ := eventData.GetString("player")
@@ -58,14 +56,10 @@ func (ccp *CardComposeProcessor) ProcessCardCompose(eventData *events.EventData)
 	// 转换为卡牌切片
 	cards, ok := cardsData.([]models.Card)
 	if !ok {
-		log.Printf("❌ Failed to convert cards data to []models.Card")
 		return
 	}
 
-	log.Printf("🔧 Card Compose - %s attempting to compose %d cards in room %s",
-		player, len(cards), roomID)
-
-	// 构建合成数据
+		// 构建合成数据
 	data := &CardComposeData{
 		RoomID:   roomID,
 		Player:   player,
@@ -73,7 +67,6 @@ func (ccp *CardComposeProcessor) ProcessCardCompose(eventData *events.EventData)
 		ClientID: clientID,
 	}
 
-	log.Printf("CardComposeProcessor: Processing card compose for player %s in room %s", data.Player, data.RoomID)
 
 	// 步骤1: 验证卡牌信息
 	room, validatedCardGroups, err := ccp.validateComposeRequest(data)
@@ -102,7 +95,7 @@ func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGr
 	var newCards []models.Card
 	composedCount := 0
 
-	for cardName, cards := range cardGroups {
+	for _, cards := range cardGroups {
 		// 检查是否有足够的卡牌合成（每3张合成1张）
 		groupSize := len(cards)
 		canCompose := groupSize / 3
@@ -116,14 +109,12 @@ func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGr
 
 		// 检查TargetName是否为空（不可合成卡牌）
 		if templateCard.TargetName == nil || *templateCard.TargetName == "" {
-			log.Printf("Card %s cannot be composed (TargetName is empty)", cardName)
 			continue
 		}
 
 		// 获取目标卡牌信息
 		targetCard, err := ccp.cardPoolManager.GetCardByName(*templateCard.TargetName)
 		if err != nil {
-			log.Printf("Failed to get target card %s for composition: %v", *templateCard.TargetName, err)
 			continue
 		}
 		// 合成指定数量的新卡牌
@@ -137,7 +128,6 @@ func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGr
 			// 从对应等级的卡牌池中抽取目标卡牌
 			drawnCard, err := room.DrawCardByNameFromPool(*templateCard.TargetName, targetCard.Level)
 			if err != nil {
-				log.Printf("Failed to draw card %s from level %d pool: %v", *templateCard.TargetName, targetCard.Level, err)
 
 				// 如果抽取失败，将已移除的卡牌放回原组
 				// 这里简化处理，可以根据需要实现更复杂的回滚逻辑
@@ -147,9 +137,7 @@ func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGr
 			newCards = append(newCards, *drawnCard)
 			composedCount++
 
-			log.Printf("Composed new card: %s (Level %d) from 3x %s, drawn from level %d pool",
-				drawnCard.Name, drawnCard.Level, cardName, targetCard.Level)
-		}
+			}
 	}
 
 	if composedCount == 0 {
@@ -256,7 +244,5 @@ func (ccp *CardComposeProcessor) updatePlayerInfo(room *types.RoomInfo, playerNa
 		}
 	}
 
-	log.Printf("Updated player %s info: removed %d cards, added %d new cards",
-		playerName, len(result.RemovedCards), len(result.NewCards))
-	return nil
+		return nil
 }

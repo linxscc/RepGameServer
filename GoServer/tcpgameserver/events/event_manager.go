@@ -2,7 +2,6 @@ package events
 
 import (
 	"fmt"
-	"log"
 	"sync"
 )
 
@@ -74,7 +73,6 @@ func (em *EventManager) Subscribe(eventType string, handler EventHandler, priori
 	// 按优先级排序（数字越小优先级越高）
 	em.sortSubscriptionsByPriority(eventType)
 
-	log.Printf("Event subscribed: %s, ID: %s, Priority: %d", eventType, subscriptionID, prio)
 	return subscriptionID
 }
 
@@ -88,13 +86,11 @@ func (em *EventManager) Unsubscribe(subscriptionID string) bool {
 			if subscription.ID == subscriptionID {
 				// 移除订阅
 				em.subscribers[eventType] = append(subscriptions[:i], subscriptions[i+1:]...)
-				log.Printf("Event unsubscribed: %s, ID: %s", eventType, subscriptionID)
 				return true
 			}
 		}
 	}
 
-	log.Printf("Subscription not found: %s", subscriptionID)
 	return false
 }
 
@@ -107,7 +103,6 @@ func (em *EventManager) UnsubscribeAll(eventType string) int {
 	if subscriptions, exists := em.subscribers[eventType]; exists {
 		count = len(subscriptions)
 		delete(em.subscribers, eventType)
-		log.Printf("All subscriptions removed for event type: %s, count: %d", eventType, count)
 	}
 
 	return count
@@ -125,7 +120,6 @@ func (em *EventManager) Publish(eventType string, data interface{}) {
 	em.mutex.RUnlock()
 
 	if len(subscriptions) == 0 {
-		log.Printf("No subscribers for event: %s", eventType)
 		return
 	}
 
@@ -134,7 +128,6 @@ func (em *EventManager) Publish(eventType string, data interface{}) {
 		go func(sub *EventSubscription) {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("Event handler panic for %s (ID: %s): %v", eventType, sub.ID, r)
 				}
 			}()
 
@@ -154,11 +147,9 @@ func (em *EventManager) PublishSync(eventType string, data interface{}) {
 	em.mutex.RUnlock()
 
 	if len(subscriptions) == 0 {
-		log.Printf("No subscribers for event: %s", eventType)
 		return
 	}
 
-	log.Printf("Publishing sync event: %s to %d subscribers", eventType, len(subscriptions))
 
 	var wg sync.WaitGroup
 	for _, subscription := range subscriptions {
@@ -167,7 +158,6 @@ func (em *EventManager) PublishSync(eventType string, data interface{}) {
 			defer wg.Done()
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("Event handler panic for %s (ID: %s): %v", eventType, sub.ID, r)
 				}
 			}()
 
@@ -176,7 +166,6 @@ func (em *EventManager) PublishSync(eventType string, data interface{}) {
 	}
 
 	wg.Wait()
-	log.Printf("Sync event completed: %s", eventType)
 }
 
 // GetSubscriberCount 获取指定事件类型的订阅者数量
@@ -260,5 +249,4 @@ func (em *EventManager) Clear() {
 	em.subscribers = make(map[string][]*EventSubscription)
 	em.idCounter = 0
 
-	log.Printf("All event subscriptions cleared, total removed: %d", totalSubscribers)
 }

@@ -60,8 +60,6 @@ func (cm *ConnectionManager) AddConnection(conn net.Conn, clientID string) *type
 
 	// 检查是否已存在相同地址的连接
 	if existingClientID, exists := cm.addrConns[remoteAddr]; exists {
-		log.Printf("Replacing existing connection for addr %s, old clientID: %s, new clientID: %s",
-			remoteAddr, existingClientID, clientID)
 		cm.removeConnectionUnsafe(existingClientID)
 	}
 
@@ -69,7 +67,6 @@ func (cm *ConnectionManager) AddConnection(conn net.Conn, clientID string) *type
 	cm.connections[clientID] = clientInfo
 	cm.addrConns[remoteAddr] = clientID
 
-	log.Printf("Added new connection: clientID=%s, addr=%s", clientID, remoteAddr)
 	return clientInfo
 }
 
@@ -99,8 +96,6 @@ func (cm *ConnectionManager) removeConnectionUnsafe(clientID string) bool {
 		clientInfo.Conn.Close()
 	}
 
-	log.Printf("Removed connection: clientID=%s, username=%s, addr=%s",
-		clientID, clientInfo.Username, clientInfo.RemoteAddr)
 	return true
 }
 
@@ -117,7 +112,6 @@ func (cm *ConnectionManager) BindUser(clientID, username string) error {
 	// 检查用户名是否已被其他连接使用
 	if existingClientID, exists := cm.userConns[username]; exists && existingClientID != clientID {
 		// 踢出旧连接
-		log.Printf("User %s already connected with clientID %s, removing old connection", username, existingClientID)
 		cm.removeConnectionUnsafe(existingClientID)
 	}
 
@@ -125,7 +119,6 @@ func (cm *ConnectionManager) BindUser(clientID, username string) error {
 	clientInfo.BindUser(username)
 	cm.userConns[username] = clientID
 
-	log.Printf("Bound user %s to clientID %s", username, clientID)
 	return nil
 }
 
@@ -141,7 +134,6 @@ func (cm *ConnectionManager) UnbindUser(clientID string) error {
 
 	if clientInfo.Username != "" {
 		delete(cm.userConns, clientInfo.Username)
-		log.Printf("Unbound user %s from clientID %s", clientInfo.Username, clientID)
 	}
 
 	clientInfo.UnbindUser()
@@ -207,7 +199,6 @@ func (cm *ConnectionManager) SetPlayerStatus(clientID string, status types.Playe
 	}
 
 	clientInfo.SetStatus(status)
-	log.Printf("Set status for clientID %s to %s", clientID, status)
 	return nil
 }
 
@@ -222,7 +213,6 @@ func (cm *ConnectionManager) SetPlayerGameRoom(clientID, roomID string) error {
 	}
 
 	clientInfo.SetGameRoom(roomID)
-	log.Printf("Set game room for clientID %s to %s", clientID, roomID)
 	return nil
 }
 
@@ -297,7 +287,6 @@ func (cm *ConnectionManager) SendToUser(username string, data []byte) error {
 
 	_, err := clientInfo.Conn.Write(data)
 	if err != nil {
-		log.Printf("Failed to send message to user %s: %v", username, err)
 		// 连接出错，移除该连接
 		cm.RemoveConnection(clientInfo.ClientID)
 		return err
@@ -321,7 +310,6 @@ func (cm *ConnectionManager) SendToClient(clientID string, data []byte) error {
 
 	_, err := clientInfo.Conn.Write(data)
 	if err != nil {
-		log.Printf("Failed to send message to client %s: %v", clientID, err)
 		// 连接出错，移除该连接
 		cm.RemoveConnection(clientID)
 		return err
@@ -345,7 +333,6 @@ func (cm *ConnectionManager) Broadcast(data []byte) {
 		if clientInfo.Conn != nil {
 			_, err := clientInfo.Conn.Write(data)
 			if err != nil {
-				log.Printf("Failed to broadcast to client %s: %v", clientInfo.ClientID, err)
 				// 连接出错，移除该连接
 				cm.RemoveConnection(clientInfo.ClientID)
 			} else {
@@ -383,12 +370,10 @@ func (cm *ConnectionManager) performCleanup() {
 	}
 
 	for _, clientID := range toRemove {
-		log.Printf("Cleaning up inactive connection: %s", clientID)
 		cm.removeConnectionUnsafe(clientID)
 	}
 
 	if len(toRemove) > 0 {
-		log.Printf("Cleaned up %d inactive connections", len(toRemove))
 	}
 }
 
@@ -414,6 +399,5 @@ func GetConnectionManager() *ConnectionManager {
 func StopConnectionManager() {
 	if globalConnectionManager != nil {
 		globalConnectionManager.Stop()
-		log.Println("Connection manager stopped")
 	}
 }

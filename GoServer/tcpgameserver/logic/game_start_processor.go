@@ -9,7 +9,6 @@ import (
 	"GoServer/tcpgameserver/types"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"time"
 )
@@ -32,10 +31,8 @@ func (g *GameStartProcessor) ProcessGameStart(eventData interface{}) error {
 			// 执行匹配逻辑
 			err := g.performMatchmaking()
 			if err != nil {
-				log.Printf("匹配失败: %v", err)
 				return err
 			} else {
-				log.Printf("匹配成功，游戏已开始")
 			}
 			return nil
 		}
@@ -54,7 +51,6 @@ func (g *GameStartProcessor) CreateGameRoom(roomName string, maxPlayers int) (*t
 		return nil, fmt.Errorf("failed to create room: %v", err)
 	}
 
-	log.Printf("Created new game room: %s (max players: %d)", room.RoomID, maxPlayers)
 	return room, nil
 }
 
@@ -62,7 +58,6 @@ func (g *GameStartProcessor) CreateGameRoom(roomName string, maxPlayers int) (*t
 func (g *GameStartProcessor) CleanupRoom(roomID string) {
 	roomManager := service.GetRoomManager()
 	roomManager.RemoveRoom(roomID)
-	log.Printf("Cleaned up room: %s", roomID)
 }
 
 // InitializeRoomCardPools 初始化房间卡牌池
@@ -129,7 +124,6 @@ func (g *GameStartProcessor) DealInitialCardsToPlayer(room *types.RoomInfo, user
 	initCards, _ = roomManager.InitPlayerHandCard(room.RoomID, 6)
 	player.HandCards = initCards
 
-	log.Printf("Dealt %d cards to player %s", len(player.HandCards), username)
 	return nil
 }
 
@@ -214,7 +208,6 @@ func (g *GameStartProcessor) performMatchmaking() error {
 		return fmt.Errorf("insufficient ready players: %d", len(readyPlayers))
 	}
 
-	log.Printf("Found %d ready players, starting matchmaking", len(readyPlayers))
 
 	// 选择前两位玩家进行匹配
 	selectedPlayers := readyPlayers[:2]
@@ -249,7 +242,6 @@ func (g *GameStartProcessor) performMatchmaking() error {
 		return fmt.Errorf("failed to initialize players and send notifications: %v", err)
 	}
 
-	log.Printf("Successfully matched players and started game in room: %s", room.RoomID)
 	return nil
 }
 
@@ -257,12 +249,10 @@ func (g *GameStartProcessor) performMatchmaking() error {
 func (g *GameStartProcessor) sendTCPResponse(conn net.Conn, resp *models.TcpResponse) {
 	jsonBytes, err := json.Marshal(resp)
 	if err != nil {
-		log.Printf("Failed to marshal response: %v", err)
 		return
 	}
 	jsonBytes = append(jsonBytes, '\n')
 	_, err = conn.Write(jsonBytes)
 	if err != nil {
-		log.Printf("Failed to write response to connection: %v", err)
 	}
 }

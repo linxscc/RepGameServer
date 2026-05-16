@@ -2,7 +2,6 @@ package tcpserver
 
 import (
 	"encoding/json"
-	"log"
 	"net"
 
 	"GoServer/tcpgameserver/events"
@@ -17,12 +16,10 @@ func HandleUserLogin(req models.TcpRequest, conn net.Conn, clientID string, conn
 	var loginData models.UserAccount
 	dataBytes, err := json.Marshal(req.Data)
 	if err != nil {
-		log.Printf("Failed to marshal UserLogin data: %v, raw: %v", err, req.Data)
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(2002))
 		return
 	}
 	if err := json.Unmarshal(dataBytes, &loginData); err != nil {
-		log.Printf("Failed to parse UserLogin data: %v, raw: %v", err, req.Data)
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(2002))
 		return
 	}
@@ -36,7 +33,6 @@ func HandleUserLogin(req models.TcpRequest, conn net.Conn, clientID string, conn
 	// 使用数据库服务验证登录
 	isValid, err := service.ValidateUserLogin(loginData.Username, loginData.Password)
 	if err != nil {
-		log.Printf("User login error: %v", err)
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(2004))
 		return
 	}
@@ -48,7 +44,6 @@ func HandleUserLogin(req models.TcpRequest, conn net.Conn, clientID string, conn
 	if existingClient, isLoggedIn := connManager.GetConnectionByUsername(loginData.Username); isLoggedIn {
 		// 检查用户状态是否在等待重连
 		if existingClient.GetStatus() == types.StatusWaitingReconnect {
-			log.Printf("User %s is waiting for reconnection, triggering reconnection event", loginData.Username)
 
 			// 发送重连事件
 			reconnectData := events.CreateUserConnectionEventData(
@@ -61,7 +56,6 @@ func HandleUserLogin(req models.TcpRequest, conn net.Conn, clientID string, conn
 		}
 
 		// 用户已登录且不在等待重连状态，踢出原客户端连接
-		log.Printf("User %s is already logged in from clientID: %s, kicking existing client", loginData.Username, existingClient.ClientID)
 
 		// 发布踢出事件
 		kickData := events.CreateUserConnectionEventData(
@@ -78,7 +72,6 @@ func HandleUserLogin(req models.TcpRequest, conn net.Conn, clientID string, conn
 	// 登录成功，绑定用户到连接
 	err = connManager.BindUser(clientID, loginData.Username)
 	if err != nil {
-		log.Printf("Failed to bind user to connection: %v", err)
 	}
 
 	// 设置玩家状态为已登录

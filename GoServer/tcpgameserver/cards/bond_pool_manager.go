@@ -4,7 +4,6 @@ import (
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/service"
 	"fmt"
-	"log"
 	"sync"
 )
 
@@ -35,7 +34,6 @@ func InitBondPool() error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 
-	log.Println("Initializing bond pool...")
 
 	// 从数据库获取所有羁绊数据
 	bonds, err := service.GetAllBonds()
@@ -50,7 +48,6 @@ func InitBondPool() error {
 	for _, bond := range bonds {
 		manager.bonds[bond.ID] = &bond
 	}
-	log.Printf("Bond pool initialized with %d bonds", len(manager.bonds))
 	return nil
 }
 

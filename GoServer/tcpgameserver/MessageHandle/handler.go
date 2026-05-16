@@ -3,7 +3,6 @@ package tcpserver
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"strings"
 	"time"
@@ -18,13 +17,11 @@ import (
 func SendTCPResponse(conn net.Conn, resp *models.TcpResponse) {
 	jsonBytes, err := json.Marshal(resp)
 	if err != nil {
-		log.Printf("Failed to marshal response: %v", err)
 		return
 	}
 	jsonBytes = append(jsonBytes, '\n')
 	_, err = conn.Write(jsonBytes)
 	if err != nil {
-		log.Printf("Failed to write response to connection: %v", err)
 	}
 }
 
@@ -38,7 +35,6 @@ func HandleTCPMessage(msg string, conn net.Conn, clientID string) {
 	var req models.TcpRequest
 	err := json.Unmarshal([]byte(msg), &req)
 	if err != nil {
-		log.Printf("Failed to parse TcpRequest: %v, raw: %s", err, msg)
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(9999))
 		return
 	}
@@ -73,8 +69,6 @@ func HandleNewConnection(conn net.Conn) string {
 
 	// 检查是否是重连的客户端（基于地址）
 	if existingInfo, exists := connManager.GetConnectionByAddr(remoteAddr); exists {
-		log.Printf("Detected potential reconnection from %s, old clientID: %s, new clientID: %s",
-			remoteAddr, existingInfo.ClientID, clientID)
 
 		// 移除旧连接，为新连接让路
 		connManager.RemoveConnection(existingInfo.ClientID)
@@ -107,7 +101,6 @@ func HandleConnectionClose(clientID string) {
 	}
 
 	if connManager.RemoveConnection(clientID) {
-		log.Printf("Client disconnected: %s", clientID)
 	}
 }
 

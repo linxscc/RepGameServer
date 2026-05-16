@@ -4,7 +4,6 @@ import (
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/types"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -43,7 +42,6 @@ func (rm *RoomManager) CreateRoom(roomName string, maxPlayers int) (*types.RoomI
 	// 添加到房间列表
 	rm.rooms[roomID] = room
 
-	log.Printf("Created room: %s (%s) with max players: %d", roomID, roomName, maxPlayers)
 	return room, nil
 }
 
@@ -136,7 +134,6 @@ func (rm *RoomManager) RemoveRoom(roomID string) error {
 	}
 
 	delete(rm.rooms, roomID)
-	log.Printf("Removed room: %s", roomID)
 	return nil
 }
 
@@ -323,7 +320,6 @@ func (rm *RoomManager) DrawCardForPlayer(roomID, username string) error {
 		return fmt.Errorf("failed to add card to player %s: %v", username, err)
 	}
 
-	log.Printf("Drew card %s (UID: %s) for player %s in room %s", card.Name, card.UID, username, roomID)
 	return nil
 }
 
@@ -367,6 +363,5 @@ func (rm *RoomManager) DrawCardsForPlayer(roomID, username string, count int) er
 		successCount++
 	}
 
-	log.Printf("Drew %d cards for player %s in room %s", count, username, roomID)
 	return nil
 }

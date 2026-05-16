@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"log"
 	"sync"
 	"time"
 
@@ -33,7 +32,6 @@ func init() {
 		timers:   make(map[string]*time.Timer),
 		Duration: DefaultTimerDuration,
 	}
-	log.Printf("RoomTimerProcessor: Global instance initialized with %v duration", DefaultTimerDuration)
 }
 
 // NewRoomTimerProcessor 创建新的房间计时处理器
@@ -52,24 +50,20 @@ func (rtp *RoomTimerProcessor) StartRoomTimer(roomID string) error {
 	roomManager := service.GetRoomManager()
 	room, err := roomManager.GetRoom(roomID)
 	if err != nil {
-		log.Printf("RoomTimerProcessor: Failed to get room %s: %v", roomID, err)
 		return err
 	}
 
 	// 启动对Round为current的玩家的计时
 	err = rtp.startPlayerTimer(room)
 	if err != nil {
-		log.Printf("RoomTimerProcessor: Failed to start player timer for room %s: %v", roomID, err)
 		return err
 	}
 
-	log.Printf("RoomTimerProcessor: Successfully started timer for room %s", roomID)
 	return nil
 }
 
 // startPlayerTimer 对房间内Round为current的玩家进行计时
 func (rtp *RoomTimerProcessor) startPlayerTimer(room *types.RoomInfo) error {
-	log.Printf("RoomTimerProcessor: Starting %v timer for room %s", rtp.Duration, room.RoomID)
 
 	// 停止现有计时器（如果存在）
 	rtp.stopRoomTimer(room.RoomID)
@@ -79,24 +73,20 @@ func (rtp *RoomTimerProcessor) startPlayerTimer(room *types.RoomInfo) error {
 	for _, player := range room.Players {
 		if player.Round == "current" {
 			hasCurrentPlayer = true
-			log.Printf("RoomTimerProcessor: Found current player %s in room %s", player.Username, room.RoomID)
 			break
 		}
 	}
 
 	if !hasCurrentPlayer {
-		log.Printf("RoomTimerProcessor: No current player found in room %s", room.RoomID)
 		return nil
 	}
 
 	// 创建计时器，使用可配置的时长
 	timer := time.AfterFunc(rtp.Duration, func() {
-		log.Printf("RoomTimerProcessor: Timer expired for room %s after %v, forcing card play", room.RoomID, rtp.Duration)
 
 		// 调用强制出牌请求
 		err := rtp.forceCardPlay(room.RoomID)
 		if err != nil {
-			log.Printf("RoomTimerProcessor: Failed to force card play for room %s: %v", room.RoomID, err)
 		}
 
 		// 清理计时器记录
@@ -110,7 +100,6 @@ func (rtp *RoomTimerProcessor) startPlayerTimer(room *types.RoomInfo) error {
 	rtp.timers[room.RoomID] = timer
 	rtp.timerMutex.Unlock()
 
-	log.Printf("RoomTimerProcessor: Successfully started %v timer for room %s", rtp.Duration, room.RoomID)
 	return nil
 }
 
@@ -125,7 +114,6 @@ func (rtp *RoomTimerProcessor) forceCardPlay(roomID string) error {
 
 // stopRoomTimer 结束房间计时
 func (rtp *RoomTimerProcessor) stopRoomTimer(roomID string) error {
-	log.Printf("RoomTimerProcessor: Stopping timer for room %s", roomID)
 
 	rtp.timerMutex.Lock()
 	defer rtp.timerMutex.Unlock()
@@ -134,9 +122,7 @@ func (rtp *RoomTimerProcessor) stopRoomTimer(roomID string) error {
 	if timer, exists := rtp.timers[roomID]; exists {
 		timer.Stop()
 		delete(rtp.timers, roomID)
-		log.Printf("RoomTimerProcessor: Successfully stopped timer for room %s", roomID)
 	} else {
-		log.Printf("RoomTimerProcessor: No timer found for room %s", roomID)
 	}
 
 	return nil
@@ -146,7 +132,6 @@ func (rtp *RoomTimerProcessor) stopRoomTimer(roomID string) error {
 func (rtp *RoomTimerProcessor) StopRoomTimer(data interface{}) error {
 	eventData, ok := data.(*events.EventData)
 	if !ok {
-		log.Printf("RoomTimerProcessor: Invalid event data type for stop timer")
 		return nil
 	}
 
@@ -155,19 +140,16 @@ func (rtp *RoomTimerProcessor) StopRoomTimer(data interface{}) error {
 
 // CleanupAllTimers 清理所有计时器（用于系统关闭时）
 func (rtp *RoomTimerProcessor) CleanupAllTimers() {
-	log.Printf("RoomTimerProcessor: Cleaning up all timers")
 
 	rtp.timerMutex.Lock()
 	defer rtp.timerMutex.Unlock()
 
-	for roomID, timer := range rtp.timers {
+	for _, timer := range rtp.timers {
 		timer.Stop()
-		log.Printf("RoomTimerProcessor: Stopped timer for room %s", roomID)
 	}
 
 	// 清空计时器映射
 	rtp.timers = make(map[string]*time.Timer)
-	log.Printf("RoomTimerProcessor: All timers cleaned up")
 }
 
 // 全局便捷函数，供外部直接调用

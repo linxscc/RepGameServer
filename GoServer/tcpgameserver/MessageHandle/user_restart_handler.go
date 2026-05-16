@@ -1,7 +1,6 @@
 package tcpserver
 
 import (
-	"log"
 	"net"
 
 	"GoServer/tcpgameserver/events"
@@ -15,14 +14,12 @@ func HandleUserRestart(conn net.Conn, clientID string, connManager *service.Conn
 	// 获取客户端信息
 	clientInfo, exists := connManager.GetConnectionByClientID(clientID)
 	if !exists {
-		log.Printf("Client not found: %s", clientID)
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(4003))
 		return
 	}
 
 	// 检查用户是否已登录
 	if !clientInfo.IsLoggedIn {
-		log.Printf("User not logged in for client: %s", clientID)
 		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(4002))
 		return
 	}

@@ -2,7 +2,6 @@ package logic
 
 import (
 	"encoding/json"
-	"log"
 	"net"
 	"time"
 
@@ -62,14 +61,12 @@ func (r *ReconnectionHandler) HandlePlayerReconnection(clientID, username string
 	// 发送重连成功消息 (消息类型 6001)
 	err = r.sendReconnectionSuccess(clientInfo.Conn, playerGameInfo)
 	if err != nil {
-		log.Printf("Failed to send reconnection success message: %v", err)
 		return err
 	}
 
 	// 通知房间内其他玩家该玩家已重连
 	err = r.notifyRoomPlayersReconnection(username, playerGameInfo.RoomId, connManager)
 	if err != nil {
-		log.Printf("Failed to notify room players about reconnection: %v", err)
 	}
 
 	return nil
@@ -92,7 +89,6 @@ func (r *ReconnectionHandler) sendReconnectionSuccess(conn net.Conn, playerGameI
 		return err
 	}
 
-	log.Printf("📤 Sent reconnection success message (6001) with game state")
 	return nil
 }
 
@@ -117,13 +113,11 @@ func (r *ReconnectionHandler) sendReconnectionFailure(clientID, reason string, c
 		return err
 	}
 
-	log.Printf("📤 Sent reconnection failure message: %s", reason)
 	return nil
 }
 
 // notifyRoomPlayersReconnection 通知房间内其他玩家有玩家重连
 func (r *ReconnectionHandler) notifyRoomPlayersReconnection(username, roomID string, connManager *service.ConnectionManager) error {
-	log.Printf("🔄 Notifying room %s players about %s's reconnection", roomID, username)
 
 	// 获取房间内的所有玩家连接
 	allConnections := connManager.GetAllConnections()
@@ -154,9 +148,7 @@ func (r *ReconnectionHandler) notifyRoomPlayersReconnection(username, roomID str
 			if messageData, err := json.Marshal(response); err == nil {
 				messageData = append(messageData, '\n')
 				if _, writeErr := player.Conn.Write(messageData); writeErr != nil {
-					log.Printf("Failed to send reconnection notification to player %s: %v", player.Username, writeErr)
 				} else {
-					log.Printf("📤 Sent reconnection notification (7002) to player %s", player.Username)
 					notifiedCount++
 				}
 			}

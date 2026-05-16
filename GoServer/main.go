@@ -36,6 +36,7 @@ func init() {
 func main() {
 	go tcpserver.StartTCPServer()
 
+	voyaraService.InitPayPal()
 	voyaraService.StartPaymentTimeoutScheduler()
 
 	// 初始化 JWT：必须在 godotenv.Load() 之后调用，

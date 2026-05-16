@@ -4,7 +4,6 @@ import (
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/service"
 	"fmt"
-	"log"
 	"sync"
 )
 
@@ -74,7 +73,6 @@ func InitCardPool() error {
 			case 3:
 				manager.level3Cards = append(manager.level3Cards, card)
 			default:
-				log.Printf("Warning: Unknown card level %d for card %s", deck.Level, deck.Name)
 				continue
 			}
 
@@ -82,7 +80,6 @@ func InitCardPool() error {
 		}
 	}
 
-	log.Printf("Initialized card pool with %d total cards across all levels", totalCards)
 
 	return nil
 }

@@ -21,14 +21,16 @@ type paypalClient struct {
 
 var ppClient *paypalClient
 
-func initPayPal() {
+func InitPayPal() {
 	cid := os.Getenv("PAYPAL_CLIENT_ID")
 	sec := os.Getenv("PAYPAL_SECRET_KEY")
 	if cid == "" || sec == "" {
 		return
 	}
+	mode := os.Getenv("PAYPAL_MODE")
+	appEnv := os.Getenv("APP_ENV")
 	base := "https://api-m.paypal.com"
-	if os.Getenv("PAYPAL_MODE") == "sandbox" || (os.Getenv("PAYPAL_MODE") == "" && os.Getenv("APP_ENV") != "production") {
+	if mode == "sandbox" || (mode == "" && appEnv != "production") {
 		base = "https://api-m.sandbox.paypal.com"
 	}
 	ppClient = &paypalClient{
@@ -55,6 +57,9 @@ func (c *paypalClient) ensureToken() error {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("paypal token error status %d: %s", resp.StatusCode, string(body))
+	}
 	var result struct {
 		AccessToken string `json:"access_token"`
 		ExpiresIn   int    `json:"expires_in"`

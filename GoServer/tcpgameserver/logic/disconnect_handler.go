@@ -2,7 +2,6 @@ package logic
 
 import (
 	"encoding/json"
-	"log"
 
 	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/tools"
@@ -19,7 +18,6 @@ func NewDisconnectHandler() *DisconnectHandler {
 
 // HandlePlayerDisconnect 处理玩家断开连接逻辑
 func (d *DisconnectHandler) HandlePlayerDisconnect(clientID, username, reason string) error {
-	log.Printf("🔌 Processing disconnect for client: %s, user: %s, reason: %s", clientID, username, reason)
 
 	// 处理已登录用户的断开连接
 	if username != "" {
@@ -41,7 +39,6 @@ func (d *DisconnectHandler) handleLoggedInUserDisconnect(clientID, username, rea
 	if !exists {
 		// 连接信息不存在，直接移除
 		connManager.RemoveConnection(clientID)
-		log.Printf("Client %s not found in connection manager, cleanup completed", clientID)
 		return nil
 	}
 
@@ -91,9 +88,7 @@ func (d *DisconnectHandler) handleInGamePlayerDisconnect(clientID, username, rea
 			if messageData, err := json.Marshal(response); err == nil {
 				messageData = append(messageData, '\n')
 				if _, writeErr := player.Conn.Write(messageData); writeErr != nil {
-					log.Printf("Failed to send disconnect notification to player %s: %v", player.Username, writeErr)
 				} else {
-					log.Printf("📤 Sent disconnect notification (7001) to player %s", player.Username)
 				}
 			}
 		}
@@ -115,7 +110,6 @@ func (d *DisconnectHandler) handleAnonymousUserDisconnect(clientID string) error
 	// 未登录用户直接移除连接
 	connManager := service.GetConnectionManager()
 	connManager.RemoveConnection(clientID)
-	log.Printf("Anonymous client %s disconnected and removed", clientID)
 	return nil
 }
 
