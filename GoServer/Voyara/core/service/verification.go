@@ -32,8 +32,7 @@ func SaveVerificationCode(email, purpose string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer db.Close()
-
+	
 	// Check cooldown: don't allow resend within 60 seconds
 	var lastCreated time.Time
 	err = db.QueryRow(`
@@ -65,8 +64,7 @@ func VerifyCode(email, code, purpose string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer db.Close()
-
+	
 	var id int64
 	err = db.QueryRow(`
 		SELECT id FROM voyara_verification_codes
@@ -93,7 +91,6 @@ func MarkEmailVerified(email string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	_, err = db.Exec(`UPDATE voyara_users SET email_verified_at = NOW() WHERE email = ?`, email)
+		_, err = db.Exec(`UPDATE voyara_users SET email_verified_at = NOW() WHERE email = ?`, email)
 	return err
 }

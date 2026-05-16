@@ -13,3 +13,7 @@
 
 /vpn/
 /.claude/
+/.env
+/Front/myrepapp-vite/.env.development
+/Front/myrepapp-vite/.env.production
+/GoServer/.env

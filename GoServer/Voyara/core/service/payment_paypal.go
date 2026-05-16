@@ -28,7 +28,7 @@ func initPayPal() {
 		return
 	}
 	base := "https://api-m.paypal.com"
-	if os.Getenv("APP_ENV") != "production" {
+	if os.Getenv("PAYPAL_MODE") == "sandbox" || (os.Getenv("PAYPAL_MODE") == "" && os.Getenv("APP_ENV") != "production") {
 		base = "https://api-m.sandbox.paypal.com"
 	}
 	ppClient = &paypalClient{
@@ -97,6 +97,43 @@ func (c *paypalClient) post(path string, payload, result interface{}) error {
 
 // ── Public API ──
 
+func VerifyPayPalWebhookSignature(headers map[string]string, body []byte) error {
+	if ppClient == nil {
+		return fmt.Errorf("PayPal client not initialized")
+	}
+
+	webhookID := os.Getenv("PAYPAL_WEBHOOK_ID")
+	if webhookID == "" {
+		return fmt.Errorf("PAYPAL_WEBHOOK_ID not set")
+	}
+
+	var event json.RawMessage
+	if err := json.Unmarshal(body, &event); err != nil {
+		return fmt.Errorf("parse webhook body: %v", err)
+	}
+
+	req := map[string]interface{}{
+		"auth_algo":         headers["Paypal-Auth-Algo"],
+		"cert_url":          headers["Paypal-Cert-Url"],
+		"transmission_id":   headers["Paypal-Transmission-Id"],
+		"transmission_sig":  headers["Paypal-Transmission-Sig"],
+		"transmission_time": headers["Paypal-Transmission-Time"],
+		"webhook_id":        webhookID,
+		"webhook_event":     event,
+	}
+
+	var result struct {
+		VerificationStatus string `json:"verification_status"`
+	}
+	if err := ppClient.post("/v1/notifications/verify-webhook-signature", req, &result); err != nil {
+		return fmt.Errorf("paypal verify webhook: %v", err)
+	}
+	if result.VerificationStatus != "SUCCESS" {
+		return fmt.Errorf("paypal webhook verification failed: %s", result.VerificationStatus)
+	}
+	return nil
+}
+
 func CreatePayPalPayment(input CreatePaymentInput) (*PaymentResult, error) {
 	if ppClient == nil {
 		return nil, fmt.Errorf("PayPal client not initialized (missing API keys)")
@@ -128,7 +165,7 @@ func CreatePayPalPayment(input CreatePaymentInput) (*PaymentResult, error) {
 				ReferenceID: fmt.Sprintf("order_%d", input.OrderID),
 				Amount: &paypalAmt{
 					Currency: input.Currency,
-					Value:    fmt.Sprintf("%.2f", input.Amount),
+					Value:    fmt.Sprintf("%.2f", float64(input.Amount)/100),
 				},
 				Description: fmt.Sprintf("Order #%d", input.OrderID),
 			},
@@ -166,21 +203,40 @@ func CreatePayPalPayment(input CreatePaymentInput) (*PaymentResult, error) {
 	}, nil
 }
 
-func CapturePayPalOrder(paypalOrderID string) error {
+func CapturePayPalOrder(paypalOrderID string) (int64, error) {
 	if ppClient == nil {
-		return fmt.Errorf("PayPal client not initialized")
+		return 0, fmt.Errorf("PayPal client not initialized")
 	}
 
 	var result struct {
-		Status string `json:"status"`
+		Status        string `json:"status"`
+		PurchaseUnits []struct {
+			Payments struct {
+				Captures []struct {
+					Amount struct {
+						CurrencyCode string `json:"currency_code"`
+						Value        string `json:"value"`
+					} `json:"amount"`
+				} `json:"captures"`
+			} `json:"payments"`
+		} `json:"purchase_units"`
 	}
 	if err := ppClient.post("/v2/checkout/orders/"+paypalOrderID+"/capture", nil, &result); err != nil {
-		return err
+		return 0, err
 	}
 	if result.Status != "COMPLETED" {
-		return fmt.Errorf("paypal capture status: %s", result.Status)
+		return 0, fmt.Errorf("paypal capture status: %s", result.Status)
 	}
-	return nil
+	if len(result.PurchaseUnits) == 0 || len(result.PurchaseUnits[0].Payments.Captures) == 0 {
+		return 0, fmt.Errorf("no captures in PayPal response")
+	}
+
+	capturedDollars := result.PurchaseUnits[0].Payments.Captures[0].Amount.Value
+	var dollars float64
+	if _, err := fmt.Sscanf(capturedDollars, "%f", &dollars); err != nil {
+		return 0, fmt.Errorf("parse captured amount: %v", err)
+	}
+	return DollarsToCents(dollars), nil
 }
 
 func ProcessPayPalWebhook(paypalOrderID string) error {
@@ -195,7 +251,7 @@ func ProcessPayPalWebhook(paypalOrderID string) error {
 		return nil
 	}
 
-	if err := CapturePayPalOrder(paypalOrderID); err != nil {
+	if _, err := CapturePayPalOrder(paypalOrderID); err != nil {
 		return err
 	}
 
@@ -203,8 +259,7 @@ func ProcessPayPalWebhook(paypalOrderID string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-
+	
 	var orderID int
 	err = db.QueryRow(`
 		SELECT o.id
@@ -218,6 +273,13 @@ func ProcessPayPalWebhook(paypalOrderID string) error {
 
 	_, _ = db.Exec(`UPDATE voyara_orders SET payment_status = 'paid', paid_at = NOW() WHERE id = ?`, orderID)
 	_, _ = db.Exec(`UPDATE voyara_payments SET payment_status = 'succeeded', paid_at = NOW() WHERE order_id = ?`, orderID)
+
+	// Async payment success email (failure does not block payment)
+	var buyerEmail, orderNo string
+	_ = db.QueryRow(`SELECT u.email, o.order_no FROM voyara_users u JOIN voyara_orders o ON o.buyer_id = u.id WHERE o.id = ?`, orderID).Scan(&buyerEmail, &orderNo)
+	if buyerEmail != "" {
+		SendPaymentSuccessEmail(buyerEmail, orderNo)
+	}
 
 	return nil
 }

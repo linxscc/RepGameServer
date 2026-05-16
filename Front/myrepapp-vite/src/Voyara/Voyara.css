@@ -23,6 +23,7 @@
   --vy-border-amber: rgba(232, 168, 80, 0.2);
   --vy-success: #5a9e6f;
   --vy-danger: #c4544a;
+  --vy-error: #c4544a;
 
   /* Typography */
   --vy-font-display: 'Fraunces', Georgia, serif;
@@ -373,6 +374,68 @@
 .vy-lang-item:hover { color: var(--vy-text); background: var(--vy-surface-hover); }
 .vy-lang-item.active { color: var(--vy-amber); }
 
+/* ── User menu (Amazon-style) ── */
+.vy-user-menu { position: relative; }
+
+.vy-user-btn {
+  display: flex !important;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.6rem !important;
+  border: 1px solid transparent !important;
+  font-size: 0.75rem !important;
+}
+
+.vy-user-btn:hover { border-color: var(--vy-border) !important; }
+
+.vy-user-greeting {
+  font-size: 0.72rem;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  color: var(--vy-text-dim);
+  line-height: 1.1;
+}
+
+.vy-user-arrow { font-size: 0.6rem; color: var(--vy-text-dim); }
+
+.vy-user-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  min-width: 220px;
+  background: var(--vy-surface-elevated);
+  border: 1px solid var(--vy-border);
+  animation: vyFadeIn 0.2s ease;
+  z-index: 100;
+}
+
+.vy-user-dropdown-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--vy-border);
+}
+
+.vy-user-dropdown-name { font-weight: 600; font-size: 0.9rem; }
+.vy-user-dropdown-email { font-size: 0.78rem; color: var(--vy-text-dim); margin-top: 0.15rem; }
+
+.vy-user-dropdown-items { display: flex; flex-direction: column; }
+
+.vy-user-dropdown-item {
+  padding: 0.65rem 1rem;
+  font-size: 0.82rem;
+  color: var(--vy-text-dim);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.vy-user-dropdown-item:hover { color: var(--vy-text); background: var(--vy-surface-hover); }
+
+.vy-user-dropdown-divider { height: 1px; background: var(--vy-border); margin: 0.25rem 0; }
+
 /* ═══════════════════════════════════════════
    Footer
    ═══════════════════════════════════════════ */
@@ -722,6 +785,45 @@
   gap: 1rem;
 }
 
+/* ── Toast notifications ── */
+.vy-toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.75rem 2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  z-index: 9999;
+  animation: vy-toast-in 0.3s ease;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+}
+.vy-toast-success {
+  background: #16a34a;
+  color: #fff;
+}
+.vy-toast-error {
+  background: #dc2626;
+  color: #fff;
+}
+@keyframes vy-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(1rem); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Button spinner ── */
+.vy-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: vy-spin 0.6s linear infinite;
+}
+
+@keyframes vy-spin { to { transform: rotate(360deg); } }
+
 /* ═══════════════════════════════════════════
    Auth pages
    ═══════════════════════════════════════════ */
@@ -752,6 +854,16 @@
   color: var(--vy-danger);
   padding: 0.75rem 1rem;
   font-size: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.vy-auth-success {
+  background: rgba(90, 158, 111, 0.1);
+  border: 1px solid rgba(90, 158, 111, 0.25);
+  color: var(--vy-success);
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  border-radius: var(--vy-radius);
   margin-bottom: 1.5rem;
 }
 
@@ -880,4 +992,115 @@
   border-radius: var(--vy-radius, 8px);
   margin-bottom: 1rem;
   font-size: 0.875rem;
+}
+
+/* ── Password visibility toggle ── */
+.vy-password-wrap {
+  position: relative;
+}
+.vy-password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 4px;
+  opacity: 0.6;
+}
+.vy-password-toggle:hover { opacity: 1; }
+
+/* ── Forgot password link ── */
+.vy-field-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: -0.5rem 0 1rem;
+}
+.vy-link-forgot {
+  font-size: 0.85rem;
+  color: var(--vy-amber);
+  text-decoration: none;
+}
+.vy-link-forgot:hover { text-decoration: underline; }
+
+/* ── Password strength indicator ── */
+.vy-pwd-strength {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+.vy-pwd-strength-bar {
+  flex: 1;
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.vy-pwd-strength-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.2s;
+}
+.vy-pwd-strength-fill.weak   { background: #ef4444; }
+.vy-pwd-strength-fill.medium { background: #f59e0b; }
+.vy-pwd-strength-fill.strong { background: #22c55e; }
+.vy-pwd-strength-label {
+  font-size: 0.75rem;
+  min-width: 3.5rem;
+  text-align: right;
+}
+.vy-pwd-strength-label.weak   { color: #ef4444; }
+.vy-pwd-strength-label.medium { color: #f59e0b; }
+.vy-pwd-strength-label.strong { color: #22c55e; }
+
+/* ── Inline link button ── */
+.vy-link-btn {
+  background: none;
+  border: none;
+  color: var(--vy-amber);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  text-decoration: underline;
+}
+.vy-link-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Email verification badge ── */
+.vy-badge-warn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 4px;
+  vertical-align: super;
+}
+
+/* ── Loading / Empty / Error state pages ── */
+.vy-state-page {
+  text-align: center;
+  padding: 4rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+.vy-state-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+.vy-state-message {
+  color: var(--vy-text-dim);
+  font-size: 1rem;
+  max-width: 360px;
+  margin: 0;
 }

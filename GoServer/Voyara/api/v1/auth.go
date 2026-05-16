@@ -74,3 +74,19 @@ type UserInfo struct {
 type MessageRes struct {
 	Message string `json:"message"`
 }
+
+type GetCSRFTokenReq struct {
+	g.Meta `path:"/voyara/auth/csrf-token" method:"get" summary:"Get CSRF token"`
+}
+
+type GetCSRFTokenRes struct {
+	Token string `json:"token"`
+}
+
+type GetCurrentUserReq struct {
+	g.Meta `path:"/voyara/auth/me" method:"get" summary:"Get current user"`
+}
+
+type GetCurrentUserRes struct {
+	User UserInfo `json:"user"`
+}

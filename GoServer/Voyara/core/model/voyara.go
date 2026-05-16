@@ -35,7 +35,7 @@ type Product struct {
 	ShopName    string         `json:"shopName,omitempty"`
 	Title       string         `json:"title"`
 	Description sql.NullString `json:"description"`
-	Price       float64        `json:"price"`
+	Price       int64          `json:"price"`
 	Currency    string         `json:"currency"`
 	Category    string         `json:"category"`
 	Condition   string         `json:"condition"`
@@ -67,8 +67,8 @@ type Order struct {
 	SellerID        int            `json:"sellerId"`
 	ProductID       int            `json:"productId"`
 	ItemCount       int            `json:"itemCount"`
-	Amount          float64        `json:"amount"`
-	Subtotal        float64        `json:"subtotal"`
+	Amount          int64          `json:"amount"`
+	Subtotal        int64          `json:"subtotal"`
 	Currency        string         `json:"currency"`
 	PaymentStatus   string         `json:"paymentStatus"`
 	ShippingStatus  string         `json:"shippingStatus"`
@@ -83,9 +83,9 @@ type OrderItem struct {
 	OrderID   int     `json:"orderId"`
 	ProductID int     `json:"productId"`
 	Title     string  `json:"title"`
-	Price     float64 `json:"price"`
-	Quantity  int     `json:"quantity"`
-	Total     float64 `json:"total"`
+	Price     int64 `json:"price"`
+	Quantity  int   `json:"quantity"`
+	Total     int64 `json:"total"`
 	ImageURL  string  `json:"imageUrl"`
 }
 

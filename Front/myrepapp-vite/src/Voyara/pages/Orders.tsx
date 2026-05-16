@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
+import { LoadingState, EmptyState, ErrorState } from '../components/LoadingState';
 import { orderApi, type Order } from '../api/order';
 
 const statusLabel: Record<string, string> = {
@@ -16,28 +18,31 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError('');
     orderApi.getOrders()
       .then(setOrders)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load orders'))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="vy-section"><div className="vy-container"><p>Loading...</p></div></div>;
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <LoadingState />;
 
   return (
     <div className="vy-section">
       <div className="vy-container" style={{ maxWidth: '800px' }}>
         <h1 className="vy-heading h2">{t('order.title')}</h1>
-        {error && <div className="vy-auth-error">{error}</div>}
-        {orders.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--vy-text-dim)' }}>
-            {t('order.noOrders')}
-          </div>
+        {error ? (
+          <ErrorState message={error} onRetry={load} />
+        ) : orders.length === 0 ? (
+          <EmptyState message={t('order.noOrders')} action={{ label: t('hero.cta') || 'Browse', href: '/voyara' }} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '2rem' }}>
             {orders.map((order) => (
-              <div key={order.id} className="vy-card" style={{ padding: '1.25rem' }}>
+              <Link key={order.id} to={`/voyara/order/${order.id}`} className="vy-card" style={{ padding: '1.25rem', display: 'block', textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <span style={{ color: 'var(--vy-text-dim)', fontSize: '0.85rem' }}>
                     {order.orderNo || `#${order.id}`}
@@ -86,7 +91,7 @@ export default function Orders() {
                     </a>
                   </div>
                 )}
-              </div>
+              </Link>
             ))}
           </div>
         )}

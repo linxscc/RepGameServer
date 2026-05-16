@@ -32,6 +32,7 @@ export const orderApi = {
   checkout: (productIds: number[], shippingAddress: ShippingAddress, idempotencyKey?: string) =>
     voyaraApi.post<Order>('/orders', { productIds, shippingAddress, idempotencyKey }),
   getOrders: () => voyaraApi.get<Order[]>('/orders'),
+  getOrder: (id: number) => voyaraApi.get<Order>(`/orders/${id}`),
   shipOrder: (id: number, trackingNumber: string) =>
     voyaraApi.put<Order>(`/orders/${id}/ship`, { trackingNumber }),
 };

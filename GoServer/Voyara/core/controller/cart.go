@@ -23,7 +23,7 @@ func (c *Cart) GetCart(ctx context.Context, req *v1.GetCartReq) (res *v1.GetCart
 			ID:             item.ID,
 			ProductID:      item.ProductID,
 			ProductTitle:   item.ProductTitle,
-			ProductPrice:   item.ProductPrice,
+			ProductPrice:   service.CentsToDollars(item.ProductPrice),
 			ProductImage:   item.ProductImage,
 			Quantity:       item.Quantity,
 			Selected:       item.Selected,

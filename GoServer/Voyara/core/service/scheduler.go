@@ -24,8 +24,7 @@ func cancelExpiredOrders() error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-
+	
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %v", err)

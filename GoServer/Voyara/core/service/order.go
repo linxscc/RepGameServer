@@ -29,8 +29,7 @@ func Checkout(buyerID int, productIDs []int, addr ShippingAddr, idempotencyKey s
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-
+	
 	placeholders := make([]string, len(productIDs))
 	args := make([]interface{}, 0, len(productIDs)+1)
 	args = append(args, buyerID)
@@ -56,7 +55,7 @@ func Checkout(buyerID int, productIDs []int, addr ShippingAddr, idempotencyKey s
 		productID int
 		quantity  int
 		title     string
-		price     float64
+		price     int64
 		sellerID  int
 		imageURL  string
 	}
@@ -65,9 +64,11 @@ func Checkout(buyerID int, productIDs []int, addr ShippingAddr, idempotencyKey s
 	for rows.Next() {
 		var item checkoutItem
 		var imagesStr, shopName string
-		if err := rows.Scan(&item.productID, &item.quantity, &item.title, &item.price, &item.sellerID, &imagesStr, &shopName); err != nil {
+		var priceF64 float64
+		if err := rows.Scan(&item.productID, &item.quantity, &item.title, &priceF64, &item.sellerID, &imagesStr, &shopName); err != nil {
 			return nil, fmt.Errorf("scan cart item: %v", err)
 		}
+		item.price = DollarsToCents(priceF64)
 		if imagesStr != "" && imagesStr != "[]" {
 			var imgs []string
 			if json.Unmarshal([]byte(imagesStr), &imgs) == nil && len(imgs) > 0 {
@@ -89,9 +90,9 @@ func Checkout(buyerID int, productIDs []int, addr ShippingAddr, idempotencyKey s
 		sellerID = sid
 	}
 
-	var subtotal float64
+	var subtotal int64
 	for _, item := range items {
-		subtotal += item.price * float64(item.quantity)
+		subtotal += item.price * int64(item.quantity)
 	}
 	grandTotal := subtotal
 	itemCount := len(items)
@@ -104,7 +105,7 @@ func Checkout(buyerID int, productIDs []int, addr ShippingAddr, idempotencyKey s
 		snapshot[i] = map[string]interface{}{
 			"productId": item.productID,
 			"title":     item.title,
-			"price":     item.price,
+			"price":     CentsToDollars(item.price),
 			"quantity":  item.quantity,
 			"imageUrl":  item.imageURL,
 		}
@@ -120,18 +121,18 @@ func Checkout(buyerID int, productIDs []int, addr ShippingAddr, idempotencyKey s
 	res, err := tx.Exec(`
 		INSERT INTO voyara_orders (order_no, buyer_id, seller_id, product_id, item_count, amount, subtotal, grand_total, shipping_address, payment_status, shipping_status, snapshot_items)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', ?)`,
-		orderNo, buyerID, sellerID, items[0].productID, itemCount, grandTotal, subtotal, grandTotal, string(addrBytes), string(snapshotJSON))
+		orderNo, buyerID, sellerID, items[0].productID, itemCount, CentsToDollars(grandTotal), CentsToDollars(subtotal), CentsToDollars(grandTotal), string(addrBytes), string(snapshotJSON))
 	if err != nil {
 		return nil, fmt.Errorf("insert order: %v", err)
 	}
 	orderID, _ := res.LastInsertId()
 
 	for _, item := range items {
-		total := item.price * float64(item.quantity)
+		total := item.price * int64(item.quantity)
 		_, err = tx.Exec(`
 			INSERT INTO voyara_order_items (order_id, product_id, title, price, quantity, total, image_url)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			orderID, item.productID, item.title, item.price, item.quantity, total, item.imageURL)
+			orderID, item.productID, item.title, CentsToDollars(item.price), item.quantity, CentsToDollars(total), item.imageURL)
 		if err != nil {
 			return nil, fmt.Errorf("insert order item: %v", err)
 		}
@@ -149,6 +150,11 @@ func Checkout(buyerID int, productIDs []int, addr ShippingAddr, idempotencyKey s
 
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit tx: %v", err)
+	}
+
+	// Async order confirmation email (failure does not block checkout)
+	if email, err := GetUserEmailByID(buyerID); err == nil {
+		SendOrderConfirmationEmail(email, orderNo)
 	}
 
 	return &model.Order{
@@ -170,8 +176,7 @@ func GetOrdersByBuyer(buyerID int) ([]model.Order, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-
+	
 	rows, err := db.Query(`
 		SELECT o.id, o.order_no, o.buyer_id, o.seller_id, o.item_count,
 		       o.amount, o.subtotal, o.currency,
@@ -189,12 +194,15 @@ func GetOrdersByBuyer(buyerID int) ([]model.Order, error) {
 	for rows.Next() {
 		var o model.Order
 		var addrStr string
+		var amountF64, subtotalF64 float64
 		if err := rows.Scan(&o.ID, &o.OrderNo, &o.BuyerID, &o.SellerID, &o.ItemCount,
-			&o.Amount, &o.Subtotal, &o.Currency,
+			&amountF64, &subtotalF64, &o.Currency,
 			&o.PaymentStatus, &o.ShippingStatus, &o.TrackingNumber,
 			&addrStr, &o.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan order: %v", err)
 		}
+		o.Amount = DollarsToCents(amountF64)
+		o.Subtotal = DollarsToCents(subtotalF64)
 		o.ShippingAddress = sql.NullString{String: addrStr, Valid: true}
 		_ = loadOrderItems(db, &o)
 		orders = append(orders, o)
@@ -213,9 +221,12 @@ func loadOrderItems(db *sql.DB, o *model.Order) error {
 	defer rows.Close()
 	for rows.Next() {
 		var item model.OrderItem
-		if err := rows.Scan(&item.ID, &item.ProductID, &item.Title, &item.Price, &item.Quantity, &item.Total, &item.ImageURL); err != nil {
+		var priceF64, totalF64 float64
+		if err := rows.Scan(&item.ID, &item.ProductID, &item.Title, &priceF64, &item.Quantity, &totalF64, &item.ImageURL); err != nil {
 			return err
 		}
+		item.Price = DollarsToCents(priceF64)
+		item.Total = DollarsToCents(totalF64)
 		o.Items = append(o.Items, item)
 	}
 	return nil
@@ -230,14 +241,43 @@ type ShippingAddr struct {
 	ZipCode string `json:"zipCode"`
 }
 
+func GetOrderByID(orderID, buyerID int) (*model.Order, error) {
+	db, err := GetDB()
+	if err != nil {
+		return nil, err
+	}
+
+	var o model.Order
+	var addrStr string
+	var amountF64, subtotalF64 float64
+	err = db.QueryRow(`
+		SELECT o.id, o.order_no, o.buyer_id, o.seller_id, o.item_count,
+		       o.amount, o.subtotal, o.currency,
+		       o.payment_status, o.shipping_status, COALESCE(o.tracking_number,''),
+		       COALESCE(o.shipping_address,''), o.created_at
+		FROM voyara_orders o
+		WHERE o.id = ? AND o.buyer_id = ?`, orderID, buyerID).
+		Scan(&o.ID, &o.OrderNo, &o.BuyerID, &o.SellerID, &o.ItemCount,
+			&amountF64, &subtotalF64, &o.Currency,
+			&o.PaymentStatus, &o.ShippingStatus, &o.TrackingNumber,
+			&addrStr, &o.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("order not found")
+	}
+	o.Amount = DollarsToCents(amountF64)
+	o.Subtotal = DollarsToCents(subtotalF64)
+	o.ShippingAddress = sql.NullString{String: addrStr, Valid: true}
+	_ = loadOrderItems(db, &o)
+	return &o, nil
+}
+
 // ShipOrder updates shipping status for an order (seller only)
 func ShipOrder(orderID, sellerID int, trackingNumber string) error {
 	db, err := GetDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-
+	
 	res, err := db.Exec(`UPDATE voyara_orders o
 		JOIN voyara_products p ON o.product_id = p.id
 		SET o.shipping_status = 'shipped', o.tracking_number = ?
@@ -250,6 +290,14 @@ func ShipOrder(orderID, sellerID int, trackingNumber string) error {
 	if n == 0 {
 		return fmt.Errorf("order not found or already shipped")
 	}
+
+	// Async shipment notification email (failure does not block shipping)
+	var buyerEmail, orderNo string
+	_ = db.QueryRow(`SELECT u.email, o.order_no FROM voyara_users u JOIN voyara_orders o ON o.buyer_id = u.id WHERE o.id = ?`, orderID).Scan(&buyerEmail, &orderNo)
+	if buyerEmail != "" {
+		SendShipmentNotificationEmail(buyerEmail, orderNo, trackingNumber)
+	}
+
 	return nil
 }
 
@@ -258,8 +306,7 @@ func GetOrdersBySeller(sellerID int) ([]model.Order, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-
+	
 	rows, err := db.Query(`SELECT o.id, o.order_no, o.buyer_id, o.seller_id, o.item_count,
 		o.amount, o.subtotal, o.currency,
 		o.payment_status, o.shipping_status, COALESCE(o.tracking_number,''),
@@ -276,12 +323,15 @@ func GetOrdersBySeller(sellerID int) ([]model.Order, error) {
 	for rows.Next() {
 		var o model.Order
 		var addrStr string
+		var amountF64, subtotalF64 float64
 		if err := rows.Scan(&o.ID, &o.OrderNo, &o.BuyerID, &o.SellerID, &o.ItemCount,
-			&o.Amount, &o.Subtotal, &o.Currency,
+			&amountF64, &subtotalF64, &o.Currency,
 			&o.PaymentStatus, &o.ShippingStatus, &o.TrackingNumber,
 			&addrStr, &o.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan order: %v", err)
 		}
+		o.Amount = DollarsToCents(amountF64)
+		o.Subtotal = DollarsToCents(subtotalF64)
 		o.ShippingAddress = sql.NullString{String: addrStr, Valid: true}
 		_ = loadOrderItems(db, &o)
 		orders = append(orders, o)

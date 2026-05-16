@@ -12,7 +12,7 @@ const (
 type CreatePaymentInput struct {
 	OrderID   int
 	BuyerID   int
-	Amount    float64
+	Amount    int64
 	Currency  string
 	Method    PaymentMethod
 	ReturnURL string // PayPal approval return URL
@@ -27,13 +27,12 @@ type PaymentResult struct {
 	GatewayOrderID    string
 }
 
-func RecordPayment(orderID, buyerID int, amount float64, method, gatewayID string) error {
+func RecordPayment(orderID, buyerID int, amount int64, method, gatewayID string) error {
 	db, err := GetDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-
+	
 	col := "stripe_payment_intent_id"
 	if method == "paypal" {
 		col = "paypal_order_id"
@@ -42,6 +41,6 @@ func RecordPayment(orderID, buyerID int, amount float64, method, gatewayID strin
 	_, err = db.Exec(fmt.Sprintf(`
 		INSERT INTO voyara_payments (order_id, buyer_id, amount, currency, payment_method, payment_status, %s)
 		VALUES (?, ?, ?, 'USD', ?, 'pending', ?)`, col),
-		orderID, buyerID, amount, method, gatewayID)
+		orderID, buyerID, CentsToDollars(amount), method, gatewayID)
 	return err
 }

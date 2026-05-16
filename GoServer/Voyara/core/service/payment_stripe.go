@@ -22,7 +22,7 @@ func CreateStripePayment(input CreatePaymentInput) (*PaymentResult, error) {
 				"order_id": fmt.Sprintf("%d", input.OrderID),
 			},
 		},
-		Amount:   stripe.Int64(int64(input.Amount * 100)),
+		Amount:   stripe.Int64(input.Amount),
 		Currency: stripe.String(string(input.Currency)),
 		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
 			Enabled: stripe.Bool(true),
@@ -79,8 +79,7 @@ func ProcessStripeWebhookEvent(eventType string, orderID int) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-
+	
 	switch eventType {
 	case "payment_intent.succeeded":
 		_, err = db.Exec(`UPDATE voyara_orders SET payment_status = 'paid', paid_at = NOW() WHERE id = ? AND payment_status = 'pending'`, orderID)

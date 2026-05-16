@@ -56,6 +56,13 @@ type OrderItem struct {
 	ImageURL  string  `json:"imageUrl"`
 }
 
+type GetOrderReq struct {
+	g.Meta `path:"/voyara/orders/:id" method:"get" summary:"Get order detail" middleware:"auth"`
+	ID     int `json:"id" in:"path"`
+}
+
+type GetOrderRes = OrderItemRes
+
 type GetOrdersRes []OrderItemRes
 
 type CheckoutRes = OrderItemRes

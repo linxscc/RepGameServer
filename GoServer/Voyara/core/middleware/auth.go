@@ -42,14 +42,21 @@ func Auth(r *ghttp.Request) {
 		return
 	}
 
-	header := r.Header.Get("Authorization")
-	if header == "" || !strings.HasPrefix(header, "Bearer ") {
+	tokenStr := ""
+	if cookie, err := r.Request.Cookie("voyara_token"); err == nil && cookie != nil {
+		tokenStr = cookie.Value
+	}
+	if tokenStr == "" {
+		header := r.Header.Get("Authorization")
+		if header != "" && strings.HasPrefix(header, "Bearer ") {
+			tokenStr = strings.TrimPrefix(header, "Bearer ")
+		}
+	}
+	if tokenStr == "" {
 		r.Response.WriteStatus(401)
 		r.Response.WriteJson(g.Map{"code": 401, "message": "Authentication required"})
 		return
 	}
-
-	tokenStr := strings.TrimPrefix(header, "Bearer ")
 	claims, err := service.ParseAccessToken(tokenStr)
 	if err != nil {
 		r.Response.WriteStatus(401)

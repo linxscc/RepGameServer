@@ -64,10 +64,10 @@ docker compose up --build
 
 #Local upload docker
 #No cache build
-docker build --no-cache -t kernzs/repgame:latest .
+docker build --no-cache -t XXXX/xxxxx:latest .
 #Cache build
-docker build -t kernzs/repgame:latest .
-docker push kernzs/repgame:latest
+docker build -t XXXX/xxxxx:latest .
+docker push XXXX/xxxxx:latest .
 
 ---
 
@@ -79,13 +79,12 @@ C:\Windows\System32\drivers\etc\hosts
 ```
 Add a line (consistent with the server_name of nginx.conf):
 ```
-127.0.0.1 www.zspersonaldomain.it.com
+127.0.0.1
 ```
 
-This way, accessing http://www.zspersonaldomain.it.com/ in the browser will point to the local Nginx.
+This way, accessing https://127.0.0.1:port in the browser will point to the local Nginx.
 
 ---
-
 
 
 

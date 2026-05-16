@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,13 +30,24 @@ func (c *Payment) createStripePayment(ctx context.Context, userID int, req *v1.C
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-
-	var amount float64
-	err = db.QueryRow(`SELECT grand_total FROM voyara_orders WHERE id = ? AND buyer_id = ? AND payment_status = 'pending'`, req.OrderID, userID).Scan(&amount)
-	if err != nil {
-		return nil, fmt.Errorf("order not found or already paid")
+	
+	var amountF64 float64
+	var paymentStatus string
+	var snapshotItems sql.NullString
+	err = db.QueryRow(`SELECT grand_total, payment_status, snapshot_items FROM voyara_orders WHERE id = ? AND buyer_id = ?`, req.OrderID, userID).Scan(&amountF64, &paymentStatus, &snapshotItems)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("order not found")
 	}
+	if err != nil {
+		return nil, err
+	}
+	if paymentStatus != "pending" {
+		return nil, fmt.Errorf("order payment status is '%s', expected 'pending'", paymentStatus)
+	}
+	if !snapshotItems.Valid || snapshotItems.String == "" || snapshotItems.String == "[]" {
+		return nil, fmt.Errorf("order snapshot missing")
+	}
+	amount := service.DollarsToCents(amountF64)
 
 	result, err := service.CreateStripePayment(service.CreatePaymentInput{
 		OrderID:  req.OrderID,
@@ -63,13 +75,24 @@ func (c *Payment) createPayPalPayment(ctx context.Context, userID int, req *v1.C
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-
-	var amount float64
-	err = db.QueryRow(`SELECT grand_total FROM voyara_orders WHERE id = ? AND buyer_id = ? AND payment_status = 'pending'`, req.OrderID, userID).Scan(&amount)
-	if err != nil {
-		return nil, fmt.Errorf("order not found or already paid")
+	
+	var amountF64 float64
+	var paymentStatus string
+	var snapshotItems sql.NullString
+	err = db.QueryRow(`SELECT grand_total, payment_status, snapshot_items FROM voyara_orders WHERE id = ? AND buyer_id = ?`, req.OrderID, userID).Scan(&amountF64, &paymentStatus, &snapshotItems)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("order not found")
 	}
+	if err != nil {
+		return nil, err
+	}
+	if paymentStatus != "pending" {
+		return nil, fmt.Errorf("order payment status is '%s', expected 'pending'", paymentStatus)
+	}
+	if !snapshotItems.Valid || snapshotItems.String == "" || snapshotItems.String == "[]" {
+		return nil, fmt.Errorf("order snapshot missing")
+	}
+	amount := service.DollarsToCents(amountF64)
 
 	result, err := service.CreatePayPalPayment(service.CreatePaymentInput{
 		OrderID:   req.OrderID,
@@ -95,18 +118,74 @@ func (c *Payment) createPayPalPayment(ctx context.Context, userID int, req *v1.C
 }
 
 func (c *Payment) CapturePayPal(ctx context.Context, req *v1.CapturePayPalReq) (res *v1.MessageRes, err error) {
-	if err := service.CapturePayPalOrder(req.PayPalOrderID); err != nil {
+	userID := ctx.Value("userID").(int)
+
+	store := service.NewIdempotencyStore()
+	key := fmt.Sprintf("capture:paypal:%s", req.PayPalOrderID)
+	exists, err := store.CheckAndSet(key)
+	if err != nil {
 		return nil, err
+	}
+	if exists {
+		return &v1.MessageRes{Message: "Payment already captured"}, nil
 	}
 
 	db, err := service.GetDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	
+	var orderID int
+	var buyerID int
+	var paymentStatus string
+	var grandTotalF64 float64
+	err = db.QueryRow(`
+		SELECT o.id, o.buyer_id, o.payment_status, o.grand_total
+		FROM voyara_orders o
+		JOIN voyara_payments p ON p.order_id = o.id
+		WHERE p.paypal_order_id = ?`, req.PayPalOrderID).
+		Scan(&orderID, &buyerID, &paymentStatus, &grandTotalF64)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("order not found for this PayPal payment")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if buyerID != userID {
+		return nil, fmt.Errorf("unauthorized: order does not belong to current user")
+	}
+	if paymentStatus != "pending" {
+		return nil, fmt.Errorf("order payment status is '%s', expected 'pending'", paymentStatus)
+	}
 
-	_, _ = db.Exec(`UPDATE voyara_orders SET payment_status = 'paid', paid_at = NOW() WHERE id = ? AND payment_status = 'pending'`, req.OrderID)
-	_, _ = db.Exec(`UPDATE voyara_payments SET payment_status = 'succeeded', paid_at = NOW() WHERE paypal_order_id = ?`, req.PayPalOrderID)
+	capturedAmount, err := service.CapturePayPalOrder(req.PayPalOrderID)
+	if err != nil {
+		return nil, err
+	}
+
+	localAmount := service.DollarsToCents(grandTotalF64)
+	if capturedAmount != localAmount {
+		return nil, fmt.Errorf("paypal amount mismatch: captured %d, expected %d", capturedAmount, localAmount)
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`UPDATE voyara_orders SET payment_status = 'paid', paid_at = NOW() WHERE id = ?`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(`UPDATE voyara_payments SET payment_status = 'succeeded', paid_at = NOW() WHERE paypal_order_id = ?`, req.PayPalOrderID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 
 	return &v1.MessageRes{Message: "Payment captured successfully"}, nil
 }
@@ -144,6 +223,20 @@ func (c *Payment) PayPalWebhook(r *ghttp.Request) {
 		return
 	}
 
+	headers := map[string]string{
+		"Paypal-Transmission-Id":   r.Header.Get("Paypal-Transmission-Id"),
+		"Paypal-Transmission-Time": r.Header.Get("Paypal-Transmission-Time"),
+		"Paypal-Cert-Url":          r.Header.Get("Paypal-Cert-Url"),
+		"Paypal-Auth-Algo":         r.Header.Get("Paypal-Auth-Algo"),
+		"Paypal-Transmission-Sig":  r.Header.Get("Paypal-Transmission-Sig"),
+	}
+
+	if err := service.VerifyPayPalWebhookSignature(headers, payload); err != nil {
+		g.Log().Errorf(r.Context(), "PayPal webhook: verification error: %v", err)
+		r.Response.WriteStatus(401)
+		return
+	}
+
 	var event struct {
 		EventType string `json:"event_type"`
 		Resource  struct {
@@ -156,12 +249,15 @@ func (c *Payment) PayPalWebhook(r *ghttp.Request) {
 		return
 	}
 
-	if event.EventType == "CHECKOUT.ORDER.APPROVED" {
+	switch event.EventType {
+	case "CHECKOUT.ORDER.APPROVED":
 		if err := service.ProcessPayPalWebhook(event.Resource.ID); err != nil {
 			g.Log().Errorf(r.Context(), "PayPal webhook: process error: %v", err)
 			r.Response.WriteStatus(500)
 			return
 		}
+	default:
+		g.Log().Infof(r.Context(), "PayPal webhook: unhandled event type: %s", event.EventType)
 	}
 
 	r.Response.WriteStatus(200)

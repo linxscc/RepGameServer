@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -23,8 +24,15 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-func InitJWT(secret []byte) {
-	jwtSecret = secret
+func InitJWT(secret string) error {
+	if secret == "" {
+		return fmt.Errorf("VOYARA_JWT_SECRET is not set")
+	}
+	if len(secret) < 32 {
+		return fmt.Errorf("VOYARA_JWT_SECRET must be at least 32 characters, got %d", len(secret))
+	}
+	jwtSecret = []byte(secret)
+	return nil
 }
 
 func MakeAccessToken(userID int, email, role string) (string, error) {
@@ -76,6 +84,30 @@ func ParseAccessToken(tokenStr string) (*JWTClaims, error) {
 	return claims, nil
 }
 
+func SetAuthCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "voyara_token",
+		Value:    token,
+		Path:     "/voyara",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400,
+	})
+}
+
+func ClearAuthCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "voyara_token",
+		Value:    "",
+		Path:     "/voyara",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+}
+
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -113,8 +145,7 @@ func GetUserByEmail(email string) (*model.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-
+	
 	var u model.User
 	var emailVerifiedAt, lockedUntil sql.NullTime
 	err = db.QueryRow(`
@@ -147,8 +178,7 @@ func CreateUser(email, passwordHash, name string) (*model.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-
+	
 	res, err := db.Exec(`
 		INSERT INTO voyara_users (email, password_hash, password_hash_method, name, role)
 		VALUES (?, ?, 'bcrypt', ?, 'user')`, email, passwordHash, name)
@@ -172,8 +202,7 @@ func RecordLoginAttempt(email string, success bool, ip string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-
+	
 	if success {
 		_, err = db.Exec(`
 			UPDATE voyara_users SET
@@ -192,16 +221,34 @@ func RecordLoginAttempt(email string, success bool, ip string) error {
 	return err
 }
 
+func RevokeRefreshToken(tokenHash string) error {
+	db, err := GetDB()
+	if err != nil {
+		return err
+	}
+		_, err = db.Exec(`UPDATE voyara_refresh_tokens SET revoked = 1 WHERE token_hash = ?`, tokenHash)
+	return err
+}
+
 func StoreRefreshToken(userID int, tokenHash string, expiresAt time.Time) error {
 	db, err := GetDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	_, err = db.Exec(`
+		_, err = db.Exec(`
 		INSERT INTO voyara_refresh_tokens (user_id, token_hash, expires_at)
 		VALUES (?, ?, ?)`, userID, tokenHash, expiresAt)
 	return err
+}
+
+func GetUserEmailByID(userID int) (string, error) {
+	db, err := GetDB()
+	if err != nil {
+		return "", err
+	}
+	var email string
+	err = db.QueryRow(`SELECT email FROM voyara_users WHERE id = ?`, userID).Scan(&email)
+	return email, err
 }
 
 func ValidateRefreshToken(tokenHash string) (int, error) {
@@ -209,8 +256,7 @@ func ValidateRefreshToken(tokenHash string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer db.Close()
-
+	
 	var userID int
 	var expiresAt time.Time
 	err = db.QueryRow(`
@@ -227,4 +273,17 @@ func ValidateRefreshToken(tokenHash string) (int, error) {
 		return 0, errors.New("refresh token expired")
 	}
 	return userID, nil
+}
+
+func IsAdmin(userID int) (bool, error) {
+	db, err := GetDB()
+	if err != nil {
+		return false, err
+	}
+	var role string
+	err = db.QueryRow(`SELECT role FROM voyara_users WHERE id = ?`, userID).Scan(&role)
+	if err != nil {
+		return false, err
+	}
+	return role == "admin", nil
 }

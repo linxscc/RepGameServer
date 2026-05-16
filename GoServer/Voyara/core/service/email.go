@@ -1,8 +1,15 @@
 package service
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"os"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ses"
+	"github.com/aws/aws-sdk-go-v2/service/ses/types"
 )
 
 type EmailConfig struct {
@@ -38,14 +45,87 @@ func SendVerificationCode(toEmail, code, purpose string) error {
 		return nil
 	}
 
-	return sendSESEmail(cfg.FromEmail, toEmail, subject, body)
+	return sendSESEmail(cfg, toEmail, subject, body)
 }
 
-func sendSESEmail(from, to, subject, body string) error {
-	fmt.Printf("[SES] From: %s To: %s Subject: %s Body: %s\n", from, to, subject, body)
+func sendSESEmail(cfg EmailConfig, to, subject, body string) error {
+	ctx := context.Background()
+
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(cfg.Region))
+	if err != nil {
+		return fmt.Errorf("aws config: %v", err)
+	}
+
+	client := ses.NewFromConfig(awsCfg)
+
+	input := &ses.SendEmailInput{
+		Source: &cfg.FromEmail,
+		Destination: &types.Destination{
+			ToAddresses: []string{to},
+		},
+		Message: &types.Message{
+			Subject: &types.Content{Data: &subject},
+			Body: &types.Body{
+				Text: &types.Content{Data: &body},
+			},
+		},
+	}
+
+	_, err = client.SendEmail(ctx, input)
+	if err != nil {
+		return fmt.Errorf("ses send email: %v", err)
+	}
+
 	return nil
 }
 
 func SendPasswordResetEmail(toEmail, code string) error {
 	return SendVerificationCode(toEmail, code, "reset_password")
+}
+
+// ── Async order notification emails ──
+
+func sendEmailAsync(to, subject, body string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		done := make(chan error, 1)
+		go func() {
+			if os.Getenv("APP_ENV") != "production" {
+				fmt.Printf("[EMAIL] To: %s | Subject: %s\n%s\n\n", to, subject, body)
+				done <- nil
+				return
+			}
+			cfg := GetEmailConfig()
+			done <- sendSESEmail(cfg, to, subject, body)
+		}()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				log.Printf("[EMAIL] Failed to send to %s: %v", to, err)
+			}
+		case <-ctx.Done():
+			log.Printf("[EMAIL] Timeout sending to %s", to)
+		}
+	}()
+}
+
+func SendOrderConfirmationEmail(toEmail, orderNo string) {
+	subject := "Order Confirmed - Voyara"
+	body := fmt.Sprintf("Thank you for your order!\n\nOrder Number: %s\n\nWe'll notify you when it ships.", orderNo)
+	sendEmailAsync(toEmail, subject, body)
+}
+
+func SendPaymentSuccessEmail(toEmail, orderNo string) {
+	subject := "Payment Received - Voyara"
+	body := fmt.Sprintf("Your payment for order %s has been received.\n\nYour order is now being processed.", orderNo)
+	sendEmailAsync(toEmail, subject, body)
+}
+
+func SendShipmentNotificationEmail(toEmail, orderNo, trackingNumber string) {
+	subject := "Order Shipped - Voyara"
+	body := fmt.Sprintf("Your order %s has been shipped!\n\nTracking Number: %s", orderNo, trackingNumber)
+	sendEmailAsync(toEmail, subject, body)
 }

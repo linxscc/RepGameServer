@@ -18,8 +18,7 @@ func (s *IdempotencyStore) CheckAndSet(key string) (isDuplicate bool, err error)
 	if err != nil {
 		return false, err
 	}
-	defer db.Close()
-
+	
 	// Clean up old keys first (best-effort)
 	_, _ = db.Exec(`DELETE FROM voyara_idempotency_keys WHERE created_at < NOW() - INTERVAL 24 HOUR`)
 
@@ -38,8 +37,7 @@ func (s *IdempotencyStore) MarkDone(key string, response interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	respJSON, err := json.Marshal(response)
+		respJSON, err := json.Marshal(response)
 	if err != nil {
 		return fmt.Errorf("idempotency marshal response: %v", err)
 	}

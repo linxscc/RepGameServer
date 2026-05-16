@@ -1,33 +1,121 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
-import { cartApi, type CartResponse } from '../api/cart';
+import { useCart } from '../contexts/CartContext';
+import { LoadingState, EmptyState } from '../components/LoadingState';
+import { cartApi } from '../api/cart';
 import type { CartItem } from '../api/types';
 
 export default function CartPage() {
   const { t } = useLanguage();
+  const { refreshCount } = useCart();
   const navigate = useNavigate();
-  const [cart, setCart] = useState<CartResponse>({ items: [], count: 0 });
+  const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const dirtyRef = useRef(false);
+  const origRef = useRef<CartItem[]>([]);
 
-  const loadCart = async () => {
+  // Load cart from API on mount
+  useEffect(() => {
+    cartApi.getCart()
+      .then((data) => {
+        setItems(data.items);
+        origRef.current = JSON.parse(JSON.stringify(data.items));
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load cart'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Sync to backend — called before checkout or on unmount
+  const syncCart = useCallback(async () => {
+    if (!dirtyRef.current) return;
+    setSyncing(true);
+    const orig = origRef.current;
+    const cur = items; // current state at sync time
+    const origMap = new Map(orig.map((i) => [i.id, i]));
+    const curMap = new Map(cur.map((i) => [i.id, i]));
+
+    const ops: Promise<unknown>[] = [];
+
+    // Removed items
+    for (const [id] of origMap) {
+      if (!curMap.has(id)) {
+        ops.push(cartApi.removeItem(id).catch(() => {}));
+      }
+    }
+
+    // Modified items
+    for (const item of cur) {
+      const origItem = origMap.get(item.id);
+      if (!origItem) continue;
+      if (origItem.quantity !== item.quantity) {
+        ops.push(cartApi.updateQuantity(item.id, item.quantity).catch(() => {}));
+      }
+      if (origItem.selected !== item.selected) {
+        ops.push(cartApi.toggleSelect(item.id, item.selected).catch(() => {}));
+      }
+    }
+
+    await Promise.all(ops);
+    dirtyRef.current = false;
+    setDirty(false);
+    origRef.current = JSON.parse(JSON.stringify(cur));
+    refreshCount();
+    setSyncing(false);
+  }, [items]);
+
+  // ── Local mutations only ──
+
+  const markDirty = (next: CartItem[]) => {
+    dirtyRef.current = true;
+    setDirty(true);
+    setItems(next);
+  };
+
+  const handleSelectAll = () => {
+    const allSelected = items.length > 0 && items.every((i) => i.selected || !i.available);
+    markDirty(items.map((i) => (i.available ? { ...i, selected: !allSelected } : i)));
+  };
+
+  const handleSelect = (item: CartItem) => {
+    markDirty(items.map((i) => (i.id === item.id ? { ...i, selected: !i.selected } : i)));
+  };
+
+  const handleQuantity = (item: CartItem, delta: number) => {
+    const q = Math.max(1, Math.min(50, item.quantity + delta));
+    markDirty(items.map((i) => (i.id === item.id ? { ...i, quantity: q } : i)));
+  };
+
+  const handleRemove = async (id: number) => {
     try {
-      setLoading(true);
-      const data = await cartApi.getCart();
-      setCart(data);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load cart');
-    } finally {
-      setLoading(false);
+      await cartApi.removeItem(id);
+      origRef.current = origRef.current.filter((i) => i.id !== id);
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      refreshCount();
+    } catch {
+      // backend sync failed — item stays in local state
     }
   };
 
-  useEffect(() => { loadCart(); }, []);
+  const handleCheckout = async () => {
+    const selected = items.filter((i) => i.selected && i.available);
+    if (selected.length === 0) return;
+    await syncCart();
+    navigate('/voyara/checkout', { state: { products: selected.map((i) => i.productId) } });
+  };
 
-  const groupedItems = (): { sellerId: number; shopName: string; items: CartItem[] }[] => {
+  // ── Derived state ──
+
+  const selectedItems = items.filter((i) => i.selected && i.available);
+  const totalAmount = selectedItems.reduce((sum, i) => sum + i.productPrice * i.quantity, 0);
+  const allSelected = items.length > 0 && items.every((i) => i.selected || !i.available);
+
+  const groupedItems = () => {
     const groups: Record<number, { sellerId: number; shopName: string; items: CartItem[] }> = {};
-    for (const item of cart.items) {
+    for (const item of items) {
       if (!groups[item.sellerId]) {
         groups[item.sellerId] = { sellerId: item.sellerId, shopName: item.sellerShopName, items: [] };
       }
@@ -36,48 +124,15 @@ export default function CartPage() {
     return Object.values(groups);
   };
 
-  const selectedItems = cart.items.filter((i) => i.selected && i.available);
-  const totalAmount = selectedItems.reduce((sum, i) => sum + i.productPrice * i.quantity, 0);
-  const allSelected = cart.items.length > 0 && cart.items.every((i) => i.selected || !i.available);
-
-  const handleSelectAll = async () => {
-    await cartApi.selectAll(!allSelected);
-    await loadCart();
-  };
-
-  const handleSelect = async (item: CartItem) => {
-    await cartApi.toggleSelect(item.id, !item.selected);
-    await loadCart();
-  };
-
-  const handleQuantity = async (item: CartItem, delta: number) => {
-    const q = Math.max(1, Math.min(50, item.quantity + delta));
-    await cartApi.updateQuantity(item.id, q);
-    await loadCart();
-  };
-
-  const handleRemove = async (id: number) => {
-    await cartApi.removeItem(id);
-    await loadCart();
-  };
-
-  const handleCheckout = () => {
-    const ids = selectedItems.map((i) => i.productId).join(',');
-    navigate(`/voyara/checkout?products=${ids}`);
-  };
-
-  if (loading) return <div className="vy-section"><div className="vy-container"><p>Loading...</p></div></div>;
+  if (loading) return <LoadingState />;
 
   return (
     <div className="vy-section">
       <div className="vy-container" style={{ maxWidth: '960px' }}>
         <h1 className="vy-heading h2">{t('cart.title')}</h1>
-        {error && <div className="vy-auth-error">{error}</div>}
-        {cart.items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--vy-text-dim)' }}>
-            <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('cart.empty')}</p>
-            <Link to="/voyara" className="vy-btn vy-btn-primary">{t('cart.continueShopping')}</Link>
-          </div>
+        {error && <div className="vy-auth-error" style={{ marginTop: '1rem' }}>{error}</div>}
+        {items.length === 0 ? (
+          <EmptyState message={t('cart.empty')} action={{ label: t('cart.continueShopping'), href: '/voyara' }} />
         ) : (
           <>
             <div className="vy-cart-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem 0', borderBottom: '1px solid var(--vy-border)' }}>
@@ -85,7 +140,7 @@ export default function CartPage() {
                 <input type="checkbox" checked={allSelected} onChange={handleSelectAll} />
                 {t('cart.selectAll')}
               </label>
-              <span style={{ color: 'var(--vy-text-dim)', fontSize: '0.9rem' }}>({cart.count} {t('cart.items')})</span>
+              <span style={{ color: 'var(--vy-text-dim)', fontSize: '0.9rem' }}>({items.length} {t('cart.items')})</span>
             </div>
             {groupedItems().map((group) => (
               <div key={group.sellerId} className="vy-cart-group" style={{ marginTop: '1rem', border: '1px solid var(--vy-border)', borderRadius: '8px', overflow: 'hidden' }}>
@@ -112,7 +167,7 @@ export default function CartPage() {
                     <div style={{ fontWeight: 600, minWidth: '80px', textAlign: 'right' }}>
                       ${(item.productPrice * item.quantity).toFixed(2)}
                     </div>
-                    <button className="vy-btn vy-btn-sm" style={{ color: 'var(--vy-error)' }} onClick={() => handleRemove(item.id)}>
+                    <button className="vy-btn vy-btn-sm" style={{ color: 'var(--vy-error)', border: '1px solid var(--vy-error)' }} onClick={() => handleRemove(item.id)}>
                       {t('cart.remove')}
                     </button>
                   </div>
@@ -123,9 +178,10 @@ export default function CartPage() {
               <div>
                 <span style={{ color: 'var(--vy-text-dim)' }}>{t('cart.total')}: </span>
                 <span style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--vy-amber)' }}>${totalAmount.toFixed(2)}</span>
+                {dirty && <span style={{ fontSize: '0.75rem', color: 'var(--vy-text-dim)', marginLeft: '0.5rem' }}>(unsaved)</span>}
               </div>
-              <button className="vy-btn vy-btn-primary vy-btn-lg" onClick={handleCheckout} disabled={selectedItems.length === 0}>
-                {t('cart.checkout')} ({selectedItems.length})
+              <button className="vy-btn vy-btn-primary vy-btn-lg" onClick={handleCheckout} disabled={selectedItems.length === 0 || syncing}>
+                {syncing ? <span className="vy-spinner" /> : `${t('cart.checkout')} (${selectedItems.length})`}
               </button>
             </div>
           </>

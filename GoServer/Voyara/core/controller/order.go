@@ -48,6 +48,18 @@ func (c *Order) GetOrders(ctx context.Context, req *v1.GetOrdersReq) (res *v1.Ge
 	return &items, nil
 }
 
+func (c *Order) GetOrder(ctx context.Context, req *v1.GetOrderReq) (res *v1.GetOrderRes, err error) {
+	userID := ctx.Value("userID").(int)
+
+	order, err := service.GetOrderByID(req.ID, userID)
+	if err != nil {
+		g.Log().Errorf(ctx, "GetOrder error: %v", err)
+		return nil, err
+	}
+	item := toOrderItemRes(*order)
+	return &item, nil
+}
+
 func (c *Order) ShipOrder(ctx context.Context, req *v1.ShipOrderReq) (res *v1.OrderItemRes, err error) {
 	userID := ctx.Value("userID").(int)
 	sellerID, err := service.GetSellerIDByUserID(userID)
@@ -73,9 +85,9 @@ func toOrderItemRes(o model.Order) v1.OrderItemRes {
 			ID:        item.ID,
 			ProductID: item.ProductID,
 			Title:     item.Title,
-			Price:     item.Price,
+			Price:     service.CentsToDollars(item.Price),
 			Quantity:  item.Quantity,
-			Total:     item.Total,
+			Total:     service.CentsToDollars(item.Total),
 			ImageURL:  item.ImageURL,
 		})
 	}
@@ -85,8 +97,8 @@ func toOrderItemRes(o model.Order) v1.OrderItemRes {
 		BuyerID:         o.BuyerID,
 		SellerID:        o.SellerID,
 		ItemCount:       o.ItemCount,
-		Amount:          o.Amount,
-		Subtotal:        o.Subtotal,
+		Amount:          service.CentsToDollars(o.Amount),
+		Subtotal:        service.CentsToDollars(o.Subtotal),
 		Currency:        o.Currency,
 		PaymentStatus:   o.PaymentStatus,
 		ShippingStatus:  o.ShippingStatus,

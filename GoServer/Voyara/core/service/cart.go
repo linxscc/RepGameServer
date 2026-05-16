@@ -10,8 +10,8 @@ import (
 
 type CartItemWithProduct struct {
 	model.CartItem
-	ProductTitle   string  `json:"productTitle"`
-	ProductPrice   float64 `json:"productPrice"`
+	ProductTitle   string `json:"productTitle"`
+	ProductPrice   int64  `json:"productPrice"`
 	ProductImage   string  `json:"productImage"`
 	ProductStatus  string  `json:"productStatus"`
 	SellerID       int     `json:"sellerId"`
@@ -23,7 +23,6 @@ func AddToCart(userID, productID, quantity int) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
 
 	var status string
 	err = db.QueryRow(`SELECT status FROM voyara_products WHERE id = ?`, productID).Scan(&status)
@@ -58,7 +57,6 @@ func UpdateCartItemQuantity(userID, itemID, quantity int) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
 
 	if quantity < 1 {
 		quantity = 1
@@ -83,7 +81,6 @@ func ToggleCartItemSelected(userID, itemID int, selected bool) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
 
 	v := 0
 	if selected {
@@ -105,7 +102,6 @@ func RemoveCartItem(userID, itemID int) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
 
 	res, err := db.Exec(`DELETE FROM voyara_cart_items WHERE id = ? AND user_id = ?`, itemID, userID)
 	if err != nil {
@@ -123,7 +119,6 @@ func ClearCart(userID int) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
 
 	_, err = db.Exec(`DELETE FROM voyara_cart_items WHERE user_id = ?`, userID)
 	return err
@@ -134,7 +129,6 @@ func GetCart(userID int) ([]CartItemWithProduct, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
 
 	rows, err := db.Query(`
 		SELECT c.id, c.product_id, c.quantity, c.selected,
@@ -157,13 +151,15 @@ func GetCart(userID int) ([]CartItemWithProduct, error) {
 		var imagesStr, shopName string
 		var sellerID int
 		var selected int
+		var priceF64 float64
 		if err := rows.Scan(&item.ID, &item.ProductID, &item.Quantity, &selected,
-			&item.ProductTitle, &item.ProductPrice, &item.ProductStatus,
+			&item.ProductTitle, &priceF64, &item.ProductStatus,
 			&imagesStr, &sellerID, &shopName); err != nil {
 			return nil, fmt.Errorf("scan cart: %v", err)
 		}
 		item.UserID = userID
 		item.Selected = selected == 1
+		item.ProductPrice = DollarsToCents(priceF64)
 		item.SellerID = sellerID
 		item.SellerShopName = shopName
 		if imagesStr != "" && imagesStr != "[]" {
@@ -185,7 +181,6 @@ func SelectAllCartItems(userID int, selected bool) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
 
 	v := 0
 	if selected {
@@ -200,7 +195,6 @@ func GetCartCount(userID int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer db.Close()
 
 	var count int
 	err = db.QueryRow(`SELECT COUNT(*) FROM voyara_cart_items WHERE user_id = ?`, userID).Scan(&count)

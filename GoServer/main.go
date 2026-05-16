@@ -7,15 +7,48 @@ import (
 	voyaraController "GoServer/Voyara/core/controller"
 	voyaraMiddleware "GoServer/Voyara/core/middleware"
 	voyaraService "GoServer/Voyara/core/service"
+	"log"
+	"os"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
+	"github.com/joho/godotenv"
 )
+
+// init() 在 Go 中的执行顺序:
+//   1. 所有 import 包的 init() 函数
+//   2. 本包的 init() 函数
+//   3. main()
+// 之前 service/auth.go 的 init() 会在本 init() 之前执行，
+// 导致读不到 .env 中的 VOYARA_JWT_SECRET。
+// 现在已移除 auth.go 的 init()，统一由 main() 显式调用 InitJWT 完成初始化。
+
+func init() {
+	envPath := os.Getenv("VOYARA_ENV_PATH")
+	if envPath == "" {
+		envPath = ".env"
+	}
+	if err := godotenv.Load(envPath); err != nil {
+		log.Println("[voyara] No .env file found, using system environment variables")
+	}
+}
 
 func main() {
 	go tcpserver.StartTCPServer()
 
 	voyaraService.StartPaymentTimeoutScheduler()
+
+	// 初始化 JWT：必须在 godotenv.Load() 之后调用，
+	// VOYARA_JWT_SECRET 未设置或不足 32 字符时服务启动失败。
+	if err := voyaraService.InitJWT(os.Getenv("VOYARA_JWT_SECRET")); err != nil {
+		log.Fatalf("[voyara] Failed to initialize JWT: %v", err)
+	}
+
+	// 初始化 Voyara 数据库连接池
+	if err := voyaraService.InitDB(); err != nil {
+		log.Fatalf("[voyara] Failed to initialize database: %v", err)
+	}
+	defer voyaraService.CloseDB()
 
 	s := g.Server()
 
@@ -57,7 +90,7 @@ func main() {
 		}
 
 		r.Response.Header().Set("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,PATCH,HEAD,CONNECT,OPTIONS,TRACE")
-		r.Response.Header().Set("Access-Control-Allow-Headers", "Origin,Content-Type,Accept,User-Agent,Cookie,Authorization,X-Auth-Token,X-Requested-With")
+		r.Response.Header().Set("Access-Control-Allow-Headers", "Origin,Content-Type,Accept,User-Agent,Cookie,Authorization,X-Auth-Token,X-Requested-With,X-CSRF-Token")
 		r.Response.Header().Set("Access-Control-Allow-Credentials", "true")
 		r.Response.Header().Set("Access-Control-Max-Age", "3600")
 
@@ -81,25 +114,36 @@ func main() {
 		)
 	})
 
-	// ── Voyara Marketplace Public Endpoints (no auth/CSRF for auth endpoints) ──
+	// ── Voyara Marketplace Public Endpoints (no auth) ──
 	s.Group("/", func(group *ghttp.RouterGroup) {
 		group.Middleware(ghttp.MiddlewareHandlerResponse)
 		group.Bind(
 			new(voyaraController.Auth),
+			new(voyaraController.Product),
+			new(voyaraController.Category),
 		)
 	})
 
-	// ── Voyara Marketplace Protected Endpoints ──
+	// ── Voyara Marketplace Protected Endpoints (auth + CSRF required) ──
 	s.Group("/", func(group *ghttp.RouterGroup) {
 		group.Middleware(ghttp.MiddlewareHandlerResponse)
 		group.Middleware(voyaraMiddleware.Auth)
 		group.Middleware(voyaraMiddleware.CSRF())
 		group.Bind(
-			new(voyaraController.Product),
-			new(voyaraController.Category),
 			new(voyaraController.Order),
 			new(voyaraController.Cart),
 			new(voyaraController.Payment),
+		)
+	})
+
+	// ── Voyara Marketplace Admin Endpoints (auth + admin + CSRF) ──
+	s.Group("/", func(group *ghttp.RouterGroup) {
+		group.Middleware(ghttp.MiddlewareHandlerResponse)
+		group.Middleware(voyaraMiddleware.Auth)
+		group.Middleware(voyaraMiddleware.AdminOnly)
+		group.Middleware(voyaraMiddleware.CSRF())
+		group.Bind(
+			new(voyaraController.Admin),
 		)
 	})
 

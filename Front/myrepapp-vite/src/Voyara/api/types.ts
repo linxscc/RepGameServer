@@ -33,7 +33,7 @@ export interface Seller {
 
 export type ProductCategory = 'appliance' | 'vehicle' | 'electronics' | 'other';
 export type ProductCondition = 'new' | 'like_new' | 'used' | 'refurbished';
-export type ProductStatus = 'active' | 'sold' | 'inactive';
+export type ProductStatus = 'active' | 'sold' | 'inactive' | 'in_review';
 
 export interface Product {
   id: number;

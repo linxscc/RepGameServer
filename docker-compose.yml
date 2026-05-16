@@ -1,5 +1,6 @@
 services:
   app:
+    build: .
     image: kernzs/repgame:latest
     ports:
       - "80:80"
@@ -16,5 +17,20 @@ services:
       - DB_PORT=3306
       - DB_NAME=RepGame
       - WEB_DB_NAME=InsByMyself
+      - VOYARA_DB_NAME=Voyara
       - DB_USER=repgameadmin
       - DB_PASSWORD=repgameadmin
+
+      - VOYARA_JWT_SECRET=9761d796dd7d09d2428b8b34a9efd0ff997ce773c57e16dff00a396bfec332fe
+      - APP_ENV=production
+      - PAYPAL_MODE=sandbox
+
+      - PAYPAL_CLIENT_ID=AbqjmWlNPs6BuQyYH8ff77CB671LMGGTD3GVcpZ4Gf7O0VQZ1pd9RNU26E4KfF9o58ULyJtHLJdbTnLU
+      - PAYPAL_SECRET_KEY=EJyQet06up6uv_7PRsasAn44BtQhfsHlcJ8VJ1bmlPmvbtyKKbyCy3u9sjQzOo3lEkMGZpxxudrXOSid
+      - PAYPAL_WEBHOOK_ID=2YF02080J8835754F
+
+      - AWS_S3_BUCKET=myrepgamebucket
+      - AWS_S3_REGION=ap-southeast-2
+      - AWS_S3_PREFIX=Voyara_download/
+      - AWS_REGION=ap-southeast-2
+      - AWS_SES_FROM_EMAIL=no-reply@zsdimain.site      

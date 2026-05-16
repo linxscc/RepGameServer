@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -81,6 +82,10 @@ func (c *Auth) Register(ctx context.Context, req *v1.RegisterReq) (res *v1.AuthR
 	}
 	_ = service.StoreRefreshToken(user.ID, refreshHash, time.Now().Add(7*24*time.Hour))
 
+	if r := g.RequestFromCtx(ctx); r != nil {
+		service.SetAuthCookie(r.Response.Writer, token)
+	}
+
 	return &v1.AuthRes{
 		Token:        token,
 		RefreshToken: refreshToken,
@@ -147,6 +152,10 @@ func (c *Auth) Login(ctx context.Context, req *v1.LoginReq) (res *v1.AuthRes, er
 	}
 	_ = service.StoreRefreshToken(user.ID, refreshHash, time.Now().Add(7*24*time.Hour))
 
+	if r := g.RequestFromCtx(ctx); r != nil {
+		service.SetAuthCookie(r.Response.Writer, token)
+	}
+
 	return &v1.AuthRes{
 		Token:        token,
 		RefreshToken: refreshToken,
@@ -174,13 +183,15 @@ func (c *Auth) RefreshToken(ctx context.Context, req *v1.RefreshTokenReq) (res *
 	if dbErr != nil {
 		return nil, dbErr
 	}
-	defer db.Close()
-
+	
 	var email, role string
 	err = db.QueryRow(`SELECT email, role FROM voyara_users WHERE id = ?`, userID).Scan(&email, &role)
 	if err != nil {
 		return nil, fmt.Errorf("user not found")
 	}
+
+	// Revoke the old refresh token (rotation)
+	_ = service.RevokeRefreshToken(tokenHash)
 
 	newToken, err := service.MakeAccessToken(userID, email, role)
 	if err != nil {
@@ -191,6 +202,10 @@ func (c *Auth) RefreshToken(ctx context.Context, req *v1.RefreshTokenReq) (res *
 		return nil, err
 	}
 	_ = service.StoreRefreshToken(userID, newRefreshHash, time.Now().Add(7*24*time.Hour))
+
+	if r := g.RequestFromCtx(ctx); r != nil {
+		service.SetAuthCookie(r.Response.Writer, newToken)
+	}
 
 	return &v1.RefreshTokenRes{
 		Token:        newToken,
@@ -237,8 +252,7 @@ func (c *Auth) ResetPassword(ctx context.Context, req *v1.ResetPasswordReq) (res
 	if dbErr != nil {
 		return nil, dbErr
 	}
-	defer db.Close()
-
+	
 	_, err = db.Exec(`UPDATE voyara_users SET password_hash = ?, password_hash_method = 'bcrypt' WHERE email = ?`, hash, req.Email)
 	if err != nil {
 		return nil, fmt.Errorf("reset password: %v", err)
@@ -254,8 +268,7 @@ func (c *Auth) ChangePassword(ctx context.Context, req *v1.ChangePasswordReq) (r
 	if dbErr != nil {
 		return nil, dbErr
 	}
-	defer db.Close()
-
+	
 	var currentHash, hashMethod string
 	err = db.QueryRow(`SELECT password_hash, password_hash_method FROM voyara_users WHERE id = ?`, userID).
 		Scan(&currentHash, &hashMethod)
@@ -289,20 +302,53 @@ func (c *Auth) ChangePassword(ctx context.Context, req *v1.ChangePasswordReq) (r
 
 // ── helpers ──
 
+func (c *Auth) GetCurrentUser(ctx context.Context, req *v1.GetCurrentUserReq) (res *v1.GetCurrentUserRes, err error) {
+	r := g.RequestFromCtx(ctx)
+	if r == nil {
+		return nil, fmt.Errorf("no request")
+	}
+
+	tokenStr := ""
+	if cookie, err := r.Request.Cookie("voyara_token"); err == nil && cookie != nil {
+		tokenStr = cookie.Value
+	}
+	if tokenStr == "" {
+		header := r.Header.Get("Authorization")
+		if header != "" && strings.HasPrefix(header, "Bearer ") {
+			tokenStr = strings.TrimPrefix(header, "Bearer ")
+		}
+	}
+	if tokenStr == "" {
+		return nil, fmt.Errorf("authentication required")
+	}
+
+	claims, err := service.ParseAccessToken(tokenStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid or expired token")
+	}
+
+	return &v1.GetCurrentUserRes{
+		User: v1.UserInfo{
+			ID:    claims.UserID,
+			Email: claims.Email,
+			Role:  claims.Role,
+		},
+	}, nil
+}
+
+func (c *Auth) GetCSRFToken(ctx context.Context, req *v1.GetCSRFTokenReq) (res *v1.GetCSRFTokenRes, err error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, fmt.Errorf("generate csrf token: %v", err)
+	}
+	return &v1.GetCSRFTokenRes{Token: hex.EncodeToString(b)}, nil
+}
+
 func upgradeUserPassword(userID int, hash string) {
 	db, err := service.GetDB()
 	if err != nil {
 		return
 	}
-	defer db.Close()
-	_, _ = db.Exec(`UPDATE voyara_users SET password_hash = ?, password_hash_method = 'bcrypt' WHERE id = ?`, hash, userID)
+		_, _ = db.Exec(`UPDATE voyara_users SET password_hash = ?, password_hash_method = 'bcrypt' WHERE id = ?`, hash, userID)
 }
 
-func init() {
-	// Generate a random JWT secret at startup
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		g.Log().Fatalf(context.Background(), "Failed to generate JWT secret: %v", err)
-	}
-	service.InitJWT(b)
-}

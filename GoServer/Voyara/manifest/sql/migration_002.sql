@@ -37,7 +37,7 @@ ALTER TABLE voyara_orders
 
 CREATE TABLE IF NOT EXISTS voyara_order_items (
   id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  order_id    BIGINT UNSIGNED NOT NULL,
+  order_id    INT NOT NULL,
   product_id  INT NOT NULL,
   title       VARCHAR(300) NOT NULL,
   price       DECIMAL(12,2) NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS voyara_order_items (
 
 CREATE TABLE IF NOT EXISTS voyara_payments (
   id                      BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  order_id                BIGINT UNSIGNED NOT NULL,
+  order_id                INT NOT NULL,
   buyer_id                INT NOT NULL,
   amount                  DECIMAL(12,2) NOT NULL,
   currency                VARCHAR(3) NOT NULL DEFAULT 'USD',

@@ -1,16 +1,20 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
+import { EmptyState, ErrorState } from '../components/LoadingState';
 import { cartApi } from '../api/cart';
 import { orderApi } from '../api/order';
 import type { CartItem, ShippingAddress } from '../api/types';
 
 export default function Checkout() {
   const { t } = useLanguage();
-  const [params] = useSearchParams();
   const navigate = useNavigate();
-  const productIds = params.get('products')?.split(',').map(Number) || [];
+  const location = useLocation();
+  const stateProducts = (location.state as { products?: number[] } | null)?.products;
+  const params = new URLSearchParams(window.location.search);
+  const productIds = stateProducts || params.get('products')?.split(',').map(Number) || [];
   const [items, setItems] = useState<CartItem[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [address, setAddress] = useState<ShippingAddress>({
     name: '', phone: '', country: '', city: '', street: '', zipCode: ''
   });
@@ -18,12 +22,17 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
+  const loadCart = useCallback(() => {
     if (productIds.length === 0) return;
+    setLoading(true);
+    setLoadError('');
     cartApi.getCart().then((data) => {
       setItems(data.items.filter((i) => productIds.includes(i.productId) && i.selected));
-    }).catch((err) => setError(err instanceof Error ? err.message : 'Failed to load cart'));
-  }, []);
+    }).catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load cart'))
+    .finally(() => setLoading(false));
+  }, [productIds.join(',')]);
+
+  useEffect(() => { loadCart(); }, [loadCart]);
 
   const update = (key: keyof ShippingAddress) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setAddress((a) => ({ ...a, [key]: e.target.value }));
@@ -37,10 +46,10 @@ export default function Checkout() {
     setError('');
     setLoading(true);
     try {
-      const key = `checkout_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const key = `checkout_${crypto.randomUUID()}`;
       const order = await orderApi.checkout(productIds, address, key);
       setSuccess(true);
-      setTimeout(() => navigate(`/voyara/payment?orderId=${order.id}`), 1500);
+      setTimeout(() => navigate(`/voyara/payment?orderId=${order.id}`, { state: { orderId: order.id } }), 1500);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Checkout failed');
     } finally {
@@ -58,6 +67,12 @@ export default function Checkout() {
       </div>
     );
   }
+
+  if (productIds.length === 0) {
+    return <EmptyState message={t('cart.empty')} action={{ label: t('cart.continueShopping'), href: '/voyara' }} />;
+  }
+
+  if (loadError) return <ErrorState message={loadError} onRetry={loadCart} />;
 
   return (
     <div className="vy-section">
