@@ -97,7 +97,7 @@ export default function NewProduct() {
 
   return (
     <div className="vy-section">
-      <div className="vy-container" style={{ maxWidth: '640px' }}>
+      <div className="vy-container vy-seller-new-container" style={{ maxWidth: '640px' }}>
         <h1 className="vy-heading h2">{t('seller.newProduct')}</h1>
         {error && <div className="vy-auth-error">{error}</div>}
         <form onSubmit={handleSubmit} encType="multipart/form-data" style={{ marginTop: '2rem' }}>

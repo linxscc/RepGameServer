@@ -78,7 +78,7 @@ export default function PaymentPage() {
 
   return (
     <div className="vy-section">
-      <div className="vy-container" style={{ maxWidth: '500px' }}>
+      <div className="vy-container vy-payment-container" style={{ maxWidth: '500px' }}>
         <h1 className="vy-heading h2">{t('payment.title')}</h1>
         {error && <div className="vy-auth-error">{error}</div>}
 

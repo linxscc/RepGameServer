@@ -36,7 +36,7 @@ export default function OrderDetail() {
 
   return (
     <div className="vy-section">
-      <div className="vy-container" style={{ maxWidth: '800px' }}>
+      <div className="vy-container vy-order-detail-container" style={{ maxWidth: '800px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h1 className="vy-heading h2">{t('order.detailTitle') || `Order #${order.id}`}</h1>
           <Link to="/voyara/orders" className="vy-btn vy-btn-secondary vy-btn-sm">{t('order.backToList') || 'Back'}</Link>

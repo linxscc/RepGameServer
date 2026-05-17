@@ -33,7 +33,7 @@ export default function Orders() {
 
   return (
     <div className="vy-section">
-      <div className="vy-container" style={{ maxWidth: '800px' }}>
+      <div className="vy-container vy-orders-container" style={{ maxWidth: '800px' }}>
         <h1 className="vy-heading h2">{t('order.title')}</h1>
         {error ? (
           <ErrorState message={error} onRetry={load} />

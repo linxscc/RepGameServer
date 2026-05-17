@@ -76,15 +76,15 @@ export default function Checkout() {
 
   return (
     <div className="vy-section">
-      <div className="vy-container" style={{ maxWidth: '800px' }}>
+      <div className="vy-container vy-checkout-container" style={{ maxWidth: '800px' }}>
         <h1 className="vy-heading h2">{t('checkout.title')}</h1>
         {error && <div className="vy-auth-error">{error}</div>}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '2rem', marginTop: '2rem' }}>
+        <div className="vy-checkout-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '2rem', marginTop: '2rem' }}>
           <div>
             <h3 style={{ marginBottom: '1rem' }}>{t('checkout.shipping')}</h3>
             <form onSubmit={handleSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="vy-checkout-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="vy-form-group">
                   <label className="vy-label">Name *</label>
                   <input className="vy-input" value={address.name} onChange={update('name')} required />
@@ -98,7 +98,7 @@ export default function Checkout() {
                 <label className="vy-label">Country *</label>
                 <input className="vy-input" value={address.country} onChange={update('country')} required />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="vy-checkout-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="vy-form-group">
                   <label className="vy-label">City *</label>
                   <input className="vy-input" value={address.city} onChange={update('city')} required />
@@ -118,7 +118,7 @@ export default function Checkout() {
             </form>
           </div>
 
-          <div>
+          <div className="vy-checkout-summary">
             <h3 style={{ marginBottom: '1rem' }}>{t('checkout.orderSummary')}</h3>
             <div style={{ border: '1px solid var(--vy-border)', borderRadius: '8px', padding: '1rem' }}>
               {items.map((item) => (

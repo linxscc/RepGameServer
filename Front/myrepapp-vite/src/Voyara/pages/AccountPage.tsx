@@ -32,7 +32,7 @@ export default function AccountPage() {
 
   return (
     <div className="vy-section">
-      <div className="vy-container" style={{ maxWidth: '600px' }}>
+      <div className="vy-container vy-account-container" style={{ maxWidth: '600px' }}>
         <h1 className="vy-heading h2">{t('account.title')}</h1>
 
         {/* User Info */}

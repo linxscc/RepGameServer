@@ -23,8 +23,8 @@ export default function MyProducts() {
 
   return (
     <div className="vy-section">
-      <div className="vy-container" style={{ maxWidth: '900px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="vy-container vy-seller-products-container" style={{ maxWidth: '900px' }}>
+        <div className="vy-seller-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1 className="vy-heading h2">{t('seller.myProducts')}</h1>
           <Link to="/voyara/seller/products/new" className="vy-btn vy-btn-primary vy-btn-sm">+ {t('seller.newProduct')}</Link>
         </div>
@@ -34,7 +34,7 @@ export default function MyProducts() {
           <div className="vy-my-products" style={{ marginTop: '2rem' }}>
             {products.map((p) => (
               <div key={p.id} className="vy-my-product-item vy-card">
-                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+                <div className="vy-my-product-row" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
                   {p.images?.[0] ? (
                     <img src={p.images[0]} alt="" style={{ width: '80px', height: '80px', objectFit: 'cover' }} />
                   ) : (
