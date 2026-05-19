@@ -17,3 +17,7 @@
 /Front/myrepapp-vite/.env.development
 /Front/myrepapp-vite/.env.production
 /GoServer/.env
+
+# Local K8s deployment temp files
+/repgame-src.tgz
+/repgame.k8s.env

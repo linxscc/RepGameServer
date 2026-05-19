@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # 集群内部访问入口。Ingress 会把 HTTP 流量转发到这个 Service。
+  name: repgame-web
+  namespace: repgame
+spec:
+  # ClusterIP 只在集群内部可访问；公网 HTTP 交给 Ingress/Traefik。
+  type: ClusterIP
+
+  # 选择 app=repgame 的 Pod，对应 Deployment template 里的 labels。
+  selector:
+    app: repgame
+  ports:
+  # 网站入口：Nginx 监听 80，服务 React 静态文件并代理 API。
+  - name: http
+    port: 80
+    targetPort: http
+
+  # GoFrame 后端端口，主要用于集群内部调试或后续拆服务。
+  - name: backend
+    port: 8000
+    targetPort: backend
+
+  # TCP 游戏端口也保留在内部 Service 中；公网 TCP 暴露见 repgame-tcp-service.yaml。
+  - name: tcp-game
+    port: 9060
+    targetPort: tcp-game

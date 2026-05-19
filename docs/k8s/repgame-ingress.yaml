@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  # HTTP 域名入口。K3s 默认安装 Traefik，会监听这个 Ingress。
+  name: repgame-web
+  namespace: repgame
+spec:
+  # 明确使用 K3s 默认的 Traefik Ingress Controller。
+  ingressClassName: traefik
+
+  # HTTPS 证书由 Kubernetes TLS Secret 提供。
+  # 先用 kubectl create secret tls repgame-tls ... 创建这个 Secret，再 apply 本 Ingress。
+  tls:
+  - hosts:
+    - zsdimain.site
+    - www.zsdimain.site
+    secretName: repgame-tls
+
+  rules:
+  # 根域名访问。
+  - host: zsdimain.site
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            # 转发到 ClusterIP Service，再由 Service 转发到 Pod 的 http 端口。
+            name: repgame-web
+            port:
+              number: 80
+
+  # www 域名访问。
+  - host: www.zsdimain.site
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: repgame-web
+            port:
+              number: 80

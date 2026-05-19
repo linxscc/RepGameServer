@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # ConfigMap 存放非敏感配置；密码、token、AWS key 等敏感值放到 Secret。
+  name: repgame-config
+  namespace: repgame
+data:
+  # RDS 连接信息。DB_USER/DB_PASSWORD 不在这里，放到 repgame-secret。
+  DB_HOST: "repgame-database-0.cx2omeoogidr.ap-southeast-2.rds.amazonaws.com"
+  DB_PORT: "3306"
+  DB_NAME: "RepGame"
+  WEB_DB_NAME: "InsByMyself"
+  VOYARA_DB_NAME: "Voyara"
+
+  # 应用运行环境。production 会启用生产路径中的逻辑，例如 SES 邮件发送。
+  APP_ENV: "production"
+
+  # PayPal 当前使用沙箱环境；真实上线时再切成 live。
+  PAYPAL_MODE: "sandbox"
+
+  # AWS/S3/SES 的公开配置；访问密钥不要写在 ConfigMap。
+  AWS_REGION: "ap-southeast-2"
+  AWS_S3_BUCKET: "myrepgamebucket"
+  AWS_S3_REGION: "ap-southeast-2"
+  AWS_S3_PREFIX: "Voyara_download/"
+  AWS_SES_FROM_EMAIL: "no-reply@zsdimain.site"

@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  # Public entry for Grafana under the existing domain path /grafana.
+  # Do not strip the /grafana prefix: Grafana handles it when serve_from_sub_path=true.
+  name: grafana
+  namespace: monitoring
+spec:
+  ingressClassName: traefik
+
+  # Reuse the existing zsdimain.site certificate.
+  tls:
+  - hosts:
+    - zsdimain.site
+    secretName: grafana-tls
+
+  rules:
+  - host: zsdimain.site
+    http:
+      paths:
+      - path: /grafana
+        pathType: Prefix
+        backend:
+          service:
+            # Default Grafana Service created by kube-prometheus-stack.
+            name: kube-prometheus-stack-grafana
+            port:
+              number: 80

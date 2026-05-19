@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # TCP 游戏服务器公网入口，独立于 HTTP Ingress。
+  name: repgame-tcp
+  namespace: repgame
+spec:
+  # K3s 自带 ServiceLB，会把 LoadBalancer Service 暴露到节点端口。
+  # EC2 安全组仍然需要放行 9060/TCP。
+  type: LoadBalancer
+
+  # 选择 RepGame Pod。
+  selector:
+    app: repgame
+  ports:
+  # 外部访问 9060 -> Pod 内 tcp-game(9060)。
+  - name: tcp-game
+    protocol: TCP
+    port: 9060
+    targetPort: tcp-game

@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Deployment 负责管理 RepGame all-in-one 容器的副本、滚动更新和回滚。
+  name: repgame
+  namespace: repgame
+  labels:
+    app: repgame
+spec:
+  # 先保持 1 个副本：HTTP 可以横向扩容，但 TCP 游戏连接/房间状态目前在单进程内。
+  replicas: 1
+
+  # 保留最近 5 个 ReplicaSet，方便 kubectl rollout undo 回滚。
+  revisionHistoryLimit: 5
+
+  # 滚动更新策略：先启动新 Pod，再下线旧 Pod，避免 HTTP 服务中断。
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+  # Deployment 通过 selector 找到自己管理的 Pod；必须和 template.metadata.labels 对应。
+  selector:
+    matchLabels:
+      app: repgame
+  template:
+    metadata:
+      labels:
+        app: repgame
+    spec:
+      # 删除 Pod 时给 Go/Nginx 一点退出时间。
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: repgame
+        # 这个镜像由根目录 Dockerfile 构建：React build + Go 后端 + Nginx。
+        image: kernzs/repgame:k8s-lab
+
+        # 固定 tag 配合 IfNotPresent 更适合练习；发布新版本时换一个新 tag，再 kubectl set image。
+        imagePullPolicy: IfNotPresent
+
+        # 容器内端口：80 是 Nginx 入口，8000 是 GoFrame 后端，9060 是 TCP 游戏服务器。
+        ports:
+        - name: http
+          containerPort: 80
+        - name: backend
+          containerPort: 8000
+        - name: tcp-game
+          containerPort: 9060
+
+        # 注入环境变量：ConfigMap 放非敏感配置，Secret 放密码、JWT、PayPal/AWS key。
+        envFrom:
+        - configMapRef:
+            name: repgame-config
+        - secretRef:
+            name: repgame-secret
+
+        # 启动探针：给前端构建产物、Go 服务、Nginx 初始化更长时间，避免启动慢时被误杀。
+        startupProbe:
+          httpGet:
+            path: /
+            port: http
+          periodSeconds: 5
+          failureThreshold: 30
+
+        # 就绪探针：失败时 Pod 会从 Service endpoints 里摘除，不再接收流量。
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        # 存活探针：持续失败时 K8s 会重启容器，用于自愈卡死的进程。
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # requests 用于调度，limits 用于限制容器最多能使用的资源。
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "768Mi"
