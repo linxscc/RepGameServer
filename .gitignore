@@ -2,6 +2,7 @@
 !Readme.md
 *.pem
 *.bat
+!deploy-ec2-docker.bat
 *.mod
 *.sum
 *.exe
@@ -12,6 +13,7 @@
 /Read.me
 
 /vpn/
+/.deploy/
 /.claude/
 /.env
 /Front/myrepapp-vite/.env.development
