@@ -113,7 +113,7 @@ func (c *Product) CreateProduct(ctx context.Context, req *v1.CreateProductReq) (
 			}
 			url, err := service.UploadToS3(data, f.Filename)
 			if err != nil {
-				g.Log().Errorf(ctx, "S3 upload failed: %v", err)
+				g.Log().Errorf(ctx, "Image upload failed: %v", err)
 				return nil, fmt.Errorf("image upload failed")
 			}
 			imageURLs = append(imageURLs, url)

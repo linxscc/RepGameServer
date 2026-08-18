@@ -46,6 +46,10 @@ func ValidateImageFile(filename string, data []byte) error {
 // AWS_S3_PREFIX can be set to a subfolder prefix (e.g. "dev" -> "dev/voyara/images/uuid.ext").
 // TODO: For production, use CloudFront or presigned URLs instead of public-read.
 func UploadToS3(data []byte, filename string) (string, error) {
+	if strings.ToLower(os.Getenv("STORAGE_DRIVER")) != "s3" {
+		return uploadToLocal(data, filename)
+	}
+
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
 		return "", fmt.Errorf("AWS_S3_BUCKET not set")
@@ -120,6 +124,29 @@ func UploadToS3(data []byte, filename string) (string, error) {
 
 	publicURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucket, region, key)
 	return publicURL, nil
+}
+
+func uploadToLocal(data []byte, filename string) (string, error) {
+	ext := strings.ToLower(path.Ext(filename))
+	uuidStr, err := generateUUID()
+	if err != nil {
+		return "", fmt.Errorf("generate uuid: %v", err)
+	}
+
+	root := envOrDefault("LOCAL_UPLOAD_DIR", "/var/lib/repgame/uploads")
+	relativeDir := path.Join("voyara", "images")
+	dir := path.Join(root, relativeDir)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("create upload directory: %v", err)
+	}
+
+	storedName := uuidStr + ext
+	if err := os.WriteFile(path.Join(dir, storedName), data, 0644); err != nil {
+		return "", fmt.Errorf("write uploaded file: %v", err)
+	}
+
+	baseURL := strings.TrimRight(envOrDefault("LOCAL_UPLOAD_URL", "/uploads"), "/")
+	return baseURL + "/" + relativeDir + "/" + storedName, nil
 }
 
 func detectContentType(ext string) string {

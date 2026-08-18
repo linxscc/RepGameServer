@@ -2,13 +2,14 @@
 package main
 
 import (
-	"GoServer/internal/controller"
-	tcpserver "GoServer/tcpgameserver"
 	voyaraController "GoServer/Voyara/core/controller"
 	voyaraMiddleware "GoServer/Voyara/core/middleware"
 	voyaraService "GoServer/Voyara/core/service"
+	"GoServer/internal/controller"
+	tcpserver "GoServer/tcpgameserver"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
@@ -68,9 +69,25 @@ func main() {
 			"http://localhost:3000",
 			"http://localhost:5173",
 		}
+		if configured := os.Getenv("ALLOWED_ORIGINS"); configured != "" {
+			for _, item := range strings.Split(configured, ",") {
+				if origin := strings.TrimSpace(item); origin != "" {
+					allowedOrigins = append(allowedOrigins, strings.TrimRight(origin, "/"))
+				}
+			}
+		}
 
 		// 检查请求来源是否在允许列表中
 		isAllowed := false
+		scheme := r.Header.Get("X-Forwarded-Proto")
+		if scheme == "" {
+			scheme = "http"
+		}
+		// Requests proxied by Nginx are same-origin even when accessed by LAN/public IP.
+		if origin == scheme+"://"+r.Host {
+			isAllowed = true
+			r.Response.Header().Set("Access-Control-Allow-Origin", origin)
+		}
 		for _, allowedOrigin := range allowedOrigins {
 			if origin == allowedOrigin {
 				isAllowed = true

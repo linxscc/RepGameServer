@@ -1,7 +1,6 @@
 // API 基础配置
-// 在开发环境使用 localhost，在生产环境使用空字符串（相对路径）
-// 使用 ?? 运算符来正确处理空字符串
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+// 默认走同源 Nginx；开发时可通过 VITE_API_BASE_URL 显式覆盖。
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 // 产品文档生成请求接口
 export interface GenerateProductDocsRequest {

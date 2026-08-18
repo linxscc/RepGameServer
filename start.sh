@@ -3,7 +3,7 @@
 /app/server &
 
 # Enable HTTPS config only when cert files are mounted.
-if [ -f /etc/nginx/certs/fullchain.pem ] && [ -f /etc/nginx/certs/privkey.pem ]; then
+if [ -f /etc/letsencrypt/live/zsdimain.site/fullchain.pem ] && [ -f /etc/letsencrypt/live/zsdimain.site/privkey.pem ]; then
   echo "[start] HTTPS cert detected, enabling TLS config"
   cp /etc/nginx/nginx.https.conf /etc/nginx/nginx.conf
 else
@@ -12,4 +12,8 @@ else
 fi
 
 nginx -t || exit 1
+
+# Pick up certificates renewed by the Certbot sidecar without stopping the app.
+(while sleep 21600; do nginx -s reload || true; done) &
+
 nginx -g "daemon off;"
