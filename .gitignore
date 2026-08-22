@@ -1,22 +1,28 @@
-*.md
-!Readme.md
+# Secrets
+.env
+GoServer/.env
+
+# Go build output
+GoServer/server
+GoServer/*.exe
+GoServer/tmp/
+GoServer/logs/
+
+# Future admin UI dependencies and builds
+Front/game-admin/node_modules/
+Front/game-admin/dist/
+Front/game-admin/.vite/
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs and credentials
+*.log
+logs/
 *.pem
-*.bat
-!deploy-ec2-docker.bat
-*.mod
-*.sum
-*.exe
-*.sql
-
-/*.md
-
-
-/Read.me
-
-/vpn/
-/.deploy/
-/.claude/
-/.env
-/Front/myrepapp-vite/.env.development
-/Front/myrepapp-vite/.env.production
-/GoServer/.env
+.aws/
