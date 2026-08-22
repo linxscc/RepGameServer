@@ -1,25 +1,58 @@
 services:
-  app:
-    build: .
-    image: kernzs/repgame:latest
-    ports:
-      - "80:80"
-      - "443:443"
-      - "8000:8000"
-      - "9060:9060"
-      - "3306:3306"
-    volumes:
-      - ./nginx/certs:/etc/nginx/certs:ro
-      - ./nginx/certbot:/var/www/certbot
-    container_name: repgame_allinone
-    env_file:
-      - ./GoServer/.env
+  db:
+    image: mysql:8.4
+    container_name: repgame_mysql
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
-      - DB_HOST=repgame-database-0.cx2omeoogidr.ap-southeast-2.rds.amazonaws.com
-      - DB_PORT=3306
-      - DB_NAME=RepGame
-      - WEB_DB_NAME=InsByMyself
-      - VOYARA_DB_NAME=Voyara
-      - DB_USER=repgameadmin
-      - DB_PASSWORD=repgameadmin
-      - APP_ENV=production
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-this-root-password}
+      MYSQL_DATABASE: RepGame
+      MYSQL_USER: repgameadmin
+      MYSQL_PASSWORD: ${DB_PASSWORD:-change-this-db-password}
+      TZ: ${TZ:-Asia/Tokyo}
+    ports:
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_EXPOSE_PORT:-13306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  gameserver:
+    build: .
+    image: repgame-server:local
+    container_name: repgame_tcp_server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${GAME_PORT:-9060}:9060"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: RepGame
+      DB_USER: repgameadmin
+      DB_PASSWORD: ${DB_PASSWORD:-change-this-db-password}
+      TZ: ${TZ:-Asia/Tokyo}
+
+  ddns:
+    image: curlimages/curl:8.14.1
+    container_name: repgame_namecheap_ddns
+    restart: unless-stopped
+    profiles: ["ddns"]
+    environment:
+      DDNS_DOMAIN: ${DDNS_DOMAIN:-zsdimain.site}
+      DDNS_HOST: ${DDNS_HOST:-@}
+      DDNS_PASSWORD: ${NAMECHEAP_DDNS_PASSWORD:-}
+      DDNS_INTERVAL: ${DDNS_INTERVAL:-300}
+    volumes:
+      - ./docker/ddns/update-namecheap.sh:/update-namecheap.sh:ro
+    entrypoint: ["/bin/sh", "/update-namecheap.sh"]
+
+volumes:
+  mysql_data:
