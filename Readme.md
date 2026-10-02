@@ -31,12 +31,14 @@ docker compose ps
 游戏客户端连接：
 
 ```text
-本机：127.0.0.1:9060
-局域网：192.168.2.163:9060
-外网：zsdimain.site:9060
+本机：127.0.0.1:19060
+局域网：服务器的局域网 IP:19060
+外网：zsdimain.site:19060
 ```
 
-路由器只需保留 TCP `9060 → 192.168.2.163:9060`。本分支不提供 Web 服务，因此端口 `80` 和 `443` 不再使用。
+路由器应转发 TCP `19060 → 服务器的局域网 IP:19060`。同一 Wi-Fi 内的客户端直接使用局域网 IP，不经过路由器端口转发。本分支不提供 Web 服务，因此端口 `80` 和 `443` 不再使用。
+
+Compose 项目名固定为 `repgame-game-server`，使用独立的容器、镜像、网络和 `repgame_game_mysql_data` 数据卷。主机端口 `19060` 和 `23306` 也与网站版分开，因此两套 Docker 服务可以同时运行。
 
 ## 动态 DNS
 
@@ -49,7 +51,7 @@ docker compose --profile ddns logs -f ddns
 
 ## 数据库
 
-MySQL 仅绑定本机 `127.0.0.1:13306`，游戏服务器通过 Docker 内部网络连接。数据保存在 `mysql_data` volume 中，普通容器重启不会丢失。
+MySQL 仅绑定本机 `127.0.0.1:23306`，游戏服务器通过 Docker 内部网络连接。数据保存在 `repgame_game_mysql_data` volume 中，普通容器重启不会丢失。
 
 初始化 SQL：`docker/mysql/init/001-game-schema.sql`。初始化脚本只在空数据卷首次创建时执行。
 
@@ -57,5 +59,5 @@ MySQL 仅绑定本机 `127.0.0.1:13306`，游戏服务器通过 Docker 内部网
 
 ```bash
 docker compose logs -f gameserver
-nc -vz 127.0.0.1 9060
+nc -vz 127.0.0.1 19060
 ```
