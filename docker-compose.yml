@@ -1,7 +1,9 @@
+name: repgame-game-server
+
 services:
   db:
     image: mysql:8.4
-    container_name: repgame_mysql
+    container_name: repgame_game_mysql
     restart: unless-stopped
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
@@ -11,9 +13,9 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD:-change-this-db-password}
       TZ: ${TZ:-Asia/Tokyo}
     ports:
-      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_EXPOSE_PORT:-13306}:3306"
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_EXPOSE_PORT:-23306}:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - game_mysql_data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
@@ -24,14 +26,14 @@ services:
 
   gameserver:
     build: .
-    image: repgame-server:local
-    container_name: repgame_tcp_server
+    image: repgame-game-server:local
+    container_name: repgame_game_tcp_server
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "${BIND_ADDRESS:-0.0.0.0}:${GAME_PORT:-9060}:9060"
+      - "${BIND_ADDRESS:-0.0.0.0}:${GAME_PORT:-19060}:9060"
     environment:
       DB_HOST: db
       DB_PORT: 3306
@@ -42,7 +44,7 @@ services:
 
   ddns:
     image: curlimages/curl:8.14.1
-    container_name: repgame_namecheap_ddns
+    container_name: repgame_game_namecheap_ddns
     restart: unless-stopped
     profiles: ["ddns"]
     environment:
@@ -55,4 +57,5 @@ services:
     entrypoint: ["/bin/sh", "/update-namecheap.sh"]
 
 volumes:
-  mysql_data:
+  game_mysql_data:
+    name: repgame_game_mysql_data

@@ -1,0 +1,87 @@
+name: Deploy RepGame Server
+
+on:
+  push:
+    branches:
+      - RepServer
+  workflow_dispatch:
+
+concurrency:
+  group: repgame-server-mac-mini
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build and deploy on Mac mini
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 30
+
+    env:
+      DEPLOY_ENV_FILE: ${{ vars.REPGAME_ENV_FILE || '/Users/shuangzhou/Documents/ChatGPT/RepGameServer/.env' }}
+
+    steps:
+      - name: Check out RepServer
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Ensure Docker Desktop is ready
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker_config="$RUNNER_TEMP/repgame-docker-config"
+          mkdir -p "$docker_config"
+          printf '{"auths":{"https://index.docker.io/v1/":{}}}\n' > "$docker_config/config.json"
+          ln -sfn "$HOME/.docker/cli-plugins" "$docker_config/cli-plugins"
+          printf 'DOCKER_CONFIG=%s\n' "$docker_config" >> "$GITHUB_ENV"
+          export DOCKER_CONFIG="$docker_config"
+
+          if ! docker info >/dev/null 2>&1; then
+            open -gja Docker
+            for attempt in {1..60}; do
+              if docker info >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+          fi
+
+          docker info >/dev/null
+
+      - name: Validate Mac mini deployment environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$DEPLOY_ENV_FILE"
+          docker compose --env-file "$DEPLOY_ENV_FILE" config --quiet
+
+      - name: Build and start game server
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file "$DEPLOY_ENV_FILE" up -d --build
+
+      - name: Verify deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in {1..30}; do
+            if docker compose --env-file "$DEPLOY_ENV_FILE" ps --status running --quiet gameserver | grep -q .; then
+              published_port="$(docker compose --env-file "$DEPLOY_ENV_FILE" port gameserver 9060 | tail -n 1)"
+              published_port="${published_port##*:}"
+              if nc -z 127.0.0.1 "$published_port"; then
+                docker compose --env-file "$DEPLOY_ENV_FILE" ps
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+
+          docker compose --env-file "$DEPLOY_ENV_FILE" ps
+          docker compose --env-file "$DEPLOY_ENV_FILE" logs --no-color --tail=100 gameserver db
+          exit 1
