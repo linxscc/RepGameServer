@@ -28,12 +28,28 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Ensure Docker Desktop is ready
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! docker info >/dev/null 2>&1; then
+            open -gja Docker
+            for attempt in {1..60}; do
+              if docker info >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+          fi
+
+          docker info >/dev/null
+
       - name: Validate Mac mini deployment environment
         shell: bash
         run: |
           set -euo pipefail
           test -f "$DEPLOY_ENV_FILE"
-          docker info >/dev/null
           docker compose --env-file "$DEPLOY_ENV_FILE" config --quiet
 
       - name: Build and start game server
@@ -62,4 +78,3 @@ jobs:
           docker compose --env-file "$DEPLOY_ENV_FILE" ps
           docker compose --env-file "$DEPLOY_ENV_FILE" logs --no-color --tail=100 gameserver db
           exit 1
-
