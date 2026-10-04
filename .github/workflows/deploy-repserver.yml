@@ -36,6 +36,7 @@ jobs:
           docker_config="$RUNNER_TEMP/repgame-docker-config"
           mkdir -p "$docker_config"
           printf '{"auths":{}}\n' > "$docker_config/config.json"
+          ln -sfn "$HOME/.docker/cli-plugins" "$docker_config/cli-plugins"
           printf 'DOCKER_CONFIG=%s\n' "$docker_config" >> "$GITHUB_ENV"
           export DOCKER_CONFIG="$docker_config"
 
