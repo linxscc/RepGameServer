@@ -21,7 +21,6 @@ jobs:
 
     env:
       DEPLOY_ENV_FILE: ${{ vars.REPGAME_ENV_FILE || '/Users/shuangzhou/Documents/ChatGPT/RepGameServer/.env' }}
-      DOCKER_CONFIG: ${{ runner.temp }}/repgame-docker-config
 
     steps:
       - name: Check out RepServer
@@ -34,8 +33,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          mkdir -p "$DOCKER_CONFIG"
-          printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
+          docker_config="$RUNNER_TEMP/repgame-docker-config"
+          mkdir -p "$docker_config"
+          printf '{"auths":{}}\n' > "$docker_config/config.json"
+          printf 'DOCKER_CONFIG=%s\n' "$docker_config" >> "$GITHUB_ENV"
+          export DOCKER_CONFIG="$docker_config"
 
           if ! docker info >/dev/null 2>&1; then
             open -gja Docker
