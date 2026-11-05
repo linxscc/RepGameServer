@@ -31,38 +31,6 @@ func GetDBConnection() (*sql.DB, error) {
 	return db, nil
 }
 
-// GetAllResponseInfo 获取所有响应信息
-func GetAllResponseInfo() ([]models.ResponseInfo, error) {
-	db, err := GetDBConnection()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	query := "SELECT id, code, response_key, COALESCE(message, '') as message FROM ResponseInfo ORDER BY id"
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query ResponseInfo: %v", err)
-	}
-	defer rows.Close()
-
-	var responseInfos []models.ResponseInfo
-	for rows.Next() {
-		var info models.ResponseInfo
-		err := rows.Scan(&info.ID, &info.Code, &info.ResponseKey, &info.Message)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan ResponseInfo: %v", err)
-		}
-		responseInfos = append(responseInfos, info)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error during ResponseInfo iteration: %v", err)
-	}
-
-	return responseInfos, nil
-}
-
 // GetAllCardDeck 获取所有卡牌信息
 func GetAllCardDeck() ([]models.CardDeck, error) {
 	db, err := GetDBConnection()
@@ -144,22 +112,6 @@ func GetUserAccount(username string) (*models.UserAccount, error) {
 	return &user, nil
 }
 
-// ValidateUserLogin 验证用户登录
-func ValidateUserLogin(username, password string) (bool, error) {
-	user, err := GetUserAccount(username)
-	if err != nil {
-		return false, err
-	}
-
-	// 这里应该使用加密密码比较，暂时使用明文比较
-	// 在生产环境中应该使用 bcrypt 等加密方式
-	if user.Password == password {
-		return true, nil
-	}
-
-	return false, nil
-}
-
 // CreateUserAccount 创建新用户账户
 func CreateUserAccount(username, password string) error {
 	db, err := GetDBConnection()
@@ -177,9 +129,14 @@ func CreateUserAccount(username, password string) error {
 		return fmt.Errorf("user already exists: %s", username)
 	}
 
-	// 插入新用户
+	hash, err := HashPassword(password)
+	if err != nil {
+		return err
+	}
+
+	// 插入新用户（只保存 bcrypt 哈希）
 	query := "INSERT INTO UserAccount (username, password) VALUES (?, ?)"
-	_, err = db.Exec(query, username, password)
+	_, err = db.Exec(query, username, hash)
 	if err != nil {
 		return fmt.Errorf("failed to create user account: %v", err)
 	}

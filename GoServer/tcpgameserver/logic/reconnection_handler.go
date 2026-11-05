@@ -1,13 +1,12 @@
 package logic
 
 import (
-	"encoding/json"
+	"GoServer/tcpgameserver/pb"
+	"GoServer/tcpgameserver/protocol"
 	"net"
-	"time"
 
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/service"
-	"GoServer/tcpgameserver/tools"
 	"GoServer/tcpgameserver/types"
 )
 
@@ -37,7 +36,10 @@ func (r *ReconnectionHandler) HandlePlayerReconnection(clientID, username string
 	}
 
 	// 获取玩家的游戏信息
-	room, _ := roomManager.FindRoomByPlayer(username)
+	room, err := roomManager.FindRoomByPlayer(username)
+	if err != nil || room == nil {
+		return r.sendReconnectionFailure(clientID, "No active game found", connManager)
+	}
 	playerGameInfo, err := roomManager.GetPlayerGameInfo(room.RoomID, username)
 	if err != nil || playerGameInfo == nil {
 		return r.sendReconnectionFailure(clientID, "No active game found", connManager)
@@ -72,88 +74,20 @@ func (r *ReconnectionHandler) HandlePlayerReconnection(clientID, username string
 	return nil
 }
 
-// sendReconnectionSuccess 发送重连成功消息 (消息类型 6001)
+// sendReconnectionSuccess 推送重连后的完整对局状态
 func (r *ReconnectionHandler) sendReconnectionSuccess(conn net.Conn, playerGameInfo *models.PlayerGameInfo) error {
-	// 创建重连成功响应
-	response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(6001, playerGameInfo)
-
-	// 序列化并发送消息
-	messageData, err := json.Marshal(response)
-	if err != nil {
-		return err
-	}
-	messageData = append(messageData, '\n')
-
-	_, err = conn.Write(messageData)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return sendTo(conn, protocol.GameStateMessage(playerGameInfo, pb.GameStateReason_GAME_STATE_REASON_RECONNECTED))
 }
 
-// sendReconnectionFailure 发送重连失败消息
+// sendReconnectionFailure 告知客户端无法恢复对局
 func (r *ReconnectionHandler) sendReconnectionFailure(clientID, reason string, connManager *service.ConnectionManager) error {
-	clientInfo, exists := connManager.GetConnectionByClientID(clientID)
-	if !exists || clientInfo.Conn == nil {
-		return nil // 连接已不存在
-	}
-
-	response := tools.GlobalResponseHelper.CreateErrorTcpResponse(6002)
-
-	// 序列化并发送消息
-	messageData, err := json.Marshal(response)
-	if err != nil {
-		return err
-	}
-	messageData = append(messageData, '\n')
-
-	_, err = clientInfo.Conn.Write(messageData)
-	if err != nil {
-		return err
-	}
-
+	notifyClientError(clientID, 0, pb.ErrorCode_ERROR_CODE_INVALID_GAME_STATE, reason)
 	return nil
 }
 
 // notifyRoomPlayersReconnection 通知房间内其他玩家有玩家重连
 func (r *ReconnectionHandler) notifyRoomPlayersReconnection(username, roomID string, connManager *service.ConnectionManager) error {
-
-	// 获取房间内的所有玩家连接
-	allConnections := connManager.GetAllConnections()
-	var roomPlayers []*types.ClientInfo
-
-	// 筛选出同一房间内的其他玩家
-	for _, clientInfo := range allConnections {
-		if clientInfo.GetGameRoom() == roomID && clientInfo.Username != username && clientInfo.Username != "" {
-			roomPlayers = append(roomPlayers, clientInfo)
-		}
-	}
-
-	// 创建重连通知消息 (消息类型 7002)
-	reconnectNotification := map[string]interface{}{
-		"message_type": "player_reconnect",
-		"username":     username,
-		"status":       "online",
-		"room_id":      roomID,
-		"timestamp":    time.Now().Unix(),
-	}
-
-	// 向房间内其他玩家发送重连通知
-	notifiedCount := 0
-	for _, player := range roomPlayers {
-		if player.Conn != nil {
-			response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(7002, reconnectNotification)
-
-			if messageData, err := json.Marshal(response); err == nil {
-				messageData = append(messageData, '\n')
-				if _, writeErr := player.Conn.Write(messageData); writeErr != nil {
-				} else {
-					notifiedCount++
-				}
-			}
-		}
-	}
+	notifyRoomPeers(roomID, username, presenceMessage(username, roomID, pb.PresenceStatus_PRESENCE_STATUS_RECONNECTED, ""))
 	return nil
 }
 

@@ -1,11 +1,11 @@
 package logic
 
 import (
-
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
+	"GoServer/tcpgameserver/pb"
+	"GoServer/tcpgameserver/protocol"
 	"GoServer/tcpgameserver/service"
-	"GoServer/tcpgameserver/tools"
 	"GoServer/tcpgameserver/types"
 )
 
@@ -70,7 +70,6 @@ func (gep *GameEndProcessor) sendPlayerInfoToAll(room *types.RoomInfo) error {
 	connManager := service.GetConnectionManager()
 	roomManager := service.GetRoomManager()
 
-
 	successCount := 0
 	failCount := 0
 
@@ -99,8 +98,7 @@ func (gep *GameEndProcessor) sendPlayerInfoToAll(room *types.RoomInfo) error {
 			continue
 		}
 
-		// 创建游戏结束消息 (消息码1101)
-		response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(1101, playerGameInfo)
+		response := protocol.GameStateMessage(playerGameInfo, pb.GameStateReason_GAME_STATE_REASON_GAME_OVER)
 
 		// 发送消息
 		broadcaster := NewGameStateBroadcaster()

@@ -5,6 +5,7 @@ import (
 
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
+	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/types"
 )
@@ -34,7 +35,6 @@ type PlayCardData struct {
 // ProcessPlayCard 处理出牌逻辑
 func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
 
-
 	// 获取玩家名称
 	player, _ := eventData.GetString("player")
 	// 获取房间ID
@@ -56,6 +56,8 @@ func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
 	// 步骤1: 验证出牌信息是否正确
 	room, validatedCards, err := p.validatePlayCardRequest(data)
 	if err != nil {
+		clientID, seq := requestMeta(eventData.GetData)
+		notifyClientError(clientID, seq, pb.ErrorCode_ERROR_CODE_INVALID_CARDS, err.Error())
 		return
 	}
 
@@ -115,12 +117,8 @@ func (p *PlayCardProcessor) validatePlayCardRequest(data *PlayCardData) (*types.
 	var validatedCards []models.Card
 	for _, cardToPlay := range data.CardsToPlay {
 		if handCard, exists := handCardMap[cardToPlay.UID]; exists {
-			// 验证卡牌详细信息匹配
-			if handCard.Name != cardToPlay.Name || handCard.ID != cardToPlay.ID {
-				return nil, nil, fmt.Errorf("card information mismatch for UID %s: expected %s (ID: %d), got %s (ID: %d)",
-					cardToPlay.UID, handCard.Name, handCard.ID, cardToPlay.Name, cardToPlay.ID)
-			}
-			validatedCards = append(validatedCards, cardToPlay)
+			// 客户端只提供 UID，牌面数据一律取服务器手牌中的值
+			validatedCards = append(validatedCards, handCard)
 		} else {
 			return nil, nil, fmt.Errorf("card UID %s not found in player %s's hand", cardToPlay.UID, data.Player)
 		}
@@ -436,7 +434,6 @@ func (p *PlayCardProcessor) updatePlayerBattleStats(room *types.RoomInfo, attack
 		// 默认按对手处理
 		return p.updatePlayerBattleStats(room, attackerName, totalDamage, "opponent", bondResult)
 	}
-
 
 	return nil
 }

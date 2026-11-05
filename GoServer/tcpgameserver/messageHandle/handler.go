@@ -1,59 +1,109 @@
 package tcpserver
 
 import (
-	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/reflect/protoreflect"
+
 	"GoServer/tcpgameserver/events"
-	"GoServer/tcpgameserver/models"
+	"GoServer/tcpgameserver/pb"
+	"GoServer/tcpgameserver/protocol"
 	"GoServer/tcpgameserver/service"
-	"GoServer/tcpgameserver/tools"
 )
 
-// SendTCPResponse 发送TCP响应消息
-func SendTCPResponse(conn net.Conn, resp *models.TcpResponse) {
-	jsonBytes, err := json.Marshal(resp)
-	if err != nil {
-		return
-	}
-	jsonBytes = append(jsonBytes, '\n')
-	_, err = conn.Write(jsonBytes)
-	if err != nil {
+// Context 单条请求的处理上下文。
+type Context struct {
+	Conn        net.Conn
+	ClientID    string
+	Seq         uint32
+	ConnManager *service.ConnectionManager
+}
+
+// Reply 回复当前请求（自动填写 reply_to）。
+func (c *Context) Reply(msg *pb.ServerMessage) {
+	msg.ReplyTo = c.Seq
+	if err := protocol.Send(c.Conn, msg); err != nil {
+		log.Printf("send reply to %s failed: %v", c.ClientID, err)
 	}
 }
 
-// HandleTCPMessage 处理TCP消息
-func HandleTCPMessage(msg string, conn net.Conn, clientID string) {
-	// 更新客户端活动时间
+// Fail 以错误回复当前请求。
+func (c *Context) Fail(code pb.ErrorCode, text string) {
+	c.Reply(protocol.NewError(0, code, text))
+}
+
+// Username 当前连接已登录的用户名；未登录时为空。
+func (c *Context) Username() string {
+	if info, ok := c.ConnManager.GetConnectionByClientID(c.ClientID); ok && info.IsLoggedIn {
+		return info.Username
+	}
+	return ""
+}
+
+type handlerFunc func(ctx *Context, msg *pb.ClientMessage)
+
+type route struct {
+	requireAuth bool
+	handle      handlerFunc
+}
+
+// routes 按 ClientMessage.body 的 oneof 分支名注册处理器。
+// 新增请求类型时只需在 .proto 中加分支并在此注册，分发逻辑无需改动。
+var routes = map[protoreflect.Name]route{
+	"login":          {requireAuth: false, handle: HandleLogin},
+	"register":       {requireAuth: false, handle: HandleRegister},
+	"resume_session": {requireAuth: false, handle: HandleResumeSession},
+	"ping":           {requireAuth: false, handle: HandlePing},
+	"ready":          {requireAuth: true, handle: HandleReady},
+	"restart":        {requireAuth: true, handle: HandleRestart},
+	"play_cards":     {requireAuth: true, handle: HandlePlayCards},
+	"compose_cards":  {requireAuth: true, handle: HandleComposeCards},
+}
+
+var bodyOneof = (&pb.ClientMessage{}).ProtoReflect().Descriptor().Oneofs().ByName("body")
+
+// HandleTCPMessage 解析一帧客户端数据并分发到对应处理器。
+func HandleTCPMessage(payload []byte, conn net.Conn, clientID string) {
 	connManager := service.GetConnectionManager()
 	connManager.UpdateActivity(clientID)
-	msg = strings.TrimSpace(msg)
-	// 尝试将msg解析为TcpRequest结构体
-	var req models.TcpRequest
-	err := json.Unmarshal([]byte(msg), &req)
+
+	msg, err := protocol.DecodeClientMessage(payload)
 	if err != nil {
-		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(9999))
+		_ = protocol.Send(conn, protocol.NewError(0, pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, "malformed message"))
 		return
 	}
-	switch req.Message {
-	case "UserLogin":
-		HandleUserLogin(req, conn, clientID, connManager)
-	case "UserRegister":
-		HandleUserRegister(req, conn, clientID, connManager)
-	case "UserReady":
-		HandleUserReady(conn, clientID, connManager)
-	case "UserPlayCard":
-		HandleUserPlayCard(req, conn, clientID, connManager)
-	case "UserComposeCard":
-		HandleUserComposeCard(req, conn, clientID, connManager)
-	case "UserRestart":
-		HandleUserRestart(conn, clientID, connManager)
-	default:
-		SendTCPResponse(conn, tools.GlobalResponseHelper.CreateErrorTcpResponse(9999))
+
+	ctx := &Context{Conn: conn, ClientID: clientID, Seq: msg.GetSeq(), ConnManager: connManager}
+
+	field := msg.ProtoReflect().WhichOneof(bodyOneof)
+	if field == nil {
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, "empty message body")
+		return
 	}
+
+	r, ok := routes[field.Name()]
+	if !ok {
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, fmt.Sprintf("unsupported request %q", field.Name()))
+		return
+	}
+	if r.requireAuth && ctx.Username() == "" {
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "login required")
+		return
+	}
+
+	r.handle(ctx, msg)
+}
+
+// SendWelcome 连接建立后发送的第一条消息。
+func SendWelcome(conn net.Conn) {
+	_ = protocol.Send(conn, &pb.ServerMessage{Body: &pb.ServerMessage_Welcome{Welcome: &pb.Welcome{
+		ServerTimeMs:    time.Now().UnixMilli(),
+		ProtocolVersion: protocol.ProtocolVersion,
+	}}})
 }
 
 // HandleNewConnection 处理新的TCP连接
@@ -64,26 +114,23 @@ func HandleNewConnection(conn net.Conn) string {
 	clientID := fmt.Sprintf("client_%d_%s", time.Now().UnixNano(),
 		strings.ReplaceAll(remoteAddr, ":", "_"))
 
-	// 获取连接管理器
 	connManager := service.GetConnectionManager()
 
 	// 检查是否是重连的客户端（基于地址）
 	if existingInfo, exists := connManager.GetConnectionByAddr(remoteAddr); exists {
-
-		// 移除旧连接，为新连接让路
 		connManager.RemoveConnection(existingInfo.ClientID)
 	}
-	// 添加到连接管理器
 	connManager.AddConnection(conn, clientID)
 
 	// 发布客户端连接事件
 	connectData := events.CreateConnectionEventData(events.EventClientConnect, clientID, remoteAddr)
-	connectData.AddData("connection_type", "tcp")
+	connectData.AddData("connection_type", "tls")
 	connectData.AddData("user_agent", "game_client")
-	connectData.AddData("version", "1.0")
+	connectData.AddData("version", fmt.Sprint(protocol.ProtocolVersion))
 	connectData.AddData("first_connect_time", time.Now().Unix())
 	events.Publish(events.EventClientConnect, connectData)
 
+	SendWelcome(conn)
 	return clientID
 }
 
@@ -91,21 +138,17 @@ func HandleNewConnection(conn net.Conn) string {
 func HandleConnectionClose(clientID string) {
 	connManager := service.GetConnectionManager()
 
-	// 获取连接信息用于事件发布
 	if clientInfo, exists := connManager.GetConnectionByClientID(clientID); exists {
-		// 发布客户端断开连接事件
 		disconnectData := events.CreateUserConnectionEventData(
 			events.EventClientDisconnect, clientID, clientInfo.Username, clientInfo.RemoteAddr)
 		disconnectData.AddData("reason", "connection_close")
 		events.Publish(events.EventClientDisconnect, disconnectData)
 	}
 
-	if connManager.RemoveConnection(clientID) {
-	}
+	connManager.RemoveConnection(clientID)
 }
 
 // UpdateClientActivity 更新客户端活动时间
 func UpdateClientActivity(clientID string) {
-	connManager := service.GetConnectionManager()
-	connManager.UpdateActivity(clientID)
+	service.GetConnectionManager().UpdateActivity(clientID)
 }

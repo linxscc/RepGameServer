@@ -1,13 +1,12 @@
 package logic
 
 import (
-	"encoding/json"
+	"GoServer/tcpgameserver/pb"
+	"GoServer/tcpgameserver/protocol"
 	"net"
 
 	"GoServer/tcpgameserver/events"
-	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/service"
-	"GoServer/tcpgameserver/tools"
 	"GoServer/tcpgameserver/types"
 )
 
@@ -19,22 +18,9 @@ func NewGameStateBroadcaster() *GameStateBroadcaster {
 	return &GameStateBroadcaster{}
 }
 
-// SendTCPMessage 发送TCP消息到连接
-func (gsb *GameStateBroadcaster) SendTCPMessage(conn net.Conn, response *models.TcpResponse) error {
-	jsonBytes, err := json.Marshal(response)
-	if err != nil {
-		return err
-	}
-
-	// 添加换行符作为消息结束标识
-	jsonBytes = append(jsonBytes, '\n')
-
-	_, err = conn.Write(jsonBytes)
-	if err != nil {
-		return err
-	}
-
-	return nil
+// SendTCPMessage 发送消息到连接
+func (gsb *GameStateBroadcaster) SendTCPMessage(conn net.Conn, msg *pb.ServerMessage) error {
+	return sendTo(conn, msg)
 }
 
 // BroadcastGameStateToRoom 向房间内所有玩家广播游戏状态（统一方法）
@@ -78,21 +64,7 @@ func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(eventData *events.Even
 			continue
 		}
 
-		// 根据事件源确定消息码
-		var messageCode int
-		switch eventData.Source {
-		case "card_compose_processor":
-			messageCode = 9001
-		case "play_card_processor":
-			messageCode = 8001
-		case "force_cardplay_processor":
-			messageCode = 7001
-		default:
-			messageCode = 8001 // 默认消息码
-		}
-
-		// 创建游戏状态响应消息
-		response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(messageCode, playerGameInfo)
+		response := protocol.GameStateMessage(playerGameInfo, reasonForSource(eventData.Source))
 		// 发送消息
 		if err := gsb.SendTCPMessage(clientInfo.Conn, response); err != nil {
 			failCount++
@@ -115,5 +87,17 @@ func (gsb *GameStateBroadcaster) resetPlayerBattleStats(room *types.RoomInfo) {
 		if err != nil {
 			continue
 		}
+	}
+}
+
+// reasonForSource 根据触发广播的业务来源确定推送原因
+func reasonForSource(source string) pb.GameStateReason {
+	switch source {
+	case "card_compose_processor":
+		return pb.GameStateReason_GAME_STATE_REASON_CARDS_COMPOSED
+	case "force_cardplay_processor":
+		return pb.GameStateReason_GAME_STATE_REASON_FORCED_PLAY
+	default:
+		return pb.GameStateReason_GAME_STATE_REASON_CARDS_PLAYED
 	}
 }

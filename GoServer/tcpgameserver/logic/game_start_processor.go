@@ -4,12 +4,11 @@ import (
 	"GoServer/tcpgameserver/cards"
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
+	"GoServer/tcpgameserver/pb"
+	"GoServer/tcpgameserver/protocol"
 	"GoServer/tcpgameserver/service"
-	"GoServer/tcpgameserver/tools"
 	"GoServer/tcpgameserver/types"
-	"encoding/json"
 	"fmt"
-	"net"
 	"time"
 )
 
@@ -183,8 +182,7 @@ func (g *GameStartProcessor) SendGameStartNotification(room *types.RoomInfo, pla
 		return fmt.Errorf("failed to get player game info for %s: %v", player.Username, err)
 	}
 
-	// 发送游戏开始消息
-	response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(5001, playerInfo)
+	response := protocol.GameStateMessage(playerInfo, pb.GameStateReason_GAME_STATE_REASON_GAME_STARTED)
 
 	// 获取玩家连接并发送消息
 	clientInfo, exists := connManager.GetConnectionByClientID(player.ClientID)
@@ -192,7 +190,7 @@ func (g *GameStartProcessor) SendGameStartNotification(room *types.RoomInfo, pla
 		return fmt.Errorf("player connection not found or invalid")
 	}
 
-	g.sendTCPResponse(clientInfo.Conn, response)
+	_ = sendTo(clientInfo.Conn, response)
 
 	return nil
 }
@@ -207,7 +205,6 @@ func (g *GameStartProcessor) performMatchmaking() error {
 	if len(readyPlayers) < 2 {
 		return fmt.Errorf("insufficient ready players: %d", len(readyPlayers))
 	}
-
 
 	// 选择前两位玩家进行匹配
 	selectedPlayers := readyPlayers[:2]
@@ -243,16 +240,4 @@ func (g *GameStartProcessor) performMatchmaking() error {
 	}
 
 	return nil
-}
-
-// sendTCPResponse 发送TCP响应消息
-func (g *GameStartProcessor) sendTCPResponse(conn net.Conn, resp *models.TcpResponse) {
-	jsonBytes, err := json.Marshal(resp)
-	if err != nil {
-		return
-	}
-	jsonBytes = append(jsonBytes, '\n')
-	_, err = conn.Write(jsonBytes)
-	if err != nil {
-	}
 }

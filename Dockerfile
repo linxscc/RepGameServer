@@ -11,7 +11,7 @@ FROM alpine:3.22
 
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S repgame \
-    && adduser -S -G repgame repgame
+    && adduser -S -G repgame repgame     && mkdir -p /certs     && chown repgame:repgame /certs
 
 COPY --from=build /out/repgame-server /usr/local/bin/repgame-server
 

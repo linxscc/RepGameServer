@@ -41,6 +41,12 @@ services:
       DB_USER: repgameadmin
       DB_PASSWORD: ${DB_PASSWORD:-change-this-db-password}
       TZ: ${TZ:-Asia/Tokyo}
+      # 证书不存在时自动生成自签名证书，指纹打印在服务器日志中
+      TLS_CERT_FILE: /certs/server.crt
+      TLS_KEY_FILE: /certs/server.key
+      TLS_HOSTS: ${TLS_HOSTS:-localhost,127.0.0.1}
+    volumes:
+      - game_tls_certs:/certs
 
   ddns:
     image: curlimages/curl:8.14.1
@@ -59,3 +65,5 @@ services:
 volumes:
   game_mysql_data:
     name: repgame_game_mysql_data
+  game_tls_certs:
+    name: repgame_game_tls_certs

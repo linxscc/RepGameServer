@@ -6,6 +6,7 @@ import (
 	"GoServer/tcpgameserver/cards"
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
+	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/types"
 )
@@ -44,7 +45,6 @@ type ComposeResult struct {
 // ProcessCardCompose 处理卡牌合成逻辑
 func (ccp *CardComposeProcessor) ProcessCardCompose(eventData *events.EventData) {
 
-
 	// 获取玩家名称
 	player, _ := eventData.GetString("player")
 	// 获取房间ID
@@ -59,7 +59,7 @@ func (ccp *CardComposeProcessor) ProcessCardCompose(eventData *events.EventData)
 		return
 	}
 
-		// 构建合成数据
+	// 构建合成数据
 	data := &CardComposeData{
 		RoomID:   roomID,
 		Player:   player,
@@ -67,10 +67,11 @@ func (ccp *CardComposeProcessor) ProcessCardCompose(eventData *events.EventData)
 		ClientID: clientID,
 	}
 
-
 	// 步骤1: 验证卡牌信息
 	room, validatedCardGroups, err := ccp.validateComposeRequest(data)
 	if err != nil {
+		_, seq := requestMeta(eventData.GetData)
+		notifyClientError(clientID, seq, pb.ErrorCode_ERROR_CODE_INVALID_CARDS, err.Error())
 		return
 	}
 
@@ -137,7 +138,7 @@ func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGr
 			newCards = append(newCards, *drawnCard)
 			composedCount++
 
-			}
+		}
 	}
 
 	if composedCount == 0 {
@@ -200,14 +201,17 @@ func (ccp *CardComposeProcessor) validateComposeRequest(data *CardComposeData) (
 
 	// 验证所有要合成的卡牌都在玩家手牌中
 	var validatedCards []models.Card
+	seenUIDs := make(map[string]bool, len(data.Cards))
 	for _, cardToCompose := range data.Cards {
+		// 同一张牌不能重复提交
+		if seenUIDs[cardToCompose.UID] {
+			return nil, nil, fmt.Errorf("duplicate card UID %s in compose request", cardToCompose.UID)
+		}
+		seenUIDs[cardToCompose.UID] = true
+
 		if handCard, exists := handCardMap[cardToCompose.UID]; exists {
-			// 验证卡牌详细信息匹配
-			if handCard.Name != cardToCompose.Name || handCard.ID != cardToCompose.ID {
-				return nil, nil, fmt.Errorf("card information mismatch for UID %s: expected %s (ID: %d), got %s (ID: %d)",
-					cardToCompose.UID, handCard.Name, handCard.ID, cardToCompose.Name, cardToCompose.ID)
-			}
-			validatedCards = append(validatedCards, cardToCompose)
+			// 客户端只提供 UID，牌面数据一律取服务器手牌中的值
+			validatedCards = append(validatedCards, handCard)
 		} else {
 			return nil, nil, fmt.Errorf("card UID %s not found in player %s's hand", cardToCompose.UID, data.Player)
 		}
@@ -244,5 +248,5 @@ func (ccp *CardComposeProcessor) updatePlayerInfo(room *types.RoomInfo, playerNa
 		}
 	}
 
-		return nil
+	return nil
 }

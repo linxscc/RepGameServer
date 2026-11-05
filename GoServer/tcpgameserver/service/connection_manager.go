@@ -1,6 +1,7 @@
 package service
 
 import (
+	"GoServer/tcpgameserver/protocol"
 	"fmt"
 	"log"
 	"net"
@@ -285,7 +286,7 @@ func (cm *ConnectionManager) SendToUser(username string, data []byte) error {
 		return fmt.Errorf("connection is nil for user %s", username)
 	}
 
-	_, err := clientInfo.Conn.Write(data)
+	err := protocol.WriteFrame(clientInfo.Conn, data)
 	if err != nil {
 		// 连接出错，移除该连接
 		cm.RemoveConnection(clientInfo.ClientID)
@@ -308,7 +309,7 @@ func (cm *ConnectionManager) SendToClient(clientID string, data []byte) error {
 		return fmt.Errorf("connection is nil for client %s", clientID)
 	}
 
-	_, err := clientInfo.Conn.Write(data)
+	err := protocol.WriteFrame(clientInfo.Conn, data)
 	if err != nil {
 		// 连接出错，移除该连接
 		cm.RemoveConnection(clientID)
@@ -331,7 +332,7 @@ func (cm *ConnectionManager) Broadcast(data []byte) {
 
 	for _, clientInfo := range connections {
 		if clientInfo.Conn != nil {
-			_, err := clientInfo.Conn.Write(data)
+			err := protocol.WriteFrame(clientInfo.Conn, data)
 			if err != nil {
 				// 连接出错，移除该连接
 				cm.RemoveConnection(clientInfo.ClientID)
