@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"GoServer/tcpgameserver/cards"
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/pb"
@@ -97,9 +98,9 @@ func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGr
 	composedCount := 0
 
 	for _, cards := range cardGroups {
-		// 检查是否有足够的卡牌合成（每3张合成1张）
-		groupSize := len(cards)
-		canCompose := groupSize / 3
+		// 检查是否有足够的卡牌合成（每 group_size 张合成 1 张，见 game_rules.yaml）
+		need := config.Game().Rules.Compose.GroupSize
+		canCompose := len(cards) / need
 
 		if canCompose == 0 {
 			continue
@@ -120,9 +121,9 @@ func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGr
 		}
 		// 合成指定数量的新卡牌
 		for i := 0; i < canCompose; i++ {
-			// 选择3张要移除的卡牌
-			startIdx := i * 3
-			endIdx := startIdx + 3
+			// 选择本次合成要移除的卡牌
+			startIdx := i * need
+			endIdx := startIdx + need
 			cardsToRemove := cards[startIdx:endIdx]
 			removedCards = append(removedCards, cardsToRemove...)
 
@@ -188,9 +189,9 @@ func (ccp *CardComposeProcessor) validateComposeRequest(data *CardComposeData) (
 		return nil, nil, fmt.Errorf("failed to get player info for %s: %v", data.Player, err)
 	}
 
-	// 验证卡牌数量（必须是3的倍数）
-	if len(data.Cards)%3 != 0 {
-		return nil, nil, fmt.Errorf("invalid card count for composition: %d (must be multiple of 3)", len(data.Cards))
+	// 验证卡牌数量（必须是 group_size 的倍数）
+	if need := config.Game().Rules.Compose.GroupSize; len(data.Cards)%need != 0 {
+		return nil, nil, fmt.Errorf("invalid card count for composition: %d (must be multiple of %d)", len(data.Cards), need)
 	}
 
 	// 构建手牌UID映射用于快速查找和验证

@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/service"
@@ -15,16 +16,16 @@ import (
 func HandleLogin(ctx *Context, msg *pb.ClientMessage) {
 	req := msg.GetLogin()
 	if err := service.ValidateCredentialFormat(req.GetUsername(), req.GetPassword()); err != nil {
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CREDENTIALS, "invalid username or password")
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CREDENTIALS, config.Msg(config.MsgInvalidCredentials))
 		return
 	}
 
 	if err := service.AuthenticateUser(req.GetUsername(), req.GetPassword()); err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
-			ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CREDENTIALS, "invalid username or password")
+			ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CREDENTIALS, config.Msg(config.MsgInvalidCredentials))
 		} else {
 			log.Printf("login %q: %v", req.GetUsername(), err)
-			ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, "login temporarily unavailable")
+			ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, config.Msg(config.MsgLoginUnavailable))
 		}
 		return
 	}
@@ -36,7 +37,7 @@ func HandleLogin(ctx *Context, msg *pb.ClientMessage) {
 func HandleResumeSession(ctx *Context, msg *pb.ClientMessage) {
 	username, ok := service.GetSessionStore().Resolve(msg.GetResumeSession().GetSessionToken())
 	if !ok {
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_SESSION_EXPIRED, "session expired, please log in again")
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_SESSION_EXPIRED, config.Msg(config.MsgSessionExpired))
 		return
 	}
 	completeAuthentication(ctx, username)
@@ -49,13 +50,17 @@ func HandleRegister(ctx *Context, msg *pb.ClientMessage) {
 		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, err.Error())
 		return
 	}
+	if service.IsReservedUsername(req.GetUsername()) {
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, config.Msg(config.MsgUsernameReserved, config.Game().Bot.NamePrefix))
+		return
+	}
 
 	if err := service.CreateUserAccount(req.GetUsername(), req.GetPassword()); err != nil {
 		if strings.Contains(err.Error(), "user already exists") {
-			ctx.Fail(pb.ErrorCode_ERROR_CODE_USER_EXISTS, "username already taken")
+			ctx.Fail(pb.ErrorCode_ERROR_CODE_USER_EXISTS, config.Msg(config.MsgUsernameTaken))
 		} else {
 			log.Printf("register %q: %v", req.GetUsername(), err)
-			ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, "registration failed")
+			ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, config.Msg(config.MsgRegisterFailed))
 		}
 		return
 	}
@@ -88,14 +93,14 @@ func completeAuthentication(ctx *Context, username string) {
 	token, expiresAt, err := service.GetSessionStore().Issue(username)
 	if err != nil {
 		log.Printf("issue session for %q: %v", username, err)
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, "login temporarily unavailable")
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, config.Msg(config.MsgLoginUnavailable))
 		return
 	}
 
 	if !resumingGame {
 		if err := connManager.BindUser(ctx.ClientID, username); err != nil {
 			log.Printf("bind %q to %s: %v", username, ctx.ClientID, err)
-			ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, "login temporarily unavailable")
+			ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, config.Msg(config.MsgLoginUnavailable))
 			return
 		}
 		connManager.SetPlayerStatus(ctx.ClientID, types.StatusLoggedIn)

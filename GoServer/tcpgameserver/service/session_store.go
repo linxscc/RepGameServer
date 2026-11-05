@@ -1,14 +1,17 @@
 package service
 
 import (
+	"GoServer/tcpgameserver/config"
 	"crypto/rand"
 	"encoding/base64"
 	"sync"
 	"time"
 )
 
-// SessionTTL 会话令牌有效期。令牌只用于断线重连时恢复身份。
-const SessionTTL = 24 * time.Hour
+// SessionTTL 会话令牌有效期（network.yaml 的 session_ttl_hours）。令牌只用于断线重连时恢复身份。
+func SessionTTL() time.Duration {
+	return config.Game().Network.SessionTTL()
+}
 
 type session struct {
 	username  string
@@ -50,7 +53,7 @@ func (s *SessionStore) Issue(username string) (token string, expiresAt time.Time
 		return "", time.Time{}, err
 	}
 	token = base64.RawURLEncoding.EncodeToString(buf)
-	expiresAt = s.now().Add(SessionTTL)
+	expiresAt = s.now().Add(SessionTTL())
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

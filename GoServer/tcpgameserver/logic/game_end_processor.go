@@ -62,6 +62,7 @@ func (gep *GameEndProcessor) ProcessGameEnd(data interface{}) error {
 
 	// 步骤6: 清理全局计时器
 	GlobalRoomTimerProcessor.StopRoomTimer(room.RoomID)
+	roomPlayLocks.Delete(room.RoomID)
 	return nil
 }
 

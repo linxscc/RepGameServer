@@ -1,6 +1,7 @@
 package types
 
 import (
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/models"
 	"fmt"
 	"math/rand"
@@ -54,8 +55,8 @@ func NewRoomInfo(roomID, roomName string, maxPlayers int) *RoomInfo {
 		Level1CardPool: make([]models.Card, 0),
 		Level2CardPool: make([]models.Card, 0),
 		Level3CardPool: make([]models.Card, 0),
-		InitialHealth:  50, // 默认初始血量
-		MaxHandCards:   10, // 默认最大手牌数量
+		InitialHealth:  config.Game().Rules.Player.InitialHealth, // 初始血量（game_rules.yaml）
+		MaxHandCards:   config.Game().Rules.Player.MaxHandCards,  // 手牌上限（game_rules.yaml）
 	}
 }
 

@@ -4,6 +4,7 @@
 package protocol
 
 import (
+	"GoServer/tcpgameserver/config"
 	"bufio"
 	"encoding/binary"
 	"fmt"
@@ -12,8 +13,10 @@ import (
 	"sync"
 )
 
-// MaxFrameSize 单条消息的最大字节数（1MB）。
-const MaxFrameSize = 1 << 20
+// MaxFrameSize 单条消息的最大字节数（network.yaml 的 max_frame_bytes）。
+func MaxFrameSize() int {
+	return config.Game().Network.Connection.MaxFrameBytes
+}
 
 const headerSize = 4
 
@@ -30,7 +33,7 @@ func WriteFrame(conn net.Conn, payload []byte) error {
 	if conn == nil {
 		return fmt.Errorf("protocol: nil connection")
 	}
-	if len(payload) > MaxFrameSize {
+	if len(payload) > MaxFrameSize() {
 		return fmt.Errorf("protocol: frame too large (%d bytes)", len(payload))
 	}
 
@@ -54,7 +57,7 @@ func ReadFrame(r *bufio.Reader) ([]byte, error) {
 	}
 
 	size := binary.BigEndian.Uint32(header[:])
-	if size > MaxFrameSize {
+	if int64(size) > int64(MaxFrameSize()) {
 		return nil, fmt.Errorf("protocol: frame too large (%d bytes)", size)
 	}
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/events"
 	messagehandle "GoServer/tcpgameserver/messageHandle"
 	"GoServer/tcpgameserver/protocol"
@@ -16,16 +17,13 @@ import (
 	"GoServer/tcpgameserver/tlsutil"
 )
 
-const (
-	listenAddr = ":9060"
-
-	// 客户端每 15 秒发送一次心跳；超过该时间没有任何消息则视为断线
-	idleTimeout      = 45 * time.Second
-	handshakeTimeout = 10 * time.Second
-)
-
 // StartTCPServer 启动游戏服务器（默认启用 TLS）。
 func StartTCPServer() {
+	// 先加载并校验配置表，配置有误时在启动阶段就失败
+	cfg := config.Game()
+	log.Printf("config loaded: %d players/room, turn %ds, bot match after %ds (enabled=%v)",
+		cfg.Rules.Match.PlayersPerRoom, cfg.Rules.Turn.TimeoutSeconds, cfg.Bot.MatchWaitSeconds, cfg.Bot.Enabled)
+
 	setup.InitializeServer()
 
 	ln, err := listen()
@@ -48,6 +46,7 @@ func StartTCPServer() {
 //	TLS_HOSTS                     自签名证书包含的 IP/域名，逗号分隔
 //	TLS_DISABLED=true             仅限本地调试：使用明文 TCP
 func listen() (net.Listener, error) {
+	listenAddr := config.Game().Network.Connection.ListenAddr
 	if strings.EqualFold(os.Getenv("TLS_DISABLED"), "true") {
 		log.Println("WARNING: TLS disabled, traffic is NOT encrypted. Use only for local debugging.")
 		ln, err := net.Listen("tcp", listenAddr)
@@ -90,7 +89,7 @@ func handleConnection(conn net.Conn) {
 	}()
 
 	if tlsConn, ok := conn.(*tls.Conn); ok {
-		_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
+		_ = conn.SetDeadline(time.Now().Add(config.Game().Network.HandshakeTimeout()))
 		if err := tlsConn.Handshake(); err != nil {
 			return
 		}
@@ -101,6 +100,8 @@ func handleConnection(conn net.Conn) {
 	clientAddr := conn.RemoteAddr().String()
 	defer messagehandle.HandleConnectionClose(clientID)
 
+	// 超过 network.yaml 的 idle_timeout_seconds 没有任何消息（含心跳）即断开
+	idleTimeout := config.Game().Network.IdleTimeout()
 	reader := bufio.NewReader(conn)
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))

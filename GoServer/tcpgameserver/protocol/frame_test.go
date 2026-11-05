@@ -57,7 +57,7 @@ func TestReadFrameAcrossSplitReads(t *testing.T) {
 
 func TestReadFrameRejectsOversize(t *testing.T) {
 	var hdr [4]byte
-	binary.BigEndian.PutUint32(hdr[:], MaxFrameSize+1)
+	binary.BigEndian.PutUint32(hdr[:], uint32(MaxFrameSize()+1))
 	_, err := ReadFrame(bufio.NewReader(bytes.NewReader(hdr[:])))
 	if err == nil || !strings.Contains(err.Error(), "too large") {
 		t.Fatalf("expected too large error, got %v", err)

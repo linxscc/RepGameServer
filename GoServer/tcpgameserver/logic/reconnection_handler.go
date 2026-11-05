@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/protocol"
 	"net"
@@ -27,34 +28,34 @@ func (r *ReconnectionHandler) HandlePlayerReconnection(clientID, username string
 	// 检查玩家原本的状态是否为等待重连
 	originalClientInfo, exists := connManager.GetConnectionByUsername(username)
 	if !exists {
-		return r.sendReconnectionFailure(clientID, "Player not found", connManager)
+		return r.sendReconnectionFailure(clientID, config.Msg(config.MsgReconnectPlayerNotFound), connManager)
 	}
 
 	// 验证玩家状态是否为等待重连
 	if originalClientInfo.GetStatus() != types.StatusWaitingReconnect {
-		return r.sendReconnectionFailure(clientID, "Player not waiting for reconnection", connManager)
+		return r.sendReconnectionFailure(clientID, config.Msg(config.MsgReconnectNotWaiting), connManager)
 	}
 
 	// 获取玩家的游戏信息
 	room, err := roomManager.FindRoomByPlayer(username)
 	if err != nil || room == nil {
-		return r.sendReconnectionFailure(clientID, "No active game found", connManager)
+		return r.sendReconnectionFailure(clientID, config.Msg(config.MsgReconnectNoGame), connManager)
 	}
 	playerGameInfo, err := roomManager.GetPlayerGameInfo(room.RoomID, username)
 	if err != nil || playerGameInfo == nil {
-		return r.sendReconnectionFailure(clientID, "No active game found", connManager)
+		return r.sendReconnectionFailure(clientID, config.Msg(config.MsgReconnectNoGame), connManager)
 	}
 
 	// 获取客户端连接信息
 	clientInfo, exists := connManager.GetConnectionByClientID(clientID)
 	if !exists {
-		return r.sendReconnectionFailure(clientID, "Connection not found", connManager)
+		return r.sendReconnectionFailure(clientID, config.Msg(config.MsgReconnectConnectionLost), connManager)
 	}
 
 	// 绑定用户到新连接
 	err = connManager.BindUser(clientID, username)
 	if err != nil {
-		return r.sendReconnectionFailure(clientID, "Failed to bind user", connManager)
+		return r.sendReconnectionFailure(clientID, config.Msg(config.MsgReconnectBindFailed), connManager)
 	}
 
 	// 设置玩家状态为游戏中

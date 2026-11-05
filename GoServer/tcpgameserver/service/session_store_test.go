@@ -17,7 +17,7 @@ func TestSessionStoreIssueResolveExpire(t *testing.T) {
 		t.Fatalf("resolve = %q, %v", user, ok)
 	}
 
-	now = now.Add(SessionTTL + time.Second)
+	now = now.Add(SessionTTL() + time.Second)
 	if _, ok := store.Resolve(tok); ok {
 		t.Fatal("expired token should not resolve")
 	}

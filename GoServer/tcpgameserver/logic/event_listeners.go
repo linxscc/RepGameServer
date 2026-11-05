@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/protocol"
 
@@ -629,7 +630,7 @@ func (c *ConnectionEventListener) handleClientKicked(data interface{}) {
 
 		// 通知被踢下线的旧连接，然后断开它；新连接的绑定由登录流程完成
 		if oldClient, exists := connManager.GetConnectionByClientID(clientID); exists && oldClient.Conn != nil {
-			_ = sendTo(oldClient.Conn, protocol.NewError(0, pb.ErrorCode_ERROR_CODE_SESSION_EXPIRED, "logged in from another device"))
+			_ = sendTo(oldClient.Conn, protocol.NewError(0, pb.ErrorCode_ERROR_CODE_SESSION_EXPIRED, config.Msg(config.MsgLoggedInElsewhere)))
 			_ = oldClient.Conn.Close()
 		}
 		_ = newClientID

@@ -1,8 +1,12 @@
 package logic
 
 import (
+	"errors"
 	"fmt"
+	"log"
+	"sync"
 
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/pb"
@@ -32,7 +36,20 @@ type PlayCardData struct {
 	TargetType  string        `json:"target_type"`
 }
 
-// ProcessPlayCard 处理出牌逻辑
+// errNotYourTurn 出牌时不是该玩家的回合
+var errNotYourTurn = errors.New("not your turn")
+
+// roomPlayLocks 每个房间一把锁：真人出牌、超时自动出牌、机器人出牌可能同时到达，必须串行结算
+var roomPlayLocks sync.Map // roomID -> *sync.Mutex
+
+func lockRoomForPlay(roomID string) func() {
+	mu, _ := roomPlayLocks.LoadOrStore(roomID, &sync.Mutex{})
+	m := mu.(*sync.Mutex)
+	m.Lock()
+	return m.Unlock
+}
+
+// ProcessPlayCard 处理出牌逻辑（真人出牌、超时自动出牌、机器人出牌共用）
 func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
 
 	// 获取玩家名称
@@ -44,6 +61,14 @@ func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
 
 	// 转换为卡牌切片
 	receivedSelfCards, _ := selfCardsData.([]models.Card)
+	// 是否为回合超时后的自动出牌
+	forced := false
+	if v, ok := eventData.GetData("forced"); ok {
+		forced, _ = v.(bool)
+	}
+
+	unlock := lockRoomForPlay(roomID)
+	defer unlock()
 
 	// 构建出牌数据（所有验证交给ProcessPlayCard处理）
 	data := &PlayCardData{
@@ -56,8 +81,13 @@ func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
 	// 步骤1: 验证出牌信息是否正确
 	room, validatedCards, err := p.validatePlayCardRequest(data)
 	if err != nil {
+		log.Printf("reject play from %s in room %s: %v", player, roomID, err)
 		clientID, seq := requestMeta(eventData.GetData)
-		notifyClientError(clientID, seq, pb.ErrorCode_ERROR_CODE_INVALID_CARDS, err.Error())
+		if errors.Is(err, errNotYourTurn) {
+			notifyClientError(clientID, seq, pb.ErrorCode_ERROR_CODE_INVALID_GAME_STATE, config.Msg(config.MsgNotYourTurn))
+		} else {
+			notifyClientError(clientID, seq, pb.ErrorCode_ERROR_CODE_INVALID_CARDS, config.Msg(config.MsgCardsInvalid))
+		}
 		return
 	}
 
@@ -70,9 +100,14 @@ func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
 		return
 	}
 
-	// 步骤4: 发送游戏状态更新事件（仅在游戏未结束时）
+	// 步骤4: 游戏未结束时广播新状态，并开始下一回合（真人计时 / 机器人出牌）
 	if !gameEnded {
-		p.publishGameStateUpdateWithBonds(room)
+		source := "play_card_processor"
+		if forced {
+			source = "force_cardplay_processor"
+		}
+		p.publishGameStateUpdate(room, source)
+		GlobalRoomTimerProcessor.StartRoomTimer(room.RoomID)
 	}
 }
 
@@ -100,7 +135,7 @@ func (p *PlayCardProcessor) validatePlayCardRequest(data *PlayCardData) (*types.
 
 	// 验证玩家回合状态
 	if playerInfo.Round != "current" {
-		return nil, nil, fmt.Errorf("it's not player %s's turn (round status: %s)", data.Player, playerInfo.Round)
+		return nil, nil, fmt.Errorf("%w: player %s (round status: %s)", errNotYourTurn, data.Player, playerInfo.Round)
 	}
 
 	// 验证是否有卡牌要出
@@ -170,9 +205,9 @@ func (p *PlayCardProcessor) updateRoomPlayersInfo(room *types.RoomInfo, playerNa
 		return true, nil
 	}
 
-	// 6. 为出牌方新增三张卡牌（如果游戏仍在进行）
+	// 6. 为出牌方补充卡牌（数量见 game_rules.yaml，游戏仍在进行时）
 	if room.Status == "playing" {
-		err = p.drawCardsForPlayer(room, playerName, 3)
+		err = p.drawCardsForPlayer(room, playerName, config.Game().Rules.Player.DrawAfterPlay)
 		if err != nil {
 		}
 	}
@@ -330,10 +365,10 @@ func (p *PlayCardProcessor) checkGameEnd(room *types.RoomInfo) bool {
 	return false // 游戏继续
 }
 
-// publishGameStateUpdateWithBonds 发布包含羁绊信息的游戏状态更新事件
-func (p *PlayCardProcessor) publishGameStateUpdateWithBonds(room *types.RoomInfo) {
-	// 发布游戏状态更新事件
-	stateUpdateData := events.NewEventData(events.EventGameStateUpdate, "play_card_processor", map[string]interface{}{})
+// publishGameStateUpdate 发布游戏状态更新事件（包含羁绊伤害信息）
+func (p *PlayCardProcessor) publishGameStateUpdate(room *types.RoomInfo, source string) {
+	// 发布游戏状态更新事件；source 决定客户端收到的推送原因（见 game_state_broadcaster）
+	stateUpdateData := events.NewEventData(events.EventGameStateUpdate, source, map[string]interface{}{})
 	stateUpdateData.SetRoom(room.RoomID)
 	events.Publish(events.EventGameStateUpdate, stateUpdateData)
 }

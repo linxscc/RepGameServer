@@ -4,22 +4,21 @@ import (
 	"sync"
 	"time"
 
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/types"
 )
 
-// 计时器配置常量
-const (
-	DefaultTimerDuration = 30 * time.Second // 默认计时时间：30秒
-)
+// 回合调度器：每个回合开始时调用 StartRoomTimer。
+//   - 当前回合是机器人：bot.yaml 的 think_delay_ms 后由机器人出牌；
+//   - 当前回合是真人：game_rules.yaml 的 turn.timeout_seconds 后由服务器替他打出第一张手牌。
 
 // RoomTimerProcessor 房间计时处理器
 type RoomTimerProcessor struct {
 	Name       string
 	timers     map[string]*time.Timer // 房间ID -> 计时器
 	timerMutex sync.RWMutex           // 计时器操作的互斥锁
-	Duration   time.Duration          // 计时时长，可配置
 }
 
 // 全局处理器实例
@@ -28,18 +27,16 @@ var GlobalRoomTimerProcessor *RoomTimerProcessor
 // init 初始化全局处理器实例
 func init() {
 	GlobalRoomTimerProcessor = &RoomTimerProcessor{
-		Name:     "RoomTimerProcessor",
-		timers:   make(map[string]*time.Timer),
-		Duration: DefaultTimerDuration,
+		Name:   "RoomTimerProcessor",
+		timers: make(map[string]*time.Timer),
 	}
 }
 
 // NewRoomTimerProcessor 创建新的房间计时处理器
 func NewRoomTimerProcessor() *RoomTimerProcessor {
 	return &RoomTimerProcessor{
-		Name:     "RoomTimerProcessor",
-		timers:   make(map[string]*time.Timer),
-		Duration: DefaultTimerDuration,
+		Name:   "RoomTimerProcessor",
+		timers: make(map[string]*time.Timer),
 	}
 }
 
@@ -62,54 +59,67 @@ func (rtp *RoomTimerProcessor) StartRoomTimer(roomID string) error {
 	return nil
 }
 
-// startPlayerTimer 对房间内Round为current的玩家进行计时
+// startPlayerTimer 为房间内当前回合的玩家安排计时：机器人到点出牌，真人超时被自动出牌
 func (rtp *RoomTimerProcessor) startPlayerTimer(room *types.RoomInfo) error {
-
-	// 停止现有计时器（如果存在）
+	// 停止上一回合的计时器（如果存在）
 	rtp.stopRoomTimer(room.RoomID)
 
-	// 检查是否有Round为current的玩家
-	hasCurrentPlayer := false
+	currentPlayer := ""
 	for _, player := range room.Players {
 		if player.Round == "current" {
-			hasCurrentPlayer = true
+			currentPlayer = player.Username
 			break
 		}
 	}
-
-	if !hasCurrentPlayer {
+	if currentPlayer == "" {
 		return nil
 	}
 
-	// 创建计时器，使用可配置的时长
-	timer := time.AfterFunc(rtp.Duration, func() {
+	roomID := room.RoomID
+	delay := config.Game().Rules.TurnTimeout()
+	action := func() { rtp.forceCardPlay(roomID, currentPlayer) }
+	if IsBot(currentPlayer) {
+		delay = config.Game().Bot.ThinkDelay()
+		action = func() { PlayBotTurn(roomID, currentPlayer) }
+	}
 
-		// 调用强制出牌请求
-		err := rtp.forceCardPlay(room.RoomID)
-		if err != nil {
-		}
-
-		// 清理计时器记录
+	var timer *time.Timer
+	timer = time.AfterFunc(delay, func() {
+		// 只清理自己这一个计时器，避免误删下一回合新建的计时器
 		rtp.timerMutex.Lock()
-		delete(rtp.timers, room.RoomID)
+		if rtp.timers[roomID] == timer {
+			delete(rtp.timers, roomID)
+		}
 		rtp.timerMutex.Unlock()
+
+		action()
 	})
 
-	// 保存计时器引用
 	rtp.timerMutex.Lock()
-	rtp.timers[room.RoomID] = timer
+	rtp.timers[roomID] = timer
 	rtp.timerMutex.Unlock()
 
 	return nil
 }
 
-// forceCardPlay 发送强制出牌请求
-func (rtp *RoomTimerProcessor) forceCardPlay(roomID string) error {
-	// 发布游戏状态更新事件
-	stateUpdateData := events.NewEventData(events.EventGameStateUpdate, "force_cardplay_processor", map[string]interface{}{})
-	stateUpdateData.SetRoom(roomID)
-	events.Publish(events.EventGameStateUpdate, stateUpdateData)
-	return nil
+// forceCardPlay 真人玩家回合超时：由服务器替其打出手牌中的第一张。
+// 走正常出牌流程，结算后广播的状态原因为 FORCED_PLAY，客户端只需展示结果。
+func (rtp *RoomTimerProcessor) forceCardPlay(roomID, username string) {
+	room, err := service.GetRoomManager().GetRoom(roomID)
+	if err != nil || room.Status != "playing" {
+		return
+	}
+	hand, err := room.GetPlayerHandCards(username)
+	if err != nil || len(hand) == 0 {
+		return
+	}
+
+	events.Publish(events.EventCardPlay, events.NewEventData(events.EventCardPlay, "force_cardplay_processor", map[string]interface{}{
+		"player":     username,
+		"self_cards": hand[:1],
+		"room_id":    roomID,
+		"forced":     true,
+	}))
 }
 
 // stopRoomTimer 结束房间计时

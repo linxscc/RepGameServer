@@ -2,6 +2,7 @@ package logic
 
 import (
 	"GoServer/tcpgameserver/cards"
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/pb"
@@ -9,6 +10,8 @@ import (
 	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/types"
 	"fmt"
+	"log"
+	"sync"
 	"time"
 )
 
@@ -20,25 +23,12 @@ func NewGameStartProcessor() *GameStartProcessor {
 	return &GameStartProcessor{}
 }
 
-// ProcessGameStart 处理游戏开始事件
+// ProcessGameStart 处理游戏开始事件：尝试用已准备的真人玩家凑满一个房间
 func (g *GameStartProcessor) ProcessGameStart(eventData interface{}) error {
-	// 类型断言获取事件数据
-	if data, ok := eventData.(*events.EventData); ok {
-		// 检查是否是匹配触发的游戏开始事件
-		if triggerSource, exists := data.GetString("trigger_source"); exists && triggerSource == "user_ready_handler" {
-
-			// 执行匹配逻辑
-			err := g.performMatchmaking()
-			if err != nil {
-				return err
-			} else {
-			}
-			return nil
-		}
-
-		return nil
+	if _, ok := eventData.(*events.EventData); !ok {
+		return fmt.Errorf("invalid event data type")
 	}
-	return fmt.Errorf("invalid event data type")
+	return g.performMatchmaking()
 }
 
 // CreateGameRoom 创建游戏房间
@@ -118,126 +108,136 @@ func (g *GameStartProcessor) DealInitialCardsToPlayer(room *types.RoomInfo, user
 	}
 
 	// 初始化玩家手牌
-	// 从房间的1级卡牌池中抽取6张卡牌
+	// 从房间的1级卡牌池中抽取开局手牌（数量见 game_rules.yaml）
 	var initCards []models.Card
-	initCards, _ = roomManager.InitPlayerHandCard(room.RoomID, 6)
+	initCards, _ = roomManager.InitPlayerHandCard(room.RoomID, config.Game().Rules.Player.InitialHandSize)
 	player.HandCards = initCards
 
 	return nil
 }
 
-// InitializePlayersHealthAndNotify 初始化玩家信息并发送游戏开始通知
-func (g *GameStartProcessor) InitializePlayersHealthAndNotify(room *types.RoomInfo, players []*types.ClientInfo, connManager *service.ConnectionManager) error {
-	// 收集所有玩家信息用于构建游戏信息
-	playerUsernames := make([]string, 0, len(players))
-	for _, player := range players {
-		if player.Username != "" {
-			playerUsernames = append(playerUsernames, player.Username)
+// InitializePlayersHealthAndNotify 初始化玩家血量与先后手，并向真人玩家发送开局状态。
+// participants 的顺序决定先后手：第一个为先手。机器人没有网络连接，只设置状态不发送消息。
+func (g *GameStartProcessor) InitializePlayersHealthAndNotify(room *types.RoomInfo, participants []string) error {
+	room.Status = "playing"
+	roomManager := service.GetRoomManager()
+
+	for i, username := range participants {
+		if err := roomManager.SetPlayerHealth(room.RoomID, username, room.Players[username].MaxHealth); err != nil {
+			return fmt.Errorf("failed to set initial health for player %s: %v", username, err)
 		}
+		round := "waiting"
+		if i == 0 {
+			round = "current"
+		}
+		roomManager.SetPlayerRound(room.RoomID, username, round)
 	}
 
-	// 设置房间状态为进行中
-	room.Status = "playing"
-
-	// 获取所有羁绊数据
-	// bondPoolManager := cards.GetBondPoolManager()
-	roomManager := service.GetRoomManager()
-	// allBonds := bondPoolManager.GetAllBonds()
-	// 为每个玩家设置初始信息并发送游戏开始消息
-	for i, player := range players {
-		if player.Username == "" {
+	for _, username := range participants {
+		if IsBot(username) {
 			continue
 		}
-
-		// 设置玩家初始血量
-		err := roomManager.SetPlayerHealth(room.RoomID, player.Username, room.Players[player.Username].MaxHealth)
-		if err != nil {
-			return fmt.Errorf("failed to set initial health for player %s: %v", player.Username, err)
-		}
-		// 设置先手回合
-		if isFirstPlayer := (i == 0); isFirstPlayer {
-			roomManager.SetPlayerRound(room.RoomID, player.Username, "current")
-		} else {
-			roomManager.SetPlayerRound(room.RoomID, player.Username, "waiting")
-		}
-
-		// 再发送游戏开始通知 (5001)
-		err = g.SendGameStartNotification(room, player, connManager)
-		if err != nil {
-			return fmt.Errorf("failed to send game start notification to player %s: %v", player.Username, err)
+		if err := g.SendGameStartNotification(room, username); err != nil {
+			return fmt.Errorf("failed to send game start notification to player %s: %v", username, err)
 		}
 	}
 
-	GlobalRoomTimerProcessor.StartRoomTimer(room.RoomID)
-
-	return nil
+	// 开始第一回合（真人计时 / 机器人出牌）
+	return GlobalRoomTimerProcessor.StartRoomTimer(room.RoomID)
 }
 
-// SendGameStartNotification 发送游戏开始通知
-func (g *GameStartProcessor) SendGameStartNotification(room *types.RoomInfo, player *types.ClientInfo, connManager *service.ConnectionManager) error {
-	// 获取玩家游戏信息
-	roomManager := service.GetRoomManager()
-	playerInfo, err := roomManager.GetPlayerGameInfo(room.RoomID, player.Username)
+// SendGameStartNotification 向真人玩家发送开局状态
+func (g *GameStartProcessor) SendGameStartNotification(room *types.RoomInfo, username string) error {
+	playerInfo, err := service.GetRoomManager().GetPlayerGameInfo(room.RoomID, username)
 	if err != nil {
-		return fmt.Errorf("failed to get player game info for %s: %v", player.Username, err)
+		return fmt.Errorf("failed to get player game info for %s: %v", username, err)
 	}
 
-	response := protocol.GameStateMessage(playerInfo, pb.GameStateReason_GAME_STATE_REASON_GAME_STARTED)
-
-	// 获取玩家连接并发送消息
-	clientInfo, exists := connManager.GetConnectionByClientID(player.ClientID)
+	clientInfo, exists := service.GetConnectionManager().GetConnectionByUsername(username)
 	if !exists || clientInfo == nil || clientInfo.Conn == nil {
 		return fmt.Errorf("player connection not found or invalid")
 	}
 
-	_ = sendTo(clientInfo.Conn, response)
-
-	return nil
+	return sendTo(clientInfo.Conn, protocol.GameStateMessage(playerInfo, pb.GameStateReason_GAME_STATE_REASON_GAME_STARTED))
 }
 
-// performMatchmaking 执行匹配逻辑
-func (g *GameStartProcessor) performMatchmaking() error {
-	// 获取连接管理器
-	connManager := service.GetConnectionManager()
+// matchmakingMu 串行化所有匹配操作，避免同一名玩家同时被真人匹配和机器人匹配选中
+var matchmakingMu sync.Mutex
 
-	// 获取准备就绪的玩家
-	readyPlayers := connManager.GetConnectionsByStatus(types.StatusReady)
-	if len(readyPlayers) < 2 {
-		return fmt.Errorf("insufficient ready players: %d", len(readyPlayers))
+// performMatchmaking 已准备的真人玩家凑满一个房间时开局
+func (g *GameStartProcessor) performMatchmaking() error {
+	matchmakingMu.Lock()
+	defer matchmakingMu.Unlock()
+
+	needed := config.Game().Rules.Match.PlayersPerRoom
+	readyPlayers := service.GetConnectionManager().GetConnectionsByStatus(types.StatusReady)
+	if len(readyPlayers) < needed {
+		return nil // 人数不足，等待更多玩家或机器人匹配
+	}
+	return g.startMatch(readyPlayers[:needed], nil)
+}
+
+// StartBotMatch 玩家等待超时后，为其安排机器人对手。
+// 如果玩家已经匹配到真人或已离开，则什么都不做。
+func (g *GameStartProcessor) StartBotMatch(clientID string) error {
+	matchmakingMu.Lock()
+	defer matchmakingMu.Unlock()
+
+	player, exists := service.GetConnectionManager().GetConnectionByClientID(clientID)
+	if !exists || player == nil || player.GetStatus() != types.StatusReady || player.Username == "" {
+		return nil
 	}
 
-	// 选择前两位玩家进行匹配
-	selectedPlayers := readyPlayers[:2]
+	bots := make([]string, 0, config.Game().Rules.Match.PlayersPerRoom-1)
+	for len(bots) < cap(bots) {
+		bots = append(bots, NewBotName())
+	}
+	return g.startMatch([]*types.ClientInfo{player}, bots)
+}
 
-	// 创建新房间
-	room, err := g.CreateGameRoom(fmt.Sprintf("Game Room %d", time.Now().Unix()), 2)
+// startMatch 创建房间、发牌并开局。真人玩家在前（先手），机器人在后。
+// 调用方必须持有 matchmakingMu。
+func (g *GameStartProcessor) startMatch(humans []*types.ClientInfo, bots []string) error {
+	connManager := service.GetConnectionManager()
+
+	room, err := g.CreateGameRoom(fmt.Sprintf("Game Room %d", time.Now().Unix()), config.Game().Rules.Match.PlayersPerRoom)
 	if err != nil {
 		return fmt.Errorf("failed to create room: %v", err)
 	}
 
-	// 初始化房间卡牌池
 	if err := g.InitializeRoomCardPools(room); err != nil {
 		g.CleanupRoom(room.RoomID)
 		return fmt.Errorf("failed to initialize room card pools: %v", err)
 	}
 
-	// 添加玩家到房间
-	if err := g.AddPlayersToRoom(room, selectedPlayers, connManager); err != nil {
+	if err := g.AddPlayersToRoom(room, humans, connManager); err != nil {
 		g.CleanupRoom(room.RoomID)
 		return fmt.Errorf("failed to add players to room: %v", err)
 	}
+	for _, bot := range bots {
+		if err := service.GetRoomManager().JoinRoom(room.RoomID, bot); err != nil {
+			g.CleanupRoom(room.RoomID)
+			return fmt.Errorf("failed to add bot %s to room: %v", bot, err)
+		}
+	}
 
-	// 为所有玩家分发初始手牌
 	if err := g.DealInitialCardsToAllPlayers(room); err != nil {
 		g.CleanupRoom(room.RoomID)
 		return fmt.Errorf("failed to deal initial cards: %v", err)
 	}
 
-	// 设置玩家初始信息并发送游戏开始通知
-	if err := g.InitializePlayersHealthAndNotify(room, selectedPlayers, connManager); err != nil {
+	participants := make([]string, 0, len(humans)+len(bots))
+	for _, h := range humans {
+		participants = append(participants, h.Username)
+	}
+	participants = append(participants, bots...)
+
+	if err := g.InitializePlayersHealthAndNotify(room, participants); err != nil {
 		g.CleanupRoom(room.RoomID)
 		return fmt.Errorf("failed to initialize players and send notifications: %v", err)
 	}
-
+	if len(bots) > 0 {
+		log.Printf("bot match started: room=%s players=%v", room.RoomID, participants)
+	}
 	return nil
 }

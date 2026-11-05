@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/protocol"
@@ -73,7 +74,7 @@ func HandleTCPMessage(payload []byte, conn net.Conn, clientID string) {
 
 	msg, err := protocol.DecodeClientMessage(payload)
 	if err != nil {
-		_ = protocol.Send(conn, protocol.NewError(0, pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, "malformed message"))
+		_ = protocol.Send(conn, protocol.NewError(0, pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, config.Msg(config.MsgMalformedMessage)))
 		return
 	}
 
@@ -81,17 +82,17 @@ func HandleTCPMessage(payload []byte, conn net.Conn, clientID string) {
 
 	field := msg.ProtoReflect().WhichOneof(bodyOneof)
 	if field == nil {
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, "empty message body")
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, config.Msg(config.MsgEmptyMessageBody))
 		return
 	}
 
 	r, ok := routes[field.Name()]
 	if !ok {
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, fmt.Sprintf("unsupported request %q", field.Name()))
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, config.Msg(config.MsgUnsupportedRequest, field.Name()))
 		return
 	}
 	if r.requireAuth && ctx.Username() == "" {
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "login required")
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, config.Msg(config.MsgLoginRequired))
 		return
 	}
 

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/protocol"
 	"fmt"
 	"log"
@@ -35,8 +36,8 @@ func NewConnectionManager() *ConnectionManager {
 		connections:      make(map[string]*types.ClientInfo),
 		userConns:        make(map[string]string),
 		addrConns:        make(map[string]string),
-		heartbeatTimeout: 30 * time.Second,
-		cleanupInterval:  60 * time.Hour,
+		heartbeatTimeout: config.Game().Network.StaleConnection(),
+		cleanupInterval:  config.Game().Network.CleanupInterval(),
 		stopChan:         make(chan struct{}),
 	}
 }

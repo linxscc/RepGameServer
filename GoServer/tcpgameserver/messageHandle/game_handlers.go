@@ -3,7 +3,9 @@ package tcpserver
 import (
 	"time"
 
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/events"
+	"GoServer/tcpgameserver/logic"
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/protocol"
 	"GoServer/tcpgameserver/types"
@@ -17,7 +19,8 @@ func HandlePing(ctx *Context, msg *pb.ClientMessage) {
 	}}})
 }
 
-// HandleReady 玩家准备：先下发羁绊表，人数足够时开始匹配。
+// HandleReady 玩家开始匹配：先下发羁绊表，然后尝试匹配真人对手；
+// 等待超时仍未匹配成功时由机器人补位（见 bot.yaml）。
 func HandleReady(ctx *Context, _ *pb.ClientMessage) {
 	ctx.ConnManager.SetPlayerStatus(ctx.ClientID, types.StatusReady)
 	stats := ctx.ConnManager.GetConnectionStats()
@@ -26,30 +29,30 @@ func HandleReady(ctx *Context, _ *pb.ClientMessage) {
 	bondsData.AddData("client_id", ctx.ClientID)
 	events.Publish(events.EventCardBonds, bondsData)
 
-	tryStartMatchmaking(stats["ready"], "user_ready_handler")
+	startMatchmaking(ctx.ClientID, stats["ready"])
 }
 
-// HandleRestart 对局结束后再来一局。
+// HandleRestart 对局结束后再来一局（与开始匹配流程相同，只是不再重复下发羁绊表）
 func HandleRestart(ctx *Context, _ *pb.ClientMessage) {
 	ctx.ConnManager.SetPlayerStatus(ctx.ClientID, types.StatusReady)
-	tryStartMatchmaking(ctx.ConnManager.GetConnectionStats()["ready"], "user_restart_handler")
+	startMatchmaking(ctx.ClientID, ctx.ConnManager.GetConnectionStats()["ready"])
 }
 
-func tryStartMatchmaking(readyCount int, source string) {
-	if readyCount < 2 {
-		return
+// startMatchmaking 人数足够时立即匹配真人；同时为该玩家开始机器人补位倒计时
+func startMatchmaking(clientID string, readyCount int) {
+	if readyCount >= config.Game().Rules.Match.PlayersPerRoom {
+		gameStartData := events.CreateRoomEventData(events.EventGameStart, "new_room", readyCount)
+		gameStartData.AddData("trigger_source", "matchmaking")
+		events.Publish(events.EventGameStart, gameStartData)
 	}
-	gameStartData := events.CreateRoomEventData(events.EventGameStart, "new_room", readyCount)
-	gameStartData.AddData("message", "Players ready, starting matchmaking")
-	gameStartData.AddData("trigger_source", source)
-	events.Publish(events.EventGameStart, gameStartData)
+	logic.ScheduleBotMatch(clientID)
 }
 
 // HandlePlayCards 出牌：只接收牌的 UID，校验与结算交给业务层。
 func HandlePlayCards(ctx *Context, msg *pb.ClientMessage) {
 	req := msg.GetPlayCards()
 	if req.GetRoomId() == "" || len(req.GetCardUids()) == 0 {
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CARDS, "no cards to play")
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CARDS, config.Msg(config.MsgNoCardsToPlay))
 		return
 	}
 
@@ -62,11 +65,12 @@ func HandlePlayCards(ctx *Context, msg *pb.ClientMessage) {
 	}))
 }
 
-// HandleComposeCards 合成：数量须为 3 的倍数，其余校验交给业务层。
+// HandleComposeCards 合成：数量须为 group_size（game_rules.yaml）的倍数，其余校验交给业务层。
 func HandleComposeCards(ctx *Context, msg *pb.ClientMessage) {
 	req := msg.GetComposeCards()
-	if req.GetRoomId() == "" || len(req.GetCardUids()) == 0 || len(req.GetCardUids())%3 != 0 {
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CARDS, "card count must be a multiple of 3")
+	need := config.Game().Rules.Compose.GroupSize
+	if req.GetRoomId() == "" || len(req.GetCardUids()) == 0 || len(req.GetCardUids())%need != 0 {
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CARDS, config.Msg(config.MsgComposeCountInvalid, need))
 		return
 	}
 
