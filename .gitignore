@@ -26,3 +26,6 @@ Thumbs.db
 logs/
 *.pem
 .aws/
+
+# Private local docs (paths, domain, LAN info)
+*.private.md
