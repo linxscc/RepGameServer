@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file "$DEPLOY_ENV_FILE" up -d --build
+          docker compose --env-file "$DEPLOY_ENV_FILE" up -d --build --remove-orphans
 
       - name: Verify deployment
         shell: bash
@@ -85,3 +85,9 @@ jobs:
           docker compose --env-file "$DEPLOY_ENV_FILE" ps
           docker compose --env-file "$DEPLOY_ENV_FILE" logs --no-color --tail=100 gameserver db
           exit 1
+
+      - name: Remove superseded game server images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image prune -f --filter "label=com.docker.compose.project=repgame-game-server"

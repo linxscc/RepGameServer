@@ -72,8 +72,9 @@ nc -vz 127.0.0.1 19060
 
 1. 拉取触发工作流的最新提交。
 2. 校验本机 Docker 和部署环境文件。
-3. 执行 `docker compose up -d --build`。
+3. 执行 `docker compose up -d --build --remove-orphans`，替换旧容器并移除已不在 compose 中的容器。
 4. 检查游戏容器和 TCP 端口；失败时输出最近日志。
+5. 部署成功后清理本项目被替换下来的旧镜像（仅限 `repgame-game-server` 项目的悬空镜像）。
 
 工作流使用 Mac mini 本地的 `.env`，不会把数据库或 DDNS 密钥上传到 GitHub。默认路径为：
 
