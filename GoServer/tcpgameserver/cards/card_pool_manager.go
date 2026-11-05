@@ -1,8 +1,8 @@
 package cards
 
 import (
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/models"
-	"GoServer/tcpgameserver/service"
 	"fmt"
 	"sync"
 )
@@ -40,11 +40,10 @@ func InitCardPool() error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 
-	// 从数据库获取所有卡牌配置
-	cardDecks, err := service.GetAllCardDeck()
-	if err != nil {
-		return fmt.Errorf("failed to load card decks from database: %v", err)
-	} // 清空现有卡牌池
+	// 从卡牌配置表（config/tables/cards.yaml）读取，启动时已校验过
+	cardDecks := cardDecksFromConfig(config.Game().Cards)
+
+	// 清空现有卡牌池
 	manager.ALLCards = make([]models.Card, 0)
 	manager.level1Cards = make([]models.Card, 0)
 	manager.level2Cards = make([]models.Card, 0)
@@ -79,7 +78,6 @@ func InitCardPool() error {
 			totalCards++
 		}
 	}
-
 
 	return nil
 }
@@ -169,4 +167,24 @@ func (cpm *CardPoolManager) GetCardByName(cardName string) (*models.Card, error)
 	}
 
 	return nil, fmt.Errorf("card with name '%s' not found in card pool", cardName)
+}
+
+// cardDecksFromConfig 把配置表中的卡牌定义转换为领域模型
+func cardDecksFromConfig(table config.CardTable) []models.CardDeck {
+	decks := make([]models.CardDeck, 0, len(table.Cards))
+	for _, c := range table.Cards {
+		deck := models.CardDeck{
+			ID:       c.ID,
+			Name:     c.Name,
+			CardsNum: c.Count,
+			Damage:   c.Damage,
+			Level:    c.Level,
+		}
+		if c.Target != "" {
+			target := c.Target
+			deck.TargetName = &target
+		}
+		decks = append(decks, deck)
+	}
+	return decks
 }

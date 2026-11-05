@@ -1,0 +1,29 @@
+# ============================================================
+# 羁绊配置表
+# ------------------------------------------------------------
+# 一次出牌中同时包含某个羁绊的全部卡牌时触发，触发后这些卡牌的
+# 伤害由羁绊伤害替代（取总伤害最高的组合，见 logic/bond_calculator.go）。
+# 来源：客户端 StreamingAssets/Config/BondConfig.sql（按卡牌名称关联）。
+#
+# 字段说明：
+#   id          羁绊编号，唯一
+#   name        羁绊名称（客户端显示）
+#   level       羁绊等级
+#   damage      触发后的伤害
+#   skill       技能标识（预留，当前未使用）
+#   description 说明文字（客户端悬停提示中显示）
+#   cards       组成羁绊的卡牌名称，必须在 cards.yaml 中存在，最多 7 张
+# ============================================================
+bonds:
+  - { id:  1, name: 修行之道, level: 1, damage: 5.0, skill: "", description: 不同信仰的修行者, cards: [道童, 沙弥] }
+  - { id:  2, name: 工匠初心, level: 1, damage: 5.0, skill: "", description: 工艺学徒的初始羁绊, cards: [木匠学徒, 铁匠学徒] }
+  - { id:  3, name: 艺术启蒙, level: 1, damage: 8.0, skill: "", description: 艺术领域的学徒, cards: [艺术学徒, 设计学徒, 学生] }
+  - { id:  4, name: 劳动力量, level: 1, damage: 8.0, skill: "", description: 劳动与军事的基础, cards: [农民学徒, 兵卒, 吏员] }
+  - { id:  5, name: 求学路, level: 1, damage: 8.0, skill: "", description: 求知的年轻人, cards: [学生, 医学生, 道童] }
+  - { id:  6, name: 服务民众, level: 1, damage: 8.0, skill: "", description: 为民服务的基层, cards: [吏员, 小贩, 农民学徒] }
+  - { id:  7, name: 医护之道, level: 1, damage: 8.0, skill: "", description: 关注生命的医者, cards: [医学生, 道童, 沙弥] }
+  - { id:  8, name: 军政基础, level: 1, damage: 12.0, skill: "", description: 军事与政治的基础, cards: [兵卒, 吏员, 学生, 木匠学徒] }
+  - { id:  9, name: 文武之道, level: 1, damage: 12.0, skill: "", description: 文武并重, cards: [学生, 兵卒, 艺术学徒, 医学生] }
+  - { id: 10, name: 创意火花, level: 1, damage: 12.0, skill: "", description: 设计与学习的结合, cards: [设计学徒, 学生, 艺术学徒, 小贩] }
+  - { id: 11, name: 手工艺术, level: 1, damage: 15.0, skill: "", description: 手工与艺术的结合, cards: [木匠学徒, 艺术学徒, 铁匠学徒, 设计学徒, 农民学徒] }
+  - { id: 12, name: 实用技能, level: 1, damage: 18.0, skill: "", description: 实用性技能, cards: [铁匠学徒, 医学生, 兵卒, 道童, 吏员, 小贩] }

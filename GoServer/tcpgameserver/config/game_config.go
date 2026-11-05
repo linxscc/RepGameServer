@@ -116,6 +116,8 @@ type Tables struct {
 	Bot      BotConfig
 	Network  NetworkConfig
 	Messages Messages
+	Cards    CardTable // 卡牌数据（cards.yaml）
+	Bonds    BondTable // 羁绊数据（bonds.yaml）
 }
 
 var (
@@ -146,6 +148,8 @@ func Load(overrideDir string) (*Tables, error) {
 		{"bot.yaml", &t.Bot},
 		{"network.yaml", &t.Network},
 		{"messages.yaml", &t.Messages},
+		{"cards.yaml", &t.Cards},
+		{"bonds.yaml", &t.Bonds},
 	}
 	for _, f := range files {
 		data, err := readTable(overrideDir, f.name)
@@ -216,6 +220,9 @@ func (t *Tables) validate() error {
 		"network.auth password length range is invalid (max 72)")
 
 	if err := t.Messages.validate(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := validateCardData(t.Cards, t.Bonds); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)

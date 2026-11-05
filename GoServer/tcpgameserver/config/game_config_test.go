@@ -57,3 +57,36 @@ func TestInvalidValueIsRejected(t *testing.T) {
 		t.Fatalf("expected validation errors, got %v", err)
 	}
 }
+
+func TestCardAndBondTables(t *testing.T) {
+	tables, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tables.Cards.Cards) != 31 || len(tables.Bonds.Bonds) != 12 {
+		t.Fatalf("unexpected table sizes: %d cards, %d bonds", len(tables.Cards.Cards), len(tables.Bonds.Bonds))
+	}
+	for _, c := range tables.Cards.Cards {
+		if c.Name == "Fire" || c.Name == "Water" || c.Name == "Wind" {
+			t.Fatalf("placeholder card %q must not be in the card table", c.Name)
+		}
+	}
+}
+
+func TestCardTableRejectsBrokenReferences(t *testing.T) {
+	cards := CardTable{Cards: []CardDef{
+		{ID: 1, Name: "A", Count: 3, Level: 1, Target: "Missing"},
+		{ID: 2, Name: "B", Count: 1, Level: 2},
+		{ID: 3, Name: "C", Count: 1, Level: 3},
+	}}
+	bonds := BondTable{Bonds: []BondDef{{ID: 1, Name: "X", Cards: []string{"A", "Nope"}}}}
+	err := validateCardData(cards, bonds)
+	if err == nil || !strings.Contains(err.Error(), "Missing") || !strings.Contains(err.Error(), "Nope") {
+		t.Fatalf("expected broken target and bond reference errors, got %v", err)
+	}
+
+	cards.Cards[0].Target = "C" // 等级跳级（1 -> 3）
+	if err := validateCardData(cards, BondTable{}); err == nil || !strings.Contains(err.Error(), "level 2") {
+		t.Fatalf("expected level-skip error, got %v", err)
+	}
+}
