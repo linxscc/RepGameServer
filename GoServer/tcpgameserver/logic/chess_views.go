@@ -12,12 +12,14 @@ func matchConfigMessage(roomID string, m *rules.Match) *pb.ServerMessage {
 	cfg := m.Config()
 	r := cfg.Rules
 	msg := &pb.MatchConfig{
-		RoomId:      roomID,
-		MaxStar:     int32(r.Merge.MaxStar),
-		BenchSize:   int32(r.Board.BenchSize),
-		RefreshCost: int32(r.Economy.RefreshCost),
-		XpCost:      int32(r.Economy.XPCost),
-		MaxLevel:    int32(cfg.MaxLevel()),
+		RoomId:       roomID,
+		MaxStar:      int32(r.Merge.MaxStar),
+		BenchSize:    int32(r.Board.BenchSize),
+		RefreshCost:  int32(r.Economy.RefreshCost),
+		XpCost:       int32(r.Economy.XPCost),
+		MaxLevel:     int32(cfg.MaxLevel()),
+		StartHp:      int32(r.Player.StartHP),
+		BondTierMult: r.Battle.BondTierMult,
 	}
 	for _, l := range cfg.Lines {
 		msg.Lines = append(msg.Lines, &pb.LineInfo{

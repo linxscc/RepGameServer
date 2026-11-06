@@ -333,6 +333,8 @@ message MatchConfig {
   int32 refresh_cost = 10;
   int32 xp_cost = 11;
   int32 max_level = 12;
+  int32 start_hp = 13;          // 初始血量（血条上限）
+  double bond_tier_mult = 14;   // 每个生效羁绊档位的通用倍率加成
 }
 
 // ---------- 动态状态 ----------
