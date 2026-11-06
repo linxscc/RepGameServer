@@ -74,11 +74,12 @@ type RulesTable struct {
 	} `yaml:"economy"`
 	Levels []LevelDef `yaml:"levels"`
 	Board  struct {
-		BenchSize     int `yaml:"bench_size"`
-		RelicSlots    int `yaml:"relic_slots"`
-		ShopSize      int `yaml:"shop_size"`
-		MaxLockRounds int `yaml:"max_lock_rounds"`
-		MinSlots      int `yaml:"min_slots"`
+		BenchSize     int  `yaml:"bench_size"`
+		RelicSlots    int  `yaml:"relic_slots"`
+		ShopSize      int  `yaml:"shop_size"`
+		MaxLockRounds int  `yaml:"max_lock_rounds"`
+		MinSlots      int  `yaml:"min_slots"`
+		ShopRelic     bool `yaml:"shop_relic"` // 商店是否出售法宝（关闭时法宝只能从宝库获得）
 	} `yaml:"board"`
 	Merge struct {
 		GroupSize      int `yaml:"group_size"`

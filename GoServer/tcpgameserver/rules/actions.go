@@ -107,7 +107,10 @@ func (m *Match) rollShop(p *Player) {
 	for i := range p.Shop {
 		p.Shop[i] = m.drawShopCard(p)
 	}
-	p.ShopRelic = m.randomRelic(p, m.cfg.Level(p.Level).RelicOdds, nil)
+	p.ShopRelic = -1
+	if m.cfg.Rules.Board.ShopRelic {
+		p.ShopRelic = m.randomRelic(p, m.cfg.Level(p.Level).RelicOdds, nil)
+	}
 }
 
 func (m *Match) requirePrep(p *Player) error {

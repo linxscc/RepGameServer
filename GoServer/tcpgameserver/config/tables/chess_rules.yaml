@@ -44,6 +44,7 @@ board:
   shop_size: 5         # 商店卡位
   max_lock_rounds: 2   # 同一批商品最多连续锁定几回合
   min_slots: 1         # 出阵格下限（家世减格后不低于此值）
+  shop_relic: false    # 商店是否出售法宝；false 时法宝只能从宝库三选一获得
 
 merge:
   group_size: 3        # 几张同系同星合成一张
