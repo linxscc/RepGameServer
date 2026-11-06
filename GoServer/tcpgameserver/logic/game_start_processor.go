@@ -2,11 +2,11 @@ package logic
 
 import (
 	"GoServer/tcpgameserver/config"
-	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/types"
 	"fmt"
 	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -19,12 +19,17 @@ func NewGameStartProcessor() *GameStartProcessor {
 	return &GameStartProcessor{}
 }
 
-// ProcessGameStart 处理游戏开始事件：尝试用已准备的真人玩家凑满一个房间
-func (g *GameStartProcessor) ProcessGameStart(eventData interface{}) error {
-	if _, ok := eventData.(*events.EventData); !ok {
-		return fmt.Errorf("invalid event data type")
+// TryStartMatch 尝试用已准备的真人玩家凑满一个房间（人数不足时什么都不做）。
+// 由 ready 请求在后台 goroutine 中调用，panic 只记录日志、不影响服务器。
+func TryStartMatch() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("matchmaking panicked: %v\n%s", r, debug.Stack())
+		}
+	}()
+	if err := NewGameStartProcessor().performMatchmaking(); err != nil {
+		log.Printf("matchmaking: %v", err)
 	}
-	return g.performMatchmaking()
 }
 
 // CreateGameRoom 创建游戏房间

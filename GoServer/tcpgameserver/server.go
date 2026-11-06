@@ -12,7 +12,6 @@ import (
 	"GoServer/tcpgameserver/config"
 	messagehandle "GoServer/tcpgameserver/messageHandle"
 	"GoServer/tcpgameserver/protocol"
-	"GoServer/tcpgameserver/setup"
 	"GoServer/tcpgameserver/tlsutil"
 )
 
@@ -20,10 +19,8 @@ import (
 func StartTCPServer() {
 	// 先加载并校验配置表，配置有误时在启动阶段就失败
 	cfg := config.Game()
-	log.Printf("config loaded: %d players/room, turn %ds, bot match after %ds (enabled=%v)",
-		cfg.Rules.Match.PlayersPerRoom, cfg.Rules.Turn.TimeoutSeconds, cfg.Bot.MatchWaitSeconds, cfg.Bot.Enabled)
-
-	setup.InitializeServer()
+	log.Printf("config loaded: %d players/room, bot match after %ds (enabled=%v)",
+		cfg.Rules.Match.PlayersPerRoom, cfg.Bot.MatchWaitSeconds, cfg.Bot.Enabled)
 
 	ln, err := listen()
 	if err != nil {

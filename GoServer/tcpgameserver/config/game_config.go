@@ -24,28 +24,11 @@ import (
 //go:embed tables/*.yaml
 var embeddedTables embed.FS
 
-// GameRules 对局规则（game_rules.yaml）
+// GameRules 匹配规则（game_rules.yaml）；对局数值见 chess_*.yaml
 type GameRules struct {
 	Match struct {
 		PlayersPerRoom int `yaml:"players_per_room"` // 每个房间的玩家数量（含机器人）
 	} `yaml:"match"`
-	Player struct {
-		InitialHealth   float64 `yaml:"initial_health"`    // 初始血量（同时是血量上限）
-		InitialHandSize int     `yaml:"initial_hand_size"` // 开局手牌数
-		MaxHandCards    int     `yaml:"max_hand_cards"`    // 手牌上限
-		DrawAfterPlay   int     `yaml:"draw_after_play"`   // 出牌后补牌数
-	} `yaml:"player"`
-	Turn struct {
-		TimeoutSeconds int `yaml:"timeout_seconds"` // 人类玩家每回合思考时间
-	} `yaml:"turn"`
-	Compose struct {
-		GroupSize int `yaml:"group_size"` // 合成所需同名卡牌数
-	} `yaml:"compose"`
-}
-
-// TurnTimeout 人类玩家回合超时时间
-func (r GameRules) TurnTimeout() time.Duration {
-	return time.Duration(r.Turn.TimeoutSeconds) * time.Second
 }
 
 // BotConfig 机器人对局（bot.yaml）
@@ -53,18 +36,11 @@ type BotConfig struct {
 	Enabled          bool   `yaml:"enabled"`            // 是否启用机器人对局
 	MatchWaitSeconds int    `yaml:"match_wait_seconds"` // 等待真人对手的最长时间
 	NamePrefix       string `yaml:"name_prefix"`        // 机器人名称前缀（禁止注册）
-	ThinkDelayMs     int    `yaml:"think_delay_ms"`     // 机器人出牌前的思考时间
-	MaxCardsPerPlay  int    `yaml:"max_cards_per_play"` // 机器人一次最多出牌数
 }
 
 // MatchWait 开始匹配后等待真人对手的时长
 func (b BotConfig) MatchWait() time.Duration {
 	return time.Duration(b.MatchWaitSeconds) * time.Second
-}
-
-// ThinkDelay 机器人出牌前的思考时长
-func (b BotConfig) ThinkDelay() time.Duration {
-	return time.Duration(b.ThinkDelayMs) * time.Millisecond
 }
 
 // NetworkConfig 网络与账号安全（network.yaml）
@@ -135,8 +111,6 @@ type Tables struct {
 	Bot      BotConfig
 	Network  NetworkConfig
 	Messages Messages
-	Cards    CardTable // 卡牌数据（cards.yaml）
-	Bonds    BondTable // 羁绊数据（bonds.yaml）
 
 	// Chess 新版规则（chess_*.yaml），由 rules 包使用
 	Chess *rules.Config
@@ -177,8 +151,6 @@ func Load(overrideDir string) (*Tables, error) {
 		{"bot.yaml", &t.Bot},
 		{"network.yaml", &t.Network},
 		{"messages.yaml", &t.Messages},
-		{"cards.yaml", &t.Cards},
-		{"bonds.yaml", &t.Bonds},
 		{"chess_rules.yaml", &chessRules},
 		{"chess_lines.yaml", &chessLines},
 		{"chess_bonds.yaml", &chessBonds},
@@ -230,19 +202,11 @@ func (t *Tables) validate() error {
 	}
 
 	r := t.Rules
-	check(r.Match.PlayersPerRoom == 2, "game_rules.match.players_per_room must be 2 (turn logic is 1v1), got %d", r.Match.PlayersPerRoom)
-	check(r.Player.InitialHealth > 0, "game_rules.player.initial_health must be > 0")
-	check(r.Player.InitialHandSize > 0 && r.Player.InitialHandSize <= r.Player.MaxHandCards,
-		"game_rules.player.initial_hand_size must be in 1..max_hand_cards")
-	check(r.Player.DrawAfterPlay >= 0, "game_rules.player.draw_after_play must be >= 0")
-	check(r.Turn.TimeoutSeconds >= 5, "game_rules.turn.timeout_seconds must be >= 5")
-	check(r.Compose.GroupSize >= 2, "game_rules.compose.group_size must be >= 2")
+	check(r.Match.PlayersPerRoom == 2, "game_rules.match.players_per_room must be 2 (chess matches are 1v1), got %d", r.Match.PlayersPerRoom)
 
 	b := t.Bot
 	check(b.MatchWaitSeconds >= 0, "bot.match_wait_seconds must be >= 0")
 	check(b.NamePrefix != "", "bot.name_prefix must not be empty")
-	check(b.ThinkDelayMs >= 0, "bot.think_delay_ms must be >= 0")
-	check(b.MaxCardsPerPlay >= 1, "bot.max_cards_per_play must be >= 1")
 
 	n := t.Network
 	check(n.Connection.ListenAddr != "", "network.connection.listen_addr must not be empty")
@@ -265,9 +229,6 @@ func (t *Tables) validate() error {
 		"network.auth password length range is invalid (max 72)")
 
 	if err := t.Messages.validate(); err != nil {
-		errs = append(errs, err)
-	}
-	if err := validateCardData(t.Cards, t.Bonds); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)

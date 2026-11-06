@@ -50,14 +50,3 @@ func presenceMessage(username, roomID string, status pb.PresenceStatus, reason s
 		Reason:   reason,
 	}}}
 }
-
-// requestMeta 从事件数据中取出发起请求的客户端和请求序号。
-func requestMeta(get func(string) (interface{}, bool)) (clientID string, seq uint32) {
-	if v, ok := get("client_id"); ok {
-		clientID, _ = v.(string)
-	}
-	if v, ok := get("seq"); ok {
-		seq, _ = v.(uint32)
-	}
-	return
-}

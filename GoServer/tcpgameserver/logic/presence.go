@@ -17,7 +17,7 @@ import (
 // ------------------------------------------------------------
 // 对局中断线的玩家保留座位记录（StatusWaitingReconnect，连接为 nil），
 // 在 network.yaml 的 reconnect_grace_seconds 内用会话令牌或密码重新登录即可回到对局；
-// 期间对局照常进行，轮到他时按回合超时自动出牌。宽限期过后记录被清理，不再能恢复。
+// 期间对局照常进行，各阶段到时由计时器推进。宽限期过后记录被清理，不再能恢复。
 // 不在对局中的玩家断线时直接清理记录。
 //
 // 这些函数都在连接协程内同步调用，保证"标记断线"一定发生在"重连恢复"之前。
@@ -113,7 +113,7 @@ func roomHasPlayer(roomID, username string) bool {
 	return err == nil && room.HasPlayer(username) && room.GetStatus() == types.RoomStatusPlaying
 }
 
-// startReconnectGrace 宽限期结束仍未重连：清理座位记录（对局继续，由超时自动出牌）
+// startReconnectGrace 宽限期结束仍未重连：清理座位记录（对局继续，由阶段计时器推进）
 func startReconnectGrace(username, clientID string) {
 	graceMu.Lock()
 	defer graceMu.Unlock()

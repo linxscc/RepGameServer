@@ -35,12 +35,6 @@ const (
 	MsgMaxLevel       = "max_level"
 	MsgInvalidChoice  = "invalid_choice"
 	MsgInternalError  = "internal_error"
-
-	MsgReconnectPlayerNotFound = "reconnect_player_not_found"
-	MsgReconnectNotWaiting     = "reconnect_not_waiting"
-	MsgReconnectNoGame         = "reconnect_no_game"
-	MsgReconnectConnectionLost = "reconnect_connection_lost"
-	MsgReconnectBindFailed     = "reconnect_bind_failed"
 )
 
 var requiredMessageKeys = []string{
@@ -50,8 +44,6 @@ var requiredMessageKeys = []string{
 	MsgUsernameSpaces, MsgUsernameReserved, MsgPasswordLength, MsgTooManyAttempts,
 	MsgNotInGame, MsgWrongPhase, MsgNotEnoughGold, MsgBenchFull, MsgRelicSlotsFull,
 	MsgMaxLevel, MsgInvalidChoice, MsgInternalError,
-	MsgReconnectPlayerNotFound, MsgReconnectNotWaiting, MsgReconnectNoGame,
-	MsgReconnectConnectionLost, MsgReconnectBindFailed,
 }
 
 // Text 返回消息文本；args 非空时按占位符格式化。

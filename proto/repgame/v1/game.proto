@@ -25,14 +25,13 @@ message ClientMessage {
   // 客户端自增请求序号；服务器在对应回复的 reply_to 中原样带回。
   uint32 seq = 1;
 
+  reserved 14, 15, 16; // 旧版回合制：play_cards / compose_cards / restart
+
   oneof body {
     LoginRequest login = 10;
     RegisterRequest register = 11;
     ResumeSessionRequest resume_session = 12;
     ReadyRequest ready = 13;
-    PlayCardsRequest play_cards = 14;
-    ComposeCardsRequest compose_cards = 15;
-    RestartRequest restart = 16;
     Ping ping = 17;
     GameAction game_action = 18;   // 新版对局的所有操作
     CancelMatchRequest cancel_match = 19;  // 取消匹配
@@ -44,13 +43,13 @@ message ServerMessage {
   // 回复的是哪条请求（ClientMessage.seq）；服务器主动推送时为 0。
   uint32 reply_to = 1;
 
+  reserved 13, 14; // 旧版回合制：game_state / bond_list
+
   oneof body {
     Error error = 2;
     Welcome welcome = 10;
     AuthResult auth_result = 11;
     RegisterResult register_result = 12;
-    GameState game_state = 13;
-    BondList bond_list = 14;
     PlayerPresence player_presence = 15;
     Pong pong = 16;
     MatchConfig match_config = 17;   // 开局下发一次：卡牌、羁绊、法宝、家世的静态数据
@@ -137,8 +136,6 @@ message RegisterResult {
 
 message ReadyRequest {}
 
-message RestartRequest {}
-
 message CancelMatchRequest {}
 
 // 匹配状态：searching = true 表示已在匹配队列中
@@ -146,80 +143,9 @@ message MatchmakingState {
   bool searching = 1;
 }
 
-message PlayCardsRequest {
-  string room_id = 1;
-  repeated string card_uids = 2; // 只传手牌 UID，牌面数值以服务器为准
-}
-
-message ComposeCardsRequest {
-  string room_id = 1;
-  repeated string card_uids = 2; // 数量必须是 3 的倍数
-}
-
 // ============================================================
-// 对局：服务器状态
+// 在线状态
 // ============================================================
-
-message Card {
-  string uid = 1;
-  int32 id = 2;
-  string name = 3;
-  double damage = 4;
-  optional string target_name = 5; // 合成目标；为空表示不可合成
-  int32 level = 6;
-}
-
-message Bond {
-  int32 id = 1;
-  string name = 2;
-  int32 level = 3;
-  repeated string card_names = 4;
-  double damage = 5;
-  string description = 6;
-  string skill = 7;
-}
-
-message BondList {
-  repeated Bond bonds = 1;
-}
-
-message OtherPlayer {
-  string username = 1;
-  string round = 2;
-  double health = 3;
-  int32 cards_count = 4;
-}
-
-message DamageInfo {
-  string source = 1;
-  string target = 2;
-  string type = 3;
-  double value = 4;
-  repeated Bond triggered_bonds = 5;
-}
-
-// 为什么推送这次状态
-enum GameStateReason {
-  GAME_STATE_REASON_UNSPECIFIED = 0;
-  GAME_STATE_REASON_GAME_STARTED = 1;
-  GAME_STATE_REASON_CARDS_PLAYED = 2;
-  GAME_STATE_REASON_CARDS_COMPOSED = 3;
-  GAME_STATE_REASON_FORCED_PLAY = 4;   // 超时被系统自动出牌
-  GAME_STATE_REASON_RECONNECTED = 5;
-  GAME_STATE_REASON_GAME_OVER = 6;
-}
-
-// 某个玩家视角下的完整对局状态
-message GameState {
-  GameStateReason reason = 1;
-  string room_id = 2;
-  string username = 3;
-  string round = 4;
-  double health = 5;
-  repeated Card self_cards = 6;
-  repeated OtherPlayer other_players = 7;
-  repeated DamageInfo damage_info = 8;
-}
 
 enum PresenceStatus {
   PRESENCE_STATUS_UNSPECIFIED = 0;

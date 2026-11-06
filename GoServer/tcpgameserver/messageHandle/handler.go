@@ -10,7 +10,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"GoServer/tcpgameserver/config"
-	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/logic"
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/protocol"
@@ -70,7 +69,6 @@ var routes = map[protoreflect.Name]route{
 	"resume_session": {requireAuth: false, handle: HandleResumeSession},
 	"ping":           {requireAuth: false, handle: HandlePing},
 	"ready":          {requireAuth: true, handle: HandleReady},
-	"restart":        {requireAuth: true, handle: HandleRestart},
 	"game_action":    {requireAuth: true, handle: HandleGameAction},
 	"cancel_match":   {requireAuth: true, handle: HandleCancelMatch},
 }
@@ -132,14 +130,6 @@ func HandleNewConnection(conn net.Conn) string {
 		connManager.RemoveConnection(existingInfo.ClientID)
 	}
 	connManager.AddConnection(conn, clientID)
-
-	// 发布客户端连接事件
-	connectData := events.CreateConnectionEventData(events.EventClientConnect, clientID, remoteAddr)
-	connectData.AddData("connection_type", "tls")
-	connectData.AddData("user_agent", "game_client")
-	connectData.AddData("version", fmt.Sprint(protocol.ProtocolVersion))
-	connectData.AddData("first_connect_time", time.Now().Unix())
-	events.Publish(events.EventClientConnect, connectData)
 
 	SendWelcome(conn)
 	return clientID
