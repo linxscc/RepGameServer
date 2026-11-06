@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"GoServer/tcpgameserver/rules"
 )
 
 // 配置表文件随代码一起编译进二进制（config/tables/*.yaml），
@@ -135,6 +137,9 @@ type Tables struct {
 	Messages Messages
 	Cards    CardTable // 卡牌数据（cards.yaml）
 	Bonds    BondTable // 羁绊数据（bonds.yaml）
+
+	// Chess 新版规则（chess_*.yaml），由 rules 包使用
+	Chess *rules.Config
 }
 
 var (
@@ -157,6 +162,13 @@ func Game() *Tables {
 // Load 读取并校验配置表；overrideDir 为空时只使用内置配置。
 func Load(overrideDir string) (*Tables, error) {
 	t := &Tables{}
+	var (
+		chessRules    rules.RulesTable
+		chessLines    rules.LinesFile
+		chessBonds    rules.BondsFile
+		chessRelics   rules.RelicsFile
+		chessFamilies rules.FamiliesFile
+	)
 	files := []struct {
 		name string
 		dst  interface{}
@@ -167,6 +179,11 @@ func Load(overrideDir string) (*Tables, error) {
 		{"messages.yaml", &t.Messages},
 		{"cards.yaml", &t.Cards},
 		{"bonds.yaml", &t.Bonds},
+		{"chess_rules.yaml", &chessRules},
+		{"chess_lines.yaml", &chessLines},
+		{"chess_bonds.yaml", &chessBonds},
+		{"chess_relics.yaml", &chessRelics},
+		{"chess_families.yaml", &chessFamilies},
 	}
 	for _, f := range files {
 		data, err := readTable(overrideDir, f.name)
@@ -179,6 +196,11 @@ func Load(overrideDir string) (*Tables, error) {
 			return nil, fmt.Errorf("%s: %w", f.name, err)
 		}
 	}
+	chess, err := rules.NewConfig(chessRules, chessLines, chessBonds, chessRelics, chessFamilies)
+	if err != nil {
+		return nil, err
+	}
+	t.Chess = chess
 	if err := t.validate(); err != nil {
 		return nil, err
 	}

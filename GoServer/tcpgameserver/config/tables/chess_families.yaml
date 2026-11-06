@@ -1,0 +1,14 @@
+# ============================================================
+# 家世表：开局几选一（chess_rules.yaml 的 player.family_offer），整局生效
+# ------------------------------------------------------------
+# key 决定效果（rules/effects.go 的 familyParams），params 为数值。
+# ============================================================
+families:
+  - { key: merchant, name: 商贾世家, desc: 开局 +6 金,                       params: { gold: 6 } }
+  - { key: scholar,  name: 书香门第, desc: 开局获得 1 个随机普通法宝,          params: { relics: 1 } }
+  - { key: general,  name: 将门之后, desc: 开局直接 2 级,                     params: { level: 2 } }
+  - { key: artisan,  name: 匠人之家, desc: 开局发的第一张卡直接是 2★,          params: { star: 2 } }
+  - { key: noble,    name: 名门望族, desc: 宝库改为四选一,                    params: { extra_offer: 1 } }
+  - { key: poor,     name: 寒门,     desc: 每输一回合额外 +1 金,               params: { gold_per_loss: 1 } }
+  - { key: miser,    name: 守财奴,   desc: 利息上限 +2，基础收入改为 4,         params: { interest_cap: 2, income_delta: -1 } }
+  - { key: hermit,   name: 方外之人, desc: 法宝栏 +1，出阵格 −2,               params: { relic_slots: 1, board_slots: -2 } }

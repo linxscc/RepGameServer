@@ -1,0 +1,93 @@
+# ============================================================
+# 对局规则数值表（新版：商店 + 合成 + 法宝）
+# ------------------------------------------------------------
+# 数值来源：卡牌规则设计文档「现行版」，已用 tools/rulesim 模拟验证。
+# 修改后重新部署即可生效；也可放到 GAME_CONFIG_DIR 覆盖（无需重新编译）。
+# 启动时会做合法性校验，非法配置会导致服务器拒绝启动。
+# ============================================================
+
+player:
+  start_hp: 100        # 初始血量
+  start_gold: 0        # 初始金币（第 1 回合开始时还会发收入）
+  start_cards: 2       # 开局发几张不同的卡，直接放上出阵
+  start_card_cost: 1   # 开局卡从哪个费用档发
+  family_offer: 3      # 开局家世几选一
+
+economy:
+  base_income: 5       # 每回合基础收入
+  interest_step: 10    # 每持有多少金 +1 利息（按收入前的金币计算）
+  interest_cap: 5      # 利息上限
+  win_bonus: 1         # 上回合获胜额外 +金
+  streak_gold:         # 连胜或连败达到 at 场时 +gold（取最高一档）
+    - { at: 2, gold: 1 }
+    - { at: 4, gold: 2 }
+    - { at: 6, gold: 3 }
+  refresh_cost: 2      # 刷新商店
+  xp_cost: 4           # 买经验花费
+  xp_per_buy: 4        # 每次买到的经验
+  auto_xp: 2           # 每回合自动经验
+  auto_xp_from_round: 2
+  merged_sell_loss: 1  # 合成卡卖出少返还的金币（堵住“买入→合成→卖出”的无限成长）
+
+# 等级：升到下一级所需经验、出阵格、商店卡牌费用概率（1/2/3 费，%）、商店法宝稀有度概率（%）
+levels:
+  - { level: 1, xp_to_next: 2,  slots: 3, shop_odds: [100, 0, 0], relic_odds: [80, 20, 0] }
+  - { level: 2, xp_to_next: 4,  slots: 4, shop_odds: [80, 20, 0],  relic_odds: [80, 20, 0] }
+  - { level: 3, xp_to_next: 8,  slots: 5, shop_odds: [65, 30, 5],  relic_odds: [60, 35, 5] }
+  - { level: 4, xp_to_next: 14, slots: 6, shop_odds: [50, 35, 15], relic_odds: [60, 35, 5] }
+  - { level: 5, xp_to_next: 24, slots: 7, shop_odds: [35, 40, 25], relic_odds: [45, 40, 15] }
+  - { level: 6, xp_to_next: 0,  slots: 8, shop_odds: [25, 40, 35], relic_odds: [45, 40, 15] }
+
+board:
+  bench_size: 8        # 备战席格数
+  relic_slots: 5       # 法宝栏格数
+  shop_size: 5         # 商店卡位
+  max_lock_rounds: 2   # 同一批商品最多连续锁定几回合
+  min_slots: 1         # 出阵格下限（家世减格后不低于此值）
+
+merge:
+  group_size: 3        # 几张同系同星合成一张
+  max_star: 3          # 最高星级
+  trigger_cap: 3       # “每次合成/卖出时”的奖励，每回合每个来源最多触发几次
+  star_multiplier: 3   # 每升一星点数乘几
+
+battle:
+  # 阶段伤害：回合数 ≤ until_round 时取 damage；最后一档之后每回合再 +late_damage_step
+  stages:
+    - { until_round: 4,  damage: 2 }
+    - { until_round: 8,  damage: 3 }
+    - { until_round: 12, damage: 5 }
+    - { until_round: 16, damage: 7 }
+    - { until_round: 20, damage: 9 }
+    - { until_round: 25, damage: 12 }
+  late_damage_step: 3
+  max_rounds: 30       # 强制结束回合
+  # 压制系数：胜方得分 ÷ 败方得分 ≥ ratio 时，扣血 = 阶段伤害 × factor（取最高一档）
+  suppression:
+    - { ratio: 2, factor: 1.25 }
+    - { ratio: 4, factor: 1.5 }
+    - { ratio: 8, factor: 2 }
+  score_cap: 1.0e15    # 单回合得分上限
+  bond_tier_mult: 1    # 每个生效的羁绊档位 +倍率（最高档算 2 档）
+
+vault:
+  rounds: [2, 6, 10, 14, 18, 22]  # 这些回合结算后进入宝库
+  offer: 3                        # 几选一
+  skip_gold: 2                    # 放弃时得到的金币
+  odds:                           # 从 from_round 开始使用的稀有度概率（%）
+    - { from_round: 1,  odds: [70, 30, 0] }
+    - { from_round: 3,  odds: [50, 45, 5] }
+    - { from_round: 7,  odds: [35, 50, 15] }
+    - { from_round: 11, odds: [20, 50, 30] }
+
+# 法宝稀有度（顺序即 relic_odds / odds 的下标顺序）
+rarities:
+  - { key: common, name: 普通, price: 4 }
+  - { key: rare,   name: 稀有, price: 6 }
+  - { key: epic,   name: 传说, price: 8 }
+
+timers:
+  family_seconds: 15   # 选家世
+  prep_seconds: 30     # 准备阶段
+  settle_seconds: 8    # 结算演出
+  vault_seconds: 15    # 宝库

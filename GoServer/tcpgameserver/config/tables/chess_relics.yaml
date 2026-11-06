@@ -1,0 +1,38 @@
+# ============================================================
+# 法宝表
+# ------------------------------------------------------------
+# key     法宝编号；它“做什么”由代码决定（rules/effects.go 的 relicBehaviours），
+#         这里只配名字、稀有度和数值。不要修改已有 key。
+# rarity  见 chess_rules.yaml 的 rarities
+# params  数值，每个 key 需要的参数名是固定的，缺了或多了都会启动失败
+# 通用规则：×倍率类（宗师印、杂家、独行侠、背水一战、乘风、文曲笔）不会被额外触发；
+#          复制类不能复制另一个复制类；成长类的复制品不成长。
+# ============================================================
+relics:
+  - { key: furnace,      name: 熔炉,     rarity: rare,   desc: 每合成一次，永久 +2 倍率,                        params: { per_merge: 2 } }
+  - { key: heirloom,     name: 传家宝,   rarity: common, desc: 2★ 卡结算时 +2 倍率,                             params: { mult: 2 } }
+  - { key: master_seal,  name: 宗师印,   rarity: epic,   desc: 出阵中每有一张 3★ 卡，倍率 ×1.3,                  params: { factor: 1.3 } }
+  - { key: graduation,   name: 出师礼,   rarity: common, desc: 每合成一次 +1 金,                                params: { gold: 1 } }
+  - { key: fellowship,   name: 同门帖,   rarity: common, desc: 每个生效中的羁绊 +1.5 倍率,                        params: { mult: 1.5 } }
+  - { key: sect_token,   name: 门派令,   rarity: rare,   desc: 选定行当计数 +1；该行当生效时再 +3 倍率,             params: { count: 1, mult: 3 } }
+  - { key: eclectic,     name: 杂家,     rarity: rare,   desc: 出阵中至少有 6 个不同的系，倍率 ×2,                 params: { min_lines: 6, factor: 2 } }
+  - { key: secret_art,   name: 家传绝学, rarity: rare,   desc: 选定行当的卡在逐卡阶段再结算一次,                   params: { repeats: 1 } }
+  - { key: lone_wolf,    name: 独行侠,   rarity: rare,   desc: 出阵不超过 3 张，倍率 ×2.5,                        params: { max_cards: 3, factor: 2.5 } }
+  - { key: lean,         name: 精兵简政, rarity: common, desc: 每个空着的出阵格 +3 倍率,                          params: { mult: 3 } }
+  - { key: vanguard,     name: 先锋旗,   rarity: common, desc: 最左边那张卡自己的点数 ×3,                         params: { factor: 3 } }
+  - { key: multitude,    name: 人多势众, rarity: common, desc: 每张出阵卡 +1 倍率,                                params: { mult: 1 } }
+  - { key: new_wave,     name: 后浪,     rarity: common, desc: 1★ 卡结算时 +4 点,                                params: { points: 4, mult: 0 } }
+  - { key: rearguard,    name: 殿后,     rarity: common, desc: 最右边那张卡结算时 +5 倍率,                         params: { mult: 5 } }
+  - { key: hidden,       name: 藏锋,     rarity: common, desc: 备战席每有一张 2★ 及以上的卡 +6 倍率,               params: { mult: 6 } }
+  - { key: storehouse,   name: 库房,     rarity: rare,   desc: 备战席每有一张卡 +15 点,                           params: { points: 15 } }
+  - { key: treasure,     name: 聚宝盆,   rarity: rare,   desc: 利息上限 +3,                                      params: { cap: 3 } }
+  - { key: piggy,        name: 存钱罐,   rarity: common, desc: 结算时每持有 10 金 +1 倍率,                         params: { per_gold: 10, mult: 1 } }
+  - { key: thrifty,      name: 精打细算, rarity: common, desc: 本回合没有刷新过（含免费刷新），结算时 +2 金,         params: { gold: 2 } }
+  - { key: accountant,   name: 账房,     rarity: rare,   desc: 每卖出一张 2★ 及以上的卡或一个法宝，永久 +2 倍率,     params: { per_sell: 2 } }
+  - { key: grudge,       name: 卧薪尝胆, rarity: common, desc: 每输一回合，永久 +1.5 倍率，上限 +25,                params: { per_loss: 1.5, cap: 25 } }
+  - { key: momentum,     name: 乘胜追击, rarity: rare,   desc: 进入本回合时每 1 场连胜 +3 倍率,                    params: { mult: 3 } }
+  - { key: last_stand,   name: 背水一战, rarity: rare,   desc: 血量低于 30 时，倍率 ×1.75,                         params: { hp_below: 30, factor: 1.75 } }
+  - { key: tailwind,     name: 乘风,     rarity: epic,   desc: 倍率 ×(1 + 0.15 × 等级),                          params: { per_level: 0.15 } }
+  - { key: literary_pen, name: 文曲笔,   rarity: epic,   desc: 文墨羁绊生效时，倍率 ×2,                            params: { factor: 2 } }
+  - { key: mirror,       name: 铜镜,     rarity: epic,   desc: 复制右边相邻法宝的效果（右边没有法宝时无效）,         params: {} }
+  - { key: rubbing,      name: 拓本,     rarity: rare,   desc: 复制最左边法宝的效果（自己在最左时无效）,             params: {} }

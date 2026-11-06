@@ -1,0 +1,62 @@
+# ============================================================
+# 羁绊表：按出阵中「不同的系」计数，达到 at 即生效，只取最高一档
+# ------------------------------------------------------------
+# 每档的 values 是通用修正项，可自由组合，新增羁绊不用改代码：
+#   计分类（按本回合出阵判断）
+#     points_per_card      每张出阵卡 +点
+#     add_mult             +倍率
+#     times_mult           ×倍率
+#     retrigger_left       最左边的法宝额外触发次数（×倍率类法宝不受影响）
+#   运营类（按上一回合结算时的出阵判断）
+#     gold_per_merge       每次合成 +金（每回合最多 merge.trigger_cap 次）
+#     merged_bonus_points  合成出的卡永久 +点（与上一项同时触发）
+#     free_refresh         每回合免费刷新次数
+#     xp_per_round         每回合 +经验
+#     extra_slots          出阵格 +N
+# 另有通用奖励：每个生效档位 +battle.bond_tier_mult 倍率（见 chess_rules.yaml）
+# ============================================================
+trades:
+  - key: craft
+    name: 百工
+    desc: 合成
+    tiers:
+      - { at: 2, values: { gold_per_merge: 1 } }
+      - { at: 3, values: { gold_per_merge: 1, merged_bonus_points: 3 } }
+  - key: letter
+    name: 文墨
+    desc: 加倍率
+    tiers:
+      - { at: 2, values: { add_mult: 2 } }
+      - { at: 3, values: { add_mult: 6 } }
+  - key: monk
+    name: 方外
+    desc: 法宝重复触发
+    tiers:
+      - { at: 2, values: { add_mult: 2 } }
+      - { at: 3, values: { retrigger_left: 1 } }
+  - key: court
+    name: 市朝
+    desc: 乘倍率
+    tiers:
+      - { at: 2, values: { times_mult: 1.3 } }
+      - { at: 3, values: { times_mult: 2 } }
+
+origins:
+  - key: rural
+    name: 乡野
+    desc: 加点数
+    tiers:
+      - { at: 2, values: { points_per_card: 2 } }
+      - { at: 4, values: { points_per_card: 6 } }
+  - key: market
+    name: 市井
+    desc: 免费刷新
+    tiers:
+      - { at: 2, values: { free_refresh: 1 } }
+      - { at: 4, values: { free_refresh: 3 } }
+  - key: hall
+    name: 庙堂
+    desc: 经验
+    tiers:
+      - { at: 2, values: { xp_per_round: 2 } }
+      - { at: 4, values: { xp_per_round: 2, extra_slots: 1 } }
