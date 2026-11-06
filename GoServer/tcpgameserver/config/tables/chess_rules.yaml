@@ -68,7 +68,7 @@ battle:
     - { ratio: 4, factor: 1.5 }
     - { ratio: 8, factor: 2 }
   score_cap: 1.0e15    # 单回合得分上限
-  bond_tier_mult: 1    # 每个生效的羁绊档位 +倍率（最高档算 2 档）
+  bond_tier_mult: 1    # 每个生效的羁绊档位 +气势（最高档算 2 档）
 
 vault:
   rounds: [2, 6, 10, 14, 18, 22]  # 这些回合结算后进入宝库

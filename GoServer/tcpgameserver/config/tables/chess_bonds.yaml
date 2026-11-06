@@ -4,16 +4,16 @@
 # 每档的 desc 是给玩家看的说明；values 是通用修正项，可自由组合，新增羁绊不用改代码：
 #   计分类（按本回合出阵判断）
 #     points_per_card      每张出阵卡 +点
-#     add_mult             +倍率
-#     times_mult           ×倍率
-#     retrigger_left       最左边的法宝额外触发次数（×倍率类法宝不受影响）
+#     add_mult             +气势
+#     times_mult           ×气势
+#     retrigger_left       最左边的法宝额外触发次数（×气势类法宝不受影响）
 #   运营类（按上一回合结算时的出阵判断）
 #     gold_per_merge       每次合成 +金（每回合最多 merge.trigger_cap 次）
 #     merged_bonus_points  合成出的卡永久 +点（与上一项同时触发）
 #     free_refresh         每回合免费刷新次数
 #     xp_per_round         每回合 +经验
 #     extra_slots          出阵格 +N
-# 另有通用奖励：每个生效档位 +battle.bond_tier_mult 倍率（见 chess_rules.yaml）
+# 另有通用奖励：每个生效档位 +battle.bond_tier_mult 气势（见 chess_rules.yaml）
 # ============================================================
 trades:
   - key: craft
@@ -21,33 +21,33 @@ trades:
     desc: 合成
     tiers:
       - { at: 2, desc: 每次合成 +1 金, values: { gold_per_merge: 1 } }
-      - { at: 3, desc: 每次合成 +1 金，合成出的卡永久 +3 点, values: { gold_per_merge: 1, merged_bonus_points: 3 } }
+      - { at: 3, desc: 每次合成 +1 金，合成出的卡永久 +3 战力, values: { gold_per_merge: 1, merged_bonus_points: 3 } }
   - key: letter
     name: 文墨
-    desc: 加倍率
+    desc: 加气势
     tiers:
-      - { at: 2, desc: +2 倍率, values: { add_mult: 2 } }
-      - { at: 3, desc: +6 倍率, values: { add_mult: 6 } }
+      - { at: 2, desc: +2 气势, values: { add_mult: 2 } }
+      - { at: 3, desc: +6 气势, values: { add_mult: 6 } }
   - key: monk
     name: 方外
     desc: 法宝重复触发
     tiers:
-      - { at: 2, desc: +2 倍率, values: { add_mult: 2 } }
+      - { at: 2, desc: +2 气势, values: { add_mult: 2 } }
       - { at: 3, desc: 最左边 1 个法宝额外触发 1 次, values: { retrigger_left: 1 } }
   - key: court
     name: 敕令
-    desc: 乘倍率
+    desc: 乘气势
     tiers:
-      - { at: 2, desc: 倍率 ×1.3, values: { times_mult: 1.3 } }
-      - { at: 3, desc: 倍率 ×2, values: { times_mult: 2 } }
+      - { at: 2, desc: 气势 ×1.3, values: { times_mult: 1.3 } }
+      - { at: 3, desc: 气势 ×2, values: { times_mult: 2 } }
 
 origins:
   - key: rural
     name: 山野
-    desc: 加点数
+    desc: 加战力
     tiers:
-      - { at: 2, desc: 每张出阵卡 +2 点, values: { points_per_card: 2 } }
-      - { at: 4, desc: 每张出阵卡 +6 点, values: { points_per_card: 6 } }
+      - { at: 2, desc: 每张出阵卡 +2 战力, values: { points_per_card: 2 } }
+      - { at: 4, desc: 每张出阵卡 +6 战力, values: { points_per_card: 6 } }
   - key: market
     name: 市井
     desc: 免费刷新

@@ -19,7 +19,7 @@ lines:
     pool: 13
     trade: craft
     origin: rural
-    legend: { key: mult_per_high_star, desc: 出阵中每张 2★ 及以上的卡 +1 倍率, params: { mult: 1 } }
+    legend: { key: mult_per_high_star, desc: 出阵中每张 2★ 及以上的卡 +1 气势, params: { mult: 1 } }
   - key: smith
     name: 炉火
     stars: [炉精, 毕方, 祝融]
@@ -28,7 +28,7 @@ lines:
     pool: 13
     trade: craft
     origin: market
-    legend: { key: grow_on_merge, desc: 每次合成永久 +6 点（每回合最多 3 次）, params: { points: 6 } }
+    legend: { key: grow_on_merge, desc: 每次合成永久 +6 战力（每回合最多 3 次）, params: { points: 6 } }
   - key: farmer
     name: 社稷
     stars: [稻草精, 土地公, 后土]
@@ -55,7 +55,7 @@ lines:
     pool: 13
     trade: monk
     origin: rural
-    legend: { key: mult_per_relic, desc: 每持有一个法宝 +1 倍率, params: { mult: 1 } }
+    legend: { key: mult_per_relic, desc: 每持有一个法宝 +1 气势, params: { mult: 1 } }
   - key: scholar
     name: 文昌
     stars: [书蠹, 魁星, 文昌帝君]
@@ -64,7 +64,7 @@ lines:
     pool: 13
     trade: letter
     origin: hall
-    legend: { key: mult_per_level, desc: +倍率，数值等于等级 × 2, params: { mult: 2 } }
+    legend: { key: mult_per_level, desc: +气势，数值等于等级 × 2, params: { mult: 2 } }
   - key: doctor
     name: 杏林
     stars: [参娃, 灵芝仙, 药王]
@@ -82,7 +82,7 @@ lines:
     pool: 11
     trade: letter
     origin: market
-    legend: { key: mult_per_bond, desc: 每个生效中的羁绊 +2 倍率, params: { mult: 2 } }
+    legend: { key: mult_per_bond, desc: 每个生效中的羁绊 +2 气势, params: { mult: 2 } }
   - key: designer
     name: 造化
     stars: [泥偶, 石敢当, 女娲]
@@ -91,7 +91,7 @@ lines:
     pool: 11
     trade: letter
     origin: hall
-    legend: { key: mult_per_line, desc: 出阵中每个不同的系 +1 倍率, params: { mult: 1 } }
+    legend: { key: mult_per_line, desc: 出阵中每个不同的系 +1 气势, params: { mult: 1 } }
   - key: trader
     name: 财神
     stars: [金蟾, 运财鬼, 赵公明]
@@ -109,7 +109,7 @@ lines:
     pool: 9
     trade: court
     origin: rural
-    legend: { key: times_mult, desc: 倍率 ×2, params: { factor: 2 } }
+    legend: { key: times_mult, desc: 气势 ×2, params: { factor: 2 } }
   - key: clerk
     name: 阴司
     stars: [鬼差, 判官, 阎罗王]
