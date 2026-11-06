@@ -89,5 +89,5 @@ rarities:
 timers:
   family_seconds: 15   # 选家世
   prep_seconds: 30     # 准备阶段
-  settle_seconds: 8    # 结算演出
+  settle_seconds: 10   # 结算演出（翻牌计分 + 火焰攻击）
   vault_seconds: 15    # 宝库

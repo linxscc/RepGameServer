@@ -64,3 +64,13 @@ func ScheduleBotMatch(clientID string) {
 		}
 	})
 }
+
+// CancelBotMatch 取消该玩家的机器人补位计时（玩家取消匹配时调用）。
+func CancelBotMatch(clientID string) {
+	botMatchMu.Lock()
+	defer botMatchMu.Unlock()
+	if t, ok := botMatchTimers[clientID]; ok {
+		t.Stop()
+		delete(botMatchTimers, clientID)
+	}
+}

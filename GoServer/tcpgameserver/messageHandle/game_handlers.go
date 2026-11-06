@@ -28,12 +28,28 @@ func HandleReady(ctx *Context, _ *pb.ClientMessage) {
 	bondsData.AddData("client_id", ctx.ClientID)
 	events.Publish(events.EventCardBonds, bondsData)
 
+	ctx.Reply(matchmakingState(true))
 	startMatchmaking(ctx.ClientID, stats["ready"])
+}
+
+// HandleCancelMatch 取消匹配：离开匹配队列并停止机器人补位计时。
+// 已经开局的玩家不受影响（状态不是 Ready 时什么都不做）。
+func HandleCancelMatch(ctx *Context, _ *pb.ClientMessage) {
+	if info, ok := ctx.ConnManager.GetConnectionByClientID(ctx.ClientID); ok && info.GetStatus() == types.StatusReady {
+		ctx.ConnManager.SetPlayerStatus(ctx.ClientID, types.StatusLoggedIn)
+	}
+	logic.CancelBotMatch(ctx.ClientID)
+	ctx.Reply(matchmakingState(false))
+}
+
+func matchmakingState(searching bool) *pb.ServerMessage {
+	return &pb.ServerMessage{Body: &pb.ServerMessage_Matchmaking{Matchmaking: &pb.MatchmakingState{Searching: searching}}}
 }
 
 // HandleRestart 对局结束后再来一局（与开始匹配流程相同，只是不再重复下发羁绊表）
 func HandleRestart(ctx *Context, _ *pb.ClientMessage) {
 	ctx.ConnManager.SetPlayerStatus(ctx.ClientID, types.StatusReady)
+	ctx.Reply(matchmakingState(true))
 	startMatchmaking(ctx.ClientID, ctx.ConnManager.GetConnectionStats()["ready"])
 }
 

@@ -35,6 +35,7 @@ message ClientMessage {
     RestartRequest restart = 16;
     Ping ping = 17;
     GameAction game_action = 18;   // 新版对局的所有操作
+    CancelMatchRequest cancel_match = 19;  // 取消匹配
   }
 }
 
@@ -56,6 +57,7 @@ message ServerMessage {
     MatchState match_state = 18;     // 每次状态变化后推送的完整视图
     RoundResult round_result = 19;   // 每回合结算
     MatchOver match_over = 20;       // 对局结束
+    MatchmakingState matchmaking = 21;  // 匹配状态（开始 / 取消匹配的回复）
   }
 }
 
@@ -136,6 +138,13 @@ message RegisterResult {
 message ReadyRequest {}
 
 message RestartRequest {}
+
+message CancelMatchRequest {}
+
+// 匹配状态：searching = true 表示已在匹配队列中
+message MatchmakingState {
+  bool searching = 1;
+}
 
 message PlayCardsRequest {
   string room_id = 1;

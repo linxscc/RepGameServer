@@ -72,6 +72,7 @@ var routes = map[protoreflect.Name]route{
 	"ready":          {requireAuth: true, handle: HandleReady},
 	"restart":        {requireAuth: true, handle: HandleRestart},
 	"game_action":    {requireAuth: true, handle: HandleGameAction},
+	"cancel_match":   {requireAuth: true, handle: HandleCancelMatch},
 }
 
 var bodyOneof = (&pb.ClientMessage{}).ProtoReflect().Descriptor().Oneofs().ByName("body")
