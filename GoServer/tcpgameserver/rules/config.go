@@ -13,6 +13,7 @@ import (
 
 type Tier struct {
 	At     int                `yaml:"at"`     // 达到几个不同的系
+	Desc   string             `yaml:"desc"`   // 给玩家看的效果说明
 	Values map[string]float64 `yaml:"values"` // 通用修正项，见 bondModifiers
 }
 
@@ -318,6 +319,7 @@ func (c *Config) validate() error {
 			check(len(bd.Tiers) > 0, "chess_bonds %s must have tiers", bd.Key)
 			for i, tr := range bd.Tiers {
 				check(tr.At >= 1, "chess_bonds %s tier %d: at must be >= 1", bd.Key, i)
+				check(tr.Desc != "", "chess_bonds %s tier %d: desc must not be empty", bd.Key, i)
 				check(i == 0 || tr.At > bd.Tiers[i-1].At, "chess_bonds %s tiers must be sorted by at", bd.Key)
 				for k := range tr.Values {
 					_, ok := bondModifiers[k]

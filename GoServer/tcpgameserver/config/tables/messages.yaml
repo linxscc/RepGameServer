@@ -33,11 +33,14 @@ password_length: "密码长度需为 %d-%d 字节"
 too_many_attempts: "尝试次数过多，请稍后再试"
 
 # ---------- 对局 ----------
-no_cards_to_play: "没有选择要打出的卡牌"
-# 占位符：合成所需的同名卡牌数量
-compose_count_invalid: "合成的卡牌数量必须是 %d 的倍数"
-cards_invalid: "所选卡牌不在手牌中或已被使用"
-not_your_turn: "还没轮到你出牌"
+not_in_game: "当前不在对局中"
+wrong_phase: "当前阶段不能进行该操作"
+not_enough_gold: "金币不足"
+bench_full: "备战席已满"
+relic_slots_full: "法宝栏已满"
+max_level: "已达到最高等级"
+invalid_choice: "选择的卡牌、栏位或选项无效"
+internal_error: "服务器内部错误"
 
 # ---------- 断线重连 ----------
 reconnect_player_not_found: "找不到该玩家"

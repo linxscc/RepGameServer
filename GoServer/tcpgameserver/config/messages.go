@@ -27,10 +27,14 @@ const (
 	MsgPasswordLength     = "password_length"
 	MsgTooManyAttempts    = "too_many_attempts"
 
-	MsgNoCardsToPlay       = "no_cards_to_play"
-	MsgComposeCountInvalid = "compose_count_invalid"
-	MsgCardsInvalid        = "cards_invalid"
-	MsgNotYourTurn         = "not_your_turn"
+	MsgNotInGame      = "not_in_game"
+	MsgWrongPhase     = "wrong_phase"
+	MsgNotEnoughGold  = "not_enough_gold"
+	MsgBenchFull      = "bench_full"
+	MsgRelicSlotsFull = "relic_slots_full"
+	MsgMaxLevel       = "max_level"
+	MsgInvalidChoice  = "invalid_choice"
+	MsgInternalError  = "internal_error"
 
 	MsgReconnectPlayerNotFound = "reconnect_player_not_found"
 	MsgReconnectNotWaiting     = "reconnect_not_waiting"
@@ -44,7 +48,8 @@ var requiredMessageKeys = []string{
 	MsgLoginRequired, MsgInvalidCredentials, MsgLoginUnavailable, MsgSessionExpired,
 	MsgLoggedInElsewhere, MsgUsernameTaken, MsgRegisterFailed, MsgUsernameLength,
 	MsgUsernameSpaces, MsgUsernameReserved, MsgPasswordLength, MsgTooManyAttempts,
-	MsgNoCardsToPlay, MsgComposeCountInvalid, MsgCardsInvalid, MsgNotYourTurn,
+	MsgNotInGame, MsgWrongPhase, MsgNotEnoughGold, MsgBenchFull, MsgRelicSlotsFull,
+	MsgMaxLevel, MsgInvalidChoice, MsgInternalError,
 	MsgReconnectPlayerNotFound, MsgReconnectNotWaiting, MsgReconnectNoGame,
 	MsgReconnectConnectionLost, MsgReconnectBindFailed,
 }

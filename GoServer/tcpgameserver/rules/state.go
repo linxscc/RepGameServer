@@ -445,7 +445,7 @@ func (m *Match) trigger(p *Player, key string) bool {
 	return true
 }
 
-func (m *Match) countCopies(p *Player, line, star int) int {
+func (m *Match) CountCopies(p *Player, line, star int) int {
 	n := 0
 	for _, cs := range [][]Card{p.Board, p.Bench} {
 		for _, c := range cs {
@@ -456,6 +456,15 @@ func (m *Match) countCopies(p *Player, line, star int) int {
 	}
 	return n
 }
+
+// XPToNext is the experience needed for the next level (0 at max level).
+func (m *Match) XPToNext(p *Player) int { return m.cfg.Level(p.Level).XPToNext }
+
+// RelicNeedsChoice reports whether acquiring the relic requires choosing a trade.
+func (m *Match) RelicNeedsChoice(relic int) bool { return m.behaviour(relic).choice }
+
+// HasThreeStar reports whether the player owns a max-star card of the line.
+func (m *Match) HasThreeStar(p *Player, line int) bool { return p.three[line] }
 
 func (m *Match) addXP(p *Player, n int) {
 	for n > 0 && p.Level < m.cfg.MaxLevel() {

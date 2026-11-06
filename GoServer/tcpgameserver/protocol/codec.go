@@ -10,7 +10,7 @@ import (
 )
 
 // ProtocolVersion 随不兼容的协议变更递增，通过 Welcome 告知客户端。
-const ProtocolVersion uint32 = 1
+const ProtocolVersion uint32 = 2
 
 // Send 序列化一条服务器消息并按帧写入连接。
 func Send(conn net.Conn, msg *pb.ServerMessage) error {

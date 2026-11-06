@@ -15,8 +15,11 @@ func TestEmbeddedTablesLoadAndValidate(t *testing.T) {
 	if tables.Rules.Player.InitialHealth <= 0 || tables.Bot.MatchWaitSeconds != 3 {
 		t.Fatalf("unexpected values: %+v %+v", tables.Rules.Player, tables.Bot)
 	}
-	if got := tables.Messages.Text(MsgComposeCountInvalid, 3); !strings.Contains(got, "3") {
+	if got := tables.Messages.Text(MsgUnsupportedRequest, "foo"); !strings.Contains(got, "foo") {
 		t.Fatalf("formatting failed: %q", got)
+	}
+	if tables.Chess == nil || len(tables.Chess.Lines) != 12 || len(tables.Chess.Relics) != 27 {
+		t.Fatal("chess tables should load: 12 lines, 27 relics")
 	}
 }
 

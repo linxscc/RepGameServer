@@ -44,6 +44,7 @@ func PlayerDisconnected(clientID, reason string) {
 			connManager.MarkWaitingReconnect(clientID)
 			startReconnectGrace(username, clientID)
 			notifyRoomPeers(roomID, username, presenceMessage(username, roomID, pb.PresenceStatus_PRESENCE_STATUS_DISCONNECTED, reason))
+			chessPresenceChanged(roomID)
 			log.Printf("player %s disconnected from room %s (%s), waiting for reconnect", username, roomID, reason)
 			return
 		}
@@ -93,7 +94,7 @@ func ResumeGame(clientID, username string) bool {
 		_ = connManager.SetPlayerStatus(clientID, types.StatusInGame)
 		_ = connManager.SetPlayerGameRoom(clientID, roomID)
 
-		sendRoomState(room, username, pb.GameStateReason_GAME_STATE_REASON_RECONNECTED)
+		chessResend(roomID, username)
 		notifyRoomPeers(roomID, username, presenceMessage(username, roomID, pb.PresenceStatus_PRESENCE_STATUS_RECONNECTED, ""))
 		return nil
 	})

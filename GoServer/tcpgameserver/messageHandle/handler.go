@@ -71,8 +71,7 @@ var routes = map[protoreflect.Name]route{
 	"ping":           {requireAuth: false, handle: HandlePing},
 	"ready":          {requireAuth: true, handle: HandleReady},
 	"restart":        {requireAuth: true, handle: HandleRestart},
-	"play_cards":     {requireAuth: true, handle: HandlePlayCards},
-	"compose_cards":  {requireAuth: true, handle: HandleComposeCards},
+	"game_action":    {requireAuth: true, handle: HandleGameAction},
 }
 
 var bodyOneof = (&pb.ClientMessage{}).ProtoReflect().Descriptor().Oneofs().ByName("body")

@@ -187,7 +187,7 @@ func (m *Match) CanBuyCard(p *Player, i int) error {
 	if len(p.Bench) < m.cfg.Rules.Board.BenchSize {
 		return nil
 	}
-	if m.countCopies(p, l, 1) >= m.cfg.Rules.Merge.GroupSize-1 {
+	if m.CountCopies(p, l, 1) >= m.cfg.Rules.Merge.GroupSize-1 {
 		return nil // completes a merge: total cards does not grow
 	}
 	return ErrBenchFull
@@ -213,7 +213,7 @@ func (m *Match) checkMerges(p *Player) []Card {
 		merged := false
 		for l := range m.cfg.Lines {
 			for s := 1; s < m.cfg.Rules.Merge.MaxStar && !merged; s++ {
-				if m.countCopies(p, l, s) >= m.cfg.Rules.Merge.GroupSize {
+				if m.CountCopies(p, l, s) >= m.cfg.Rules.Merge.GroupSize {
 					made = append(made, m.merge(p, l, s))
 					merged = true
 				}

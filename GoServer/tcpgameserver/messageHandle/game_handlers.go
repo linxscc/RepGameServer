@@ -47,38 +47,18 @@ func startMatchmaking(clientID string, readyCount int) {
 	logic.ScheduleBotMatch(clientID)
 }
 
-// HandlePlayCards 出牌：只接收牌的 UID，校验与结算交给业务层。
-// 在连接协程内同步处理，同一连接的请求按到达顺序执行。
-func HandlePlayCards(ctx *Context, msg *pb.ClientMessage) {
-	req := msg.GetPlayCards()
-	if req.GetRoomId() == "" || len(req.GetCardUids()) == 0 {
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CARDS, config.Msg(config.MsgNoCardsToPlay))
+// HandleGameAction 对局内的所有操作（买卖、刷新、摆阵、就绪、选择……）。
+// 只转发意图；校验、判定与结算全部在 logic / rules 中完成。
+func HandleGameAction(ctx *Context, msg *pb.ClientMessage) {
+	action := msg.GetGameAction()
+	if action == nil || action.GetAction() == nil {
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, config.Msg(config.MsgEmptyMessageBody))
 		return
 	}
-
-	logic.PlayCards(logic.PlayRequest{
-		RoomID:   req.GetRoomId(),
+	logic.HandleGameAction(logic.GameActionRequest{
 		Player:   ctx.Username(),
-		CardUIDs: req.GetCardUids(),
 		ClientID: ctx.ClientID,
 		Seq:      ctx.Seq,
-	})
-}
-
-// HandleComposeCards 合成：数量须为 group_size（game_rules.yaml）的倍数，其余校验交给业务层。
-func HandleComposeCards(ctx *Context, msg *pb.ClientMessage) {
-	req := msg.GetComposeCards()
-	need := config.Game().Rules.Compose.GroupSize
-	if req.GetRoomId() == "" || len(req.GetCardUids()) == 0 || len(req.GetCardUids())%need != 0 {
-		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CARDS, config.Msg(config.MsgComposeCountInvalid, need))
-		return
-	}
-
-	logic.ComposeCards(logic.ComposeRequest{
-		RoomID:   req.GetRoomId(),
-		Player:   ctx.Username(),
-		CardUIDs: req.GetCardUids(),
-		ClientID: ctx.ClientID,
-		Seq:      ctx.Seq,
+		Action:   action,
 	})
 }
