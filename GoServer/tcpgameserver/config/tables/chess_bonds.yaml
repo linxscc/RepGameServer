@@ -17,7 +17,7 @@
 # ============================================================
 trades:
   - key: craft
-    name: 百工
+    name: 天工
     desc: 合成
     tiers:
       - { at: 2, desc: 每次合成 +1 金, values: { gold_per_merge: 1 } }
@@ -35,7 +35,7 @@ trades:
       - { at: 2, desc: +2 倍率, values: { add_mult: 2 } }
       - { at: 3, desc: 最左边 1 个法宝额外触发 1 次, values: { retrigger_left: 1 } }
   - key: court
-    name: 市朝
+    name: 敕令
     desc: 乘倍率
     tiers:
       - { at: 2, desc: 倍率 ×1.3, values: { times_mult: 1.3 } }
@@ -43,7 +43,7 @@ trades:
 
 origins:
   - key: rural
-    name: 乡野
+    name: 山野
     desc: 加点数
     tiers:
       - { at: 2, desc: 每张出阵卡 +2 点, values: { points_per_card: 2 } }

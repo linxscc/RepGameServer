@@ -12,8 +12,8 @@
 # ============================================================
 lines:
   - key: carpenter
-    name: 木匠
-    stars: [木匠学徒, 木匠, 百工专家]
+    name: 木灵
+    stars: [木魅, 槐树姥姥, 句芒]
     cost: 1
     points: 2
     pool: 13
@@ -21,8 +21,8 @@ lines:
     origin: rural
     legend: { key: mult_per_high_star, desc: 出阵中每张 2★ 及以上的卡 +1 倍率, params: { mult: 1 } }
   - key: smith
-    name: 铁匠
-    stars: [铁匠学徒, 铁匠, 铸剑师]
+    name: 炉火
+    stars: [炉精, 毕方, 祝融]
     cost: 1
     points: 2
     pool: 13
@@ -30,17 +30,17 @@ lines:
     origin: market
     legend: { key: grow_on_merge, desc: 每次合成永久 +6 点（每回合最多 3 次）, params: { points: 6 } }
   - key: farmer
-    name: 农
-    stars: [农民学徒, 农民, 神农]
+    name: 社稷
+    stars: [稻草精, 土地公, 后土]
     cost: 1
     points: 2
     pool: 13
     trade: craft
     origin: rural
-    legend: { key: own_origin_count, desc: 乡野羁绊计数 +1, params: { count: 1 } }
+    legend: { key: own_origin_count, desc: 山野羁绊计数 +1, params: { count: 1 } }
   - key: taoist
-    name: 道
-    stars: [道童, 道士, 天师]
+    name: 玄门
+    stars: [黄巾力士, 王灵官, 真武大帝]
     cost: 1
     points: 2
     pool: 13
@@ -48,8 +48,8 @@ lines:
     origin: hall
     legend: { key: retrigger_left, desc: 最左边 1 个法宝额外触发 1 次, params: { count: 1 } }
   - key: monk
-    name: 僧
-    stars: [沙弥, 和尚, 住持]
+    name: 佛门
+    stars: [木鱼沙弥, 伏虎金刚, 地藏王]
     cost: 1
     points: 2
     pool: 13
@@ -57,8 +57,8 @@ lines:
     origin: rural
     legend: { key: mult_per_relic, desc: 每持有一个法宝 +1 倍率, params: { mult: 1 } }
   - key: scholar
-    name: 学
-    stars: [学生, 学者, 教授]
+    name: 文昌
+    stars: [书蠹, 魁星, 文昌帝君]
     cost: 1
     points: 2
     pool: 13
@@ -66,8 +66,8 @@ lines:
     origin: hall
     legend: { key: mult_per_level, desc: +倍率，数值等于等级 × 2, params: { mult: 2 } }
   - key: doctor
-    name: 医
-    stars: [医学生, 医师, 医圣]
+    name: 杏林
+    stars: [参娃, 灵芝仙, 药王]
     cost: 2
     points: 3
     pool: 11
@@ -75,8 +75,8 @@ lines:
     origin: market
     legend: { key: damage_taken, desc: 受到的伤害 ×0.7（向上取整）, params: { factor: 0.7 } }
   - key: artist
-    name: 艺
-    stars: [艺术学徒, 梦想家, 艺术家]
+    name: 丹青
+    stars: [墨灵, 画皮, 织女]
     cost: 2
     points: 3
     pool: 11
@@ -84,8 +84,8 @@ lines:
     origin: market
     legend: { key: mult_per_bond, desc: 每个生效中的羁绊 +2 倍率, params: { mult: 2 } }
   - key: designer
-    name: 设计
-    stars: [设计学徒, 设计师, 营造宗师]
+    name: 造化
+    stars: [泥偶, 石敢当, 女娲]
     cost: 2
     points: 3
     pool: 11
@@ -93,8 +93,8 @@ lines:
     origin: hall
     legend: { key: mult_per_line, desc: 出阵中每个不同的系 +1 倍率, params: { mult: 1 } }
   - key: trader
-    name: 商
-    stars: [小贩, 游商, 商人]
+    name: 财神
+    stars: [金蟾, 运财鬼, 赵公明]
     cost: 2
     points: 3
     pool: 11
@@ -102,8 +102,8 @@ lines:
     origin: market
     legend: { key: interest, desc: 利息改为每 10 金 +2，上限 +10, params: { rate: 2, cap: 10 } }
   - key: soldier
-    name: 兵
-    stars: [兵卒, 老兵, 统领]
+    name: 战魂
+    stars: [阴兵, 夜叉, 刑天]
     cost: 3
     points: 5
     pool: 9
@@ -111,8 +111,8 @@ lines:
     origin: rural
     legend: { key: times_mult, desc: 倍率 ×2, params: { factor: 2 } }
   - key: clerk
-    name: 吏
-    stars: [吏员, 官员, 相国]
+    name: 阴司
+    stars: [鬼差, 判官, 阎罗王]
     cost: 3
     points: 5
     pool: 9
