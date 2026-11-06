@@ -118,15 +118,15 @@ type Skill struct {
 }
 
 type LineDef struct {
-	Key    string   `yaml:"key"`
-	Name   string   `yaml:"name"`
-	Stars  []string `yaml:"stars"` // 各星级卡名，与客户端卡面同名
-	Cost   int      `yaml:"cost"`
-	Points int      `yaml:"points"` // 1★ 点数
-	Pool   int      `yaml:"pool"`
-	Trade  string   `yaml:"trade"`
-	Origin string   `yaml:"origin"`
-	Legend Skill    `yaml:"legend"` // 3★ 技能
+	Key    string `yaml:"key"`
+	Name   string `yaml:"name"`
+	Card   string `yaml:"card"` // 卡名（各星级相同），与客户端卡面同名
+	Cost   int    `yaml:"cost"`
+	Points int    `yaml:"points"` // 1★ 点数
+	Pool   int    `yaml:"pool"`
+	Trade  string `yaml:"trade"`
+	Origin string `yaml:"origin"`
+	Legend Skill  `yaml:"legend"` // 3★ 技能
 }
 
 type LinesFile struct {
@@ -302,7 +302,7 @@ func (c *Config) validate() error {
 	// lines
 	check(len(c.Lines) > 0, "chess_lines must not be empty")
 	for _, l := range c.Lines {
-		check(len(l.Stars) == r.Merge.MaxStar, "chess_lines %s must have %d star names", l.Key, r.Merge.MaxStar)
+		check(l.Card != "", "chess_lines %s needs a card name", l.Key)
 		check(l.Cost >= 1 && l.Cost <= maxCost, "chess_lines %s cost invalid", l.Key)
 		check(l.Points > 0 && l.Pool > 0, "chess_lines %s points/pool must be > 0", l.Key)
 		_, okT := c.tradeIdx[l.Trade]

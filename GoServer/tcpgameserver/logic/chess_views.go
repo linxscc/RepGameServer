@@ -23,7 +23,7 @@ func matchConfigMessage(roomID string, m *rules.Match) *pb.ServerMessage {
 	}
 	for _, l := range cfg.Lines {
 		msg.Lines = append(msg.Lines, &pb.LineInfo{
-			Key: l.Key, Name: l.Name, StarNames: l.Stars, Cost: int32(l.Cost), Points: int32(l.Points),
+			Key: l.Key, Name: l.Name, StarNames: []string{l.Card}, Cost: int32(l.Cost), Points: int32(l.Points),
 			TradeKey: l.Trade, OriginKey: l.Origin, LegendDesc: l.Legend.Desc,
 		})
 	}

@@ -194,7 +194,7 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 		}
 	}
 	for _, ls := range m.legendsOnWithLine(board) {
-		name := cfg.Lines[ls.line].Stars[cfg.Rules.Merge.MaxStar-1]
+		name := cfg.Lines[ls.line].Card
 		pp := ls.skill.Params
 		switch ls.skill.Key {
 		case "mult_per_high_star":

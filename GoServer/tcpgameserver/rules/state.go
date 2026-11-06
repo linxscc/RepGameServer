@@ -149,7 +149,7 @@ func (m *Match) SellPrice(c Card) int {
 	return m.copiesOf(c.Star)*cost - m.cfg.Rules.Economy.MergedSellLoss
 }
 
-func (m *Match) CardName(c Card) string { return m.cfg.Lines[c.Line].Stars[c.Star-1] }
+func (m *Match) CardName(c Card) string { return m.cfg.Lines[c.Line].Card }
 
 // ---------- family helpers ----------
 
