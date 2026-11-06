@@ -85,13 +85,3 @@ func ToGameState(info *models.PlayerGameInfo, reason pb.GameStateReason) *pb.Gam
 func GameStateMessage(info *models.PlayerGameInfo, reason pb.GameStateReason) *pb.ServerMessage {
 	return &pb.ServerMessage{Body: &pb.ServerMessage_GameState{GameState: ToGameState(info, reason)}}
 }
-
-// CardsFromUIDs 把客户端提交的 UID 列表转成仅含 UID 的卡牌，
-// 由业务层在服务器手牌中查找真实数据。
-func CardsFromUIDs(uids []string) []models.Card {
-	cards := make([]models.Card, 0, len(uids))
-	for _, uid := range uids {
-		cards = append(cards, models.Card{UID: uid})
-	}
-	return cards
-}

@@ -5,7 +5,21 @@ import (
 	"GoServer/tcpgameserver/models"
 	"fmt"
 	"math/rand"
+	"sort"
 	"sync"
+)
+
+// 房间状态
+const (
+	RoomStatusWaiting  = "waiting"
+	RoomStatusPlaying  = "playing"
+	RoomStatusFinished = "finished"
+)
+
+// 玩家回合状态
+const (
+	RoundCurrent = "current" // 轮到该玩家出牌
+	RoundWaiting = "waiting" // 等待对手
 )
 
 // PlayerInfo 房间内玩家信息
@@ -164,13 +178,12 @@ func (r *RoomInfo) GetPlayerInfo(username string) (*PlayerInfo, error) {
 	// 返回玩家信息副本
 	playerCopy := &PlayerInfo{
 		Username:      player.Username,
-		HandCards:     player.HandCards,
+		HandCards:     append([]models.Card(nil), player.HandCards...),
 		MaxHealth:     player.MaxHealth,
 		CurrentHealth: player.CurrentHealth,
 		Round:         player.Round,
 		IsReady:       player.IsReady,
 	}
-	copy(playerCopy.HandCards, player.HandCards)
 
 	return playerCopy, nil
 }
@@ -562,4 +575,143 @@ func (r *RoomInfo) DrawCardByNameFromPool(cardName string, level int) (*models.C
 	}
 
 	return nil, fmt.Errorf("card '%s' not found in %s pool", cardName, poolName)
+}
+
+// ------------------------------------------------------------
+// 以下方法供业务层读写房间而不直接访问内部字段，全部持有房间锁。
+// ------------------------------------------------------------
+
+// GetStatus 房间状态（见 RoomStatus* 常量）
+func (r *RoomInfo) GetStatus() string {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	return r.Status
+}
+
+// PlayerNames 房间内所有玩家，按名称排序（结果稳定）
+func (r *RoomInfo) PlayerNames() []string {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	names := make([]string, 0, len(r.Players))
+	for name := range r.Players {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// CurrentPlayer 当前回合的玩家；没有时返回空字符串
+func (r *RoomInfo) CurrentPlayer() string {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	for name, p := range r.Players {
+		if p.Round == RoundCurrent {
+			return name
+		}
+	}
+	return ""
+}
+
+// HasPlayer 玩家是否在房间中
+func (r *RoomInfo) HasPlayer(username string) bool {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	_, ok := r.Players[username]
+	return ok
+}
+
+// AnyPlayerDefeated 是否有玩家血量归零
+func (r *RoomInfo) AnyPlayerDefeated() bool {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	for _, p := range r.Players {
+		if p.CurrentHealth <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// SetPlayerHand 替换玩家手牌
+func (r *RoomInfo) SetPlayerHand(username string, cards []models.Card) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	player, ok := r.Players[username]
+	if !ok {
+		return fmt.Errorf("player %s not found in room", username)
+	}
+	player.HandCards = append([]models.Card(nil), cards...)
+	return nil
+}
+
+// ReturnCardsToPool 把抽出但未能发给玩家的卡牌按等级放回共享卡池
+func (r *RoomInfo) ReturnCardsToPool(cards []models.Card) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	for _, c := range cards {
+		switch c.Level {
+		case 2:
+			r.Level2CardPool = append(r.Level2CardPool, c)
+		case 3:
+			r.Level3CardPool = append(r.Level3CardPool, c)
+		default:
+			r.Level1CardPool = append(r.Level1CardPool, c)
+		}
+	}
+}
+
+// ResetForGameEnd 对局结束：清空卡池与所有玩家的对局数据
+func (r *RoomInfo) ResetForGameEnd() {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.Status = RoomStatusFinished
+	r.Level1CardPool = nil
+	r.Level2CardPool = nil
+	r.Level3CardPool = nil
+	for _, p := range r.Players {
+		p.HandCards = nil
+		p.IsReady = false
+		p.Round = ""
+		p.OtherPlayers = nil
+		p.DamageInfo = nil
+	}
+}
+
+// Snapshot 生成发给 username 的对局状态（深拷贝，可在锁外安全使用）
+func (r *RoomInfo) Snapshot(username string) (*models.PlayerGameInfo, error) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	self, ok := r.Players[username]
+	if !ok {
+		return nil, fmt.Errorf("player %s not found in room", username)
+	}
+
+	names := make([]string, 0, len(r.Players))
+	for name := range r.Players {
+		if name != username {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	others := make([]models.OtherPlayerGameInfo, 0, len(names))
+	for _, name := range names {
+		p := r.Players[name]
+		others = append(others, models.OtherPlayerGameInfo{
+			Username:   p.Username,
+			Round:      p.Round,
+			Health:     p.CurrentHealth,
+			CardsCount: len(p.HandCards),
+		})
+	}
+
+	return &models.PlayerGameInfo{
+		RoomId:       r.RoomID,
+		Username:     username,
+		Round:        self.Round,
+		Health:       self.CurrentHealth,
+		SelfCards:    append([]models.Card(nil), self.HandCards...),
+		OtherPlayers: others,
+		DamageInfo:   append([]models.DamageInfo(nil), self.DamageInfo...),
+	}, nil
 }

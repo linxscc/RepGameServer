@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"GoServer/tcpgameserver/config"
-	"GoServer/tcpgameserver/events"
 	messagehandle "GoServer/tcpgameserver/messageHandle"
 	"GoServer/tcpgameserver/protocol"
 	"GoServer/tcpgameserver/setup"
@@ -31,11 +30,21 @@ func StartTCPServer() {
 		log.Fatal(err)
 	}
 
+	var backoff time.Duration
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
+			// 例如文件描述符耗尽：退避重试，避免空转占满 CPU
+			if backoff == 0 {
+				backoff = 5 * time.Millisecond
+			} else if backoff < time.Second {
+				backoff *= 2
+			}
+			log.Printf("accept failed: %v; retrying in %v", err, backoff)
+			time.Sleep(backoff)
 			continue
 		}
+		backoff = 0
 		go handleConnection(conn)
 	}
 }
@@ -83,10 +92,7 @@ func envOr(key, fallback string) string {
 
 // handleConnection 处理单个客户端连接：完成握手后循环读取帧并分发。
 func handleConnection(conn net.Conn) {
-	defer func() {
-		conn.Close()
-		protocol.Forget(conn)
-	}()
+	defer conn.Close()
 
 	if tlsConn, ok := conn.(*tls.Conn); ok {
 		_ = conn.SetDeadline(time.Now().Add(config.Game().Network.HandshakeTimeout()))
@@ -95,6 +101,9 @@ func handleConnection(conn net.Conn) {
 		}
 		_ = conn.SetDeadline(time.Time{})
 	}
+
+	protocol.Attach(conn)
+	defer protocol.Detach(conn)
 
 	clientID := messagehandle.HandleNewConnection(conn)
 	clientAddr := conn.RemoteAddr().String()
@@ -107,12 +116,9 @@ func handleConnection(conn net.Conn) {
 		_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))
 		payload, err := protocol.ReadFrame(reader)
 		if err != nil {
+			// 断线处理统一由上面 defer 的 HandleConnectionClose 完成
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				events.Publish(events.EventClientDisconnect, events.NewEventData(events.EventClientDisconnect, "tcp_server", map[string]interface{}{
-					"client_id":      clientID,
-					"client_address": clientAddr,
-					"error":          err.Error(),
-				}))
+				log.Printf("client %s (%s) idle timeout", clientID, clientAddr)
 			}
 			return
 		}

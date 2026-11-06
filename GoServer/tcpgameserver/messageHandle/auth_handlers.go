@@ -3,10 +3,9 @@ package tcpserver
 import (
 	"errors"
 	"log"
-	"strings"
 
 	"GoServer/tcpgameserver/config"
-	"GoServer/tcpgameserver/events"
+	"GoServer/tcpgameserver/logic"
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/types"
@@ -15,6 +14,10 @@ import (
 // HandleLogin 用户名 + 密码登录。
 func HandleLogin(ctx *Context, msg *pb.ClientMessage) {
 	req := msg.GetLogin()
+	if !service.AllowAuthAttempt(ctx.RemoteIP(), req.GetUsername()) {
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, config.Msg(config.MsgTooManyAttempts))
+		return
+	}
 	if err := service.ValidateCredentialFormat(req.GetUsername(), req.GetPassword()); err != nil {
 		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_CREDENTIALS, config.Msg(config.MsgInvalidCredentials))
 		return
@@ -46,6 +49,10 @@ func HandleResumeSession(ctx *Context, msg *pb.ClientMessage) {
 // HandleRegister 注册新账号。
 func HandleRegister(ctx *Context, msg *pb.ClientMessage) {
 	req := msg.GetRegister()
+	if !service.AllowAuthAttempt(ctx.RemoteIP(), "") {
+		ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, config.Msg(config.MsgTooManyAttempts))
+		return
+	}
 	if err := service.ValidateCredentialFormat(req.GetUsername(), req.GetPassword()); err != nil {
 		ctx.Fail(pb.ErrorCode_ERROR_CODE_INVALID_REQUEST, err.Error())
 		return
@@ -56,7 +63,7 @@ func HandleRegister(ctx *Context, msg *pb.ClientMessage) {
 	}
 
 	if err := service.CreateUserAccount(req.GetUsername(), req.GetPassword()); err != nil {
-		if strings.Contains(err.Error(), "user already exists") {
+		if errors.Is(err, service.ErrUserExists) {
 			ctx.Fail(pb.ErrorCode_ERROR_CODE_USER_EXISTS, config.Msg(config.MsgUsernameTaken))
 		} else {
 			log.Printf("register %q: %v", req.GetUsername(), err)
@@ -74,20 +81,11 @@ func HandleRegister(ctx *Context, msg *pb.ClientMessage) {
 // 绑定连接、签发会话令牌并回复 AuthResult。
 func completeAuthentication(ctx *Context, username string) {
 	connManager := ctx.ConnManager
-	resumingGame := false
 
-	if existing, loggedIn := connManager.GetConnectionByUsername(username); loggedIn && existing.ClientID != ctx.ClientID {
-		if existing.GetStatus() == types.StatusWaitingReconnect {
-			resumingGame = true
-		} else {
-			// 同一账号在别处在线：踢掉旧连接（同步执行，保证随后绑定的是新连接）
-			kickData := events.CreateUserConnectionEventData(
-				events.EventClientKicked, existing.ClientID, username, existing.RemoteAddr)
-			kickData.AddData("kick_reason", "duplicate_login")
-			kickData.AddData("kicked_by", "system")
-			kickData.AddData("new_client_id", ctx.ClientID)
-			events.PublishSync(events.EventClientKicked, kickData)
-		}
+	if existing, loggedIn := connManager.GetConnectionByUsername(username); loggedIn && existing.ClientID != ctx.ClientID &&
+		existing.GetStatus() != types.StatusWaitingReconnect {
+		// 同一账号在别处在线：踢掉旧连接（对局中的旧连接会转为等待重连，由本连接恢复）
+		logic.KickDuplicateLogin(existing)
 	}
 
 	token, expiresAt, err := service.GetSessionStore().Issue(username)
@@ -97,7 +95,8 @@ func completeAuthentication(ctx *Context, username string) {
 		return
 	}
 
-	if !resumingGame {
+	resuming := logic.CanResumeGame(username)
+	if !resuming {
 		if err := connManager.BindUser(ctx.ClientID, username); err != nil {
 			log.Printf("bind %q to %s: %v", username, ctx.ClientID, err)
 			ctx.Fail(pb.ErrorCode_ERROR_CODE_INTERNAL, config.Msg(config.MsgLoginUnavailable))
@@ -112,10 +111,11 @@ func completeAuthentication(ctx *Context, username string) {
 		SessionExpiresAtMs: expiresAt.UnixMilli(),
 	}}})
 
-	if resumingGame {
-		// 由重连处理器绑定连接并推送当前对局状态
-		reconnectData := events.CreateUserConnectionEventData(
-			events.EventClientReconnect, ctx.ClientID, username, ctx.Conn.RemoteAddr().String())
-		events.Publish(events.EventClientReconnect, reconnectData)
+	// 有对局可恢复：绑定到本连接并推送完整状态（在 AuthResult 之后到达客户端）
+	if resuming && !logic.ResumeGame(ctx.ClientID, username) {
+		// 对局恰好在这期间结束：按普通登录处理
+		if err := connManager.BindUser(ctx.ClientID, username); err == nil {
+			connManager.SetPlayerStatus(ctx.ClientID, types.StatusLoggedIn)
+		}
 	}
 }

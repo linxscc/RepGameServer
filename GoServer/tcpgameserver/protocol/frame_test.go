@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestRoundTripMultipleFramesInOneStream(t *testing.T) {
@@ -105,4 +106,52 @@ func (o *oneByteReader) Read(p []byte) (int, error) {
 	p[0] = o.data[o.pos]
 	o.pos++
 	return 1, nil
+}
+
+func TestAttachedWriterDeliversInOrderAndCloseAfterFlush(t *testing.T) {
+	server, client := net.Pipe()
+	defer client.Close()
+	Attach(server)
+	defer Detach(server)
+
+	for i := 0; i < 5; i++ {
+		if err := WriteFrame(server, []byte{byte(i)}); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+	}
+	CloseAfterFlush(server)
+
+	r := bufio.NewReader(client)
+	for i := 0; i < 5; i++ {
+		got, err := ReadFrame(r)
+		if err != nil {
+			t.Fatalf("read %d: %v", i, err)
+		}
+		if len(got) != 1 || got[0] != byte(i) {
+			t.Fatalf("frame %d out of order: %v", i, got)
+		}
+	}
+	if _, err := ReadFrame(r); err == nil {
+		t.Fatal("expected connection closed after flush")
+	}
+}
+
+func TestSlowReaderDoesNotBlockSender(t *testing.T) {
+	server, client := net.Pipe() // 对端从不读取
+	defer client.Close()
+	Attach(server)
+	defer Detach(server)
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 1000; i++ {
+			_ = WriteFrame(server, []byte("x"))
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("WriteFrame blocked on a reader that never reads")
+	}
 }

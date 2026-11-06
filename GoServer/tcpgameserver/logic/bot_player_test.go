@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
-	"GoServer/tcpgameserver/config"
-	"GoServer/tcpgameserver/events"
+	"GoServer/tcpgameserver/cards"
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/service"
+	"GoServer/tcpgameserver/types"
 )
 
 // 测试使用较短的机器人思考时间，其余配置沿用内置配置表
@@ -24,6 +25,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("GAME_CONFIG_DIR", dir)
+	if err := cards.InitCardPool(); err != nil {
+		panic(err)
+	}
 	code := m.Run()
 	CleanupTimers()
 	os.RemoveAll(dir)
@@ -94,60 +98,72 @@ func TestBotNamesAreReservedAndUnique(t *testing.T) {
 	}
 }
 
-// 集成测试：机器人按回合自动出牌，真人超时由服务器自动出牌，回合正确轮换
-func TestTurnLoopWithBotAndForcedPlay(t *testing.T) {
-	events.Subscribe(events.EventCardPlay, func(data interface{}) {
-		if ed, ok := data.(*events.EventData); ok {
-			NewPlayCardProcessor().ProcessPlayCard(ed)
-		}
-	})
-
+// newTestRoom 创建一个对局中的双人房间：first 先手，两人手牌由 hands 指定
+func newTestRoom(t *testing.T, pool []models.Card, first, second string, hands map[string][]models.Card) *types.RoomInfo {
+	t.Helper()
 	rm := service.GetRoomManager()
-	room, err := rm.CreateRoom("test", config.Game().Rules.Match.PlayersPerRoom)
+	room, err := rm.CreateRoom("test", 2)
 	if err != nil {
 		t.Fatal(err)
-	}
-	pool := make([]models.Card, 0, 40)
-	for i := 0; i < 40; i++ {
-		pool = append(pool, card(fmt.Sprintf("card_%d", i), "Fire", 1))
 	}
 	if err := rm.InitCardPool(room.RoomID, pool, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-
-	human, bot := "alice", NewBotName()
-	for _, u := range []string{human, bot} {
+	for _, u := range []string{first, second} {
 		if err := rm.JoinRoom(room.RoomID, u); err != nil {
 			t.Fatal(err)
 		}
+		if h, ok := hands[u]; ok {
+			_ = room.SetPlayerHand(u, h)
+		}
 	}
+	room.UpdateRoomStatus(types.RoomStatusPlaying)
+	_ = room.SetPlayerRound(first, types.RoundCurrent)
+	_ = room.SetPlayerRound(second, types.RoundWaiting)
+	return room
+}
+
+func playerOf(t *testing.T, room *types.RoomInfo, name string) *types.PlayerInfo {
+	t.Helper()
+	p, err := room.GetPlayerInfo(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// 集成测试：机器人按回合自动出牌，真人超时由服务器自动出牌，回合正确轮换
+func TestTurnLoopWithBotAndForcedPlay(t *testing.T) {
+	pool := make([]models.Card, 0, 40)
+	for i := 0; i < 40; i++ {
+		pool = append(pool, card(fmt.Sprintf("card_%d", i), "Fire", 1))
+	}
+	human, bot := "alice", NewBotName()
+	room := newTestRoom(t, pool, bot, human, nil)
 	if err := NewGameStartProcessor().DealInitialCardsToAllPlayers(room); err != nil {
 		t.Fatal(err)
 	}
-	room.Status = "playing"
-	rm.SetPlayerRound(room.RoomID, bot, "current")
-	rm.SetPlayerRound(room.RoomID, human, "waiting")
 
-	startHealth := room.Players[human].CurrentHealth
+	startHealth := playerOf(t, room, human).CurrentHealth
 	if err := GlobalRoomTimerProcessor.StartRoomTimer(room.RoomID); err != nil {
 		t.Fatal(err)
 	}
 
 	waitFor(t, "bot plays and passes the turn", func() bool {
-		return room.Players[human].Round == "current" && room.Players[bot].Round == "waiting"
+		return room.CurrentPlayer() == human
 	})
-	if room.Players[human].CurrentHealth >= startHealth {
-		t.Fatalf("bot play should damage the human: %v -> %v", startHealth, room.Players[human].CurrentHealth)
+	if playerOf(t, room, human).CurrentHealth >= startHealth {
+		t.Fatalf("bot play should damage the human")
 	}
 
 	// 真人回合超时：服务器替他打出第一张牌，随后又轮到机器人并自动出牌
-	healthBeforeForced := room.Players[bot].CurrentHealth
+	healthBeforeForced := playerOf(t, room, bot).CurrentHealth
 	GlobalRoomTimerProcessor.forceCardPlay(room.RoomID, human)
-	waitFor(t, "forced play damages the bot", func() bool {
-		return room.Players[bot].CurrentHealth < healthBeforeForced
-	})
+	if playerOf(t, room, bot).CurrentHealth >= healthBeforeForced {
+		t.Fatal("forced play should damage the bot")
+	}
 	waitFor(t, "bot takes its next turn automatically", func() bool {
-		return room.Players[human].Round == "current"
+		return room.CurrentPlayer() == human
 	})
 
 	GlobalRoomTimerProcessor.stopRoomTimer(room.RoomID)
@@ -155,23 +171,77 @@ func TestTurnLoopWithBotAndForcedPlay(t *testing.T) {
 
 // 不是自己的回合时出牌会被拒绝，房间状态不变
 func TestPlayOutOfTurnIsRejected(t *testing.T) {
-	rm := service.GetRoomManager()
-	room, _ := rm.CreateRoom("turn-check", 2)
-	_ = rm.InitCardPool(room.RoomID, []models.Card{card("x1", "Fire", 1), card("x2", "Fire", 1)}, nil, nil)
-	_ = rm.JoinRoom(room.RoomID, "p1")
-	_ = rm.JoinRoom(room.RoomID, "p2")
-	room.Status = "playing"
-	room.Players["p1"].HandCards = []models.Card{card("x1", "Fire", 1)}
-	rm.SetPlayerRound(room.RoomID, "p1", "waiting")
-	rm.SetPlayerRound(room.RoomID, "p2", "current")
+	room := newTestRoom(t, []models.Card{card("x2", "Fire", 1)}, "p2", "p1",
+		map[string][]models.Card{"p1": {card("x1", "Fire", 1)}})
 
-	ed := events.NewEventData(events.EventCardPlay, "test", map[string]interface{}{
-		"player": "p1", "room_id": room.RoomID, "self_cards": []models.Card{{UID: "x1"}},
-	})
-	NewPlayCardProcessor().ProcessPlayCard(ed)
+	PlayCards(PlayRequest{RoomID: room.RoomID, Player: "p1", CardUIDs: []string{"x1"}})
 
-	if len(room.Players["p1"].HandCards) != 1 || room.Players["p2"].Round != "current" {
+	if len(playerOf(t, room, "p1").HandCards) != 1 || room.CurrentPlayer() != "p2" {
 		t.Fatal("out-of-turn play must not change room state")
+	}
+}
+
+// 合成的目标卡池为空时，用于合成的牌必须留在手里
+func TestComposeKeepsCardsWhenTargetPoolEmpty(t *testing.T) {
+	target := "木匠" // cards.yaml 中真实存在的 2 级卡
+	mk := func(uid string) models.Card {
+		c := card(uid, "木匠学徒", 1)
+		c.TargetName = &target
+		return c
+	}
+	hand := []models.Card{mk("f1"), mk("f2"), mk("f3")}
+
+	// 2 级卡池为空：合成失败，牌留在手里
+	room := newTestRoom(t, nil, "p1", "p2", map[string][]models.Card{"p1": hand})
+	ComposeCards(ComposeRequest{RoomID: room.RoomID, Player: "p1", CardUIDs: []string{"f1", "f2", "f3"}})
+	if got := len(playerOf(t, room, "p1").HandCards); got != 3 {
+		t.Fatalf("hand should be unchanged when the target pool is empty, got %d cards", got)
+	}
+
+	// 2 级卡池有目标卡：3 张换 1 张
+	room = newTestRoom(t, nil, "p1", "p2", map[string][]models.Card{"p1": hand})
+	_ = service.GetRoomManager().InitCardPool(room.RoomID, nil, []models.Card{{UID: "w1", Name: target, Level: 2}}, nil)
+	ComposeCards(ComposeRequest{RoomID: room.RoomID, Player: "p1", CardUIDs: []string{"f1", "f2", "f3"}})
+	if h := playerOf(t, room, "p1").HandCards; len(h) != 1 || h[0].Name != target {
+		t.Fatalf("expected one composed %s, got %v", target, h)
+	}
+}
+
+// 合成与出牌并发到达时串行结算：每张牌只会被用掉一次，回合只切换一次
+func TestConcurrentPlayAndComposeAreSerialized(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		target := "木匠"
+		mk := func(uid string) models.Card {
+			c := card(uid, "木匠学徒", 1)
+			c.TargetName = &target
+			return c
+		}
+		hand := []models.Card{mk("a"), mk("b"), mk("c")}
+		room := newTestRoom(t, nil, "p1", "p2", map[string][]models.Card{"p1": hand})
+		_ = service.GetRoomManager().InitCardPool(room.RoomID, nil, []models.Card{{UID: "w1", Name: target, Level: 2}}, nil)
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			PlayCards(PlayRequest{RoomID: room.RoomID, Player: "p1", CardUIDs: []string{"a"}})
+		}()
+		go func() {
+			defer wg.Done()
+			ComposeCards(ComposeRequest{RoomID: room.RoomID, Player: "p1", CardUIDs: []string{"a", "b", "c"}})
+		}()
+		wg.Wait()
+		GlobalRoomTimerProcessor.stopRoomTimer(room.RoomID)
+
+		// 两种合法结果：先出牌（a 被打出，剩 2 张凑不满合成）或先合成（3 换 1，出牌因 a 已不在手里被拒）
+		p1 := playerOf(t, room, "p1")
+		played := playerOf(t, room, "p2").CurrentHealth < room.InitialHealth
+		switch {
+		case played && len(p1.HandCards) == 2 && room.CurrentPlayer() == "p2":
+		case !played && len(p1.HandCards) == 1 && p1.HandCards[0].Name == target && room.CurrentPlayer() == "p1":
+		default:
+			t.Fatalf("iteration %d: inconsistent result: played=%v hand=%v current=%s", i, played, p1.HandCards, room.CurrentPlayer())
+		}
 	}
 }
 

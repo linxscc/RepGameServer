@@ -1,103 +1,44 @@
 package logic
 
 import (
+	"log"
+
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/protocol"
-	"net"
-
-	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/service"
 	"GoServer/tcpgameserver/types"
 )
 
-// GameStateBroadcaster 游戏状态广播器
-type GameStateBroadcaster struct{}
+// 对局状态推送。调用方必须持有房间操作锁（见 room_sync.go），
+// 保证推送的是一次操作完成后的完整状态。
 
-// NewGameStateBroadcaster 创建新的游戏状态广播器
-func NewGameStateBroadcaster() *GameStateBroadcaster {
-	return &GameStateBroadcaster{}
+// broadcastRoomState 向房间内每个在线的真人玩家推送各自视角的状态，然后清空本次的伤害信息
+func broadcastRoomState(room *types.RoomInfo, reason pb.GameStateReason) {
+	for _, name := range room.PlayerNames() {
+		sendRoomState(room, name, reason)
+	}
+	for _, name := range room.PlayerNames() {
+		_ = room.CleanPlayerDamage(name)
+	}
 }
 
-// SendTCPMessage 发送消息到连接
-func (gsb *GameStateBroadcaster) SendTCPMessage(conn net.Conn, msg *pb.ServerMessage) error {
-	return sendTo(conn, msg)
-}
-
-// BroadcastGameStateToRoom 向房间内所有玩家广播游戏状态（统一方法）
-func (gsb *GameStateBroadcaster) BroadcastGameStateToRoom(eventData *events.EventData) {
-
-	// 获取连接管理器
-	connManager := service.GetConnectionManager()
-	roomManager := service.GetRoomManager()
-
-	// 获取房间信息
-	room, err := roomManager.GetRoom(eventData.RoomID)
-	if err != nil {
+// sendRoomState 向一个玩家推送其视角的状态；机器人或不在线的玩家跳过
+func sendRoomState(room *types.RoomInfo, username string, reason pb.GameStateReason) {
+	if IsBot(username) {
 		return
 	}
-
-	// 向房间内每个玩家发送其个人游戏信息
-	successCount := 0
-	failCount := 0
-
-	for playerName := range room.Players {
-		// 获取该玩家的连接信息
-		clientInfo, exists := connManager.GetConnectionByUsername(playerName)
-		if !exists {
-			failCount++
-			continue
-		}
-
-		if clientInfo.Conn == nil {
-			failCount++
-			continue
-		}
-
-		// 从房间管理器获取该玩家的游戏信息
-		playerGameInfo, err := roomManager.GetPlayerGameInfo(eventData.RoomID, playerName)
-		if err != nil {
-			failCount++
-			continue
-		}
-		// 如果玩家不在游戏中，跳过
-		if playerGameInfo == nil {
-			continue
-		}
-
-		response := protocol.GameStateMessage(playerGameInfo, reasonForSource(eventData.Source))
-		// 发送消息
-		if err := gsb.SendTCPMessage(clientInfo.Conn, response); err != nil {
-			failCount++
-		} else {
-			successCount++
-		}
+	info, ok := service.GetConnectionManager().GetConnectionByUsername(username)
+	if !ok {
+		return
 	}
-
-	// 在广播完成后重置所有玩家的战斗统计信息
-	gsb.resetPlayerBattleStats(room)
-
-}
-
-// resetPlayerBattleStats 重置房间内所有玩家的战斗统计信息
-func (gsb *GameStateBroadcaster) resetPlayerBattleStats(room *types.RoomInfo) {
-	roomManager := service.GetRoomManager()
-	for playerName := range room.Players {
-		// 重置玩家的伤害统计信息
-		err := roomManager.CleanPlayerDamage(room.RoomID, playerName)
-		if err != nil {
-			continue
-		}
+	conn := info.GetConn()
+	if conn == nil {
+		return // 断线中：重连时会收到完整状态
 	}
-}
-
-// reasonForSource 根据触发广播的业务来源确定推送原因
-func reasonForSource(source string) pb.GameStateReason {
-	switch source {
-	case "card_compose_processor":
-		return pb.GameStateReason_GAME_STATE_REASON_CARDS_COMPOSED
-	case "force_cardplay_processor":
-		return pb.GameStateReason_GAME_STATE_REASON_FORCED_PLAY
-	default:
-		return pb.GameStateReason_GAME_STATE_REASON_CARDS_PLAYED
+	snapshot, err := room.Snapshot(username)
+	if err != nil {
+		log.Printf("room %s: snapshot for %s: %v", room.RoomID, username, err)
+		return
 	}
+	_ = sendTo(conn, protocol.GameStateMessage(snapshot, reason))
 }

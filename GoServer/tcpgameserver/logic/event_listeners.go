@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/protocol"
 
@@ -47,12 +46,11 @@ func NewGameEventListener() *GameEventListener {
 	return &GameEventListener{
 		BaseEventListener: BaseEventListener{
 			Name: "GameEventListener",
+			// 出牌/合成/状态推送/对局结束不走事件总线，由 PlayCards、ComposeCards 在房间锁内直接完成
 			EventTypes: []string{
 				events.EventGameStart,
-				events.EventGameEnd,
 				events.EventGamePause,
 				events.EventGameResume,
-				events.EventGameStateUpdate,
 			},
 			Priority: 10, // 高优先级
 		},
@@ -63,14 +61,10 @@ func (g *GameEventListener) HandleEvent(eventType string, data interface{}) {
 	switch eventType {
 	case events.EventGameStart:
 		g.handleGameStart(data)
-	case events.EventGameEnd:
-		g.handleGameEnd(data)
 	case events.EventGamePause:
 		g.handleGamePause(data)
 	case events.EventGameResume:
 		g.handleGameResume(data)
-	case events.EventGameStateUpdate:
-		g.handleGameStateUpdate(data)
 	default:
 	}
 }
@@ -85,13 +79,6 @@ func (g *GameEventListener) handleGameStart(data interface{}) {
 	}
 }
 
-func (g *GameEventListener) handleGameEnd(data interface{}) {
-
-	// 直接创建并使用GameEndProcessor处理游戏结束逻辑
-	processor := NewGameEndProcessor()
-	processor.ProcessGameEnd(data)
-}
-
 func (g *GameEventListener) handleGamePause(data interface{}) {
 	if _, ok := data.(*events.EventData); ok {
 		// 暂停游戏逻辑
@@ -101,15 +88,6 @@ func (g *GameEventListener) handleGamePause(data interface{}) {
 func (g *GameEventListener) handleGameResume(data interface{}) {
 	if _, ok := data.(*events.EventData); ok {
 		// 恢复游戏逻辑
-	}
-}
-
-func (g *GameEventListener) handleGameStateUpdate(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-
-		// 向房间内所有玩家发送游戏状态更新
-		broadcaster := NewGameStateBroadcaster()
-		broadcaster.BroadcastGameStateToRoom(eventData)
 	}
 }
 
@@ -124,10 +102,8 @@ func NewCardEventListener() *CardEventListener {
 			Name: "CardEventListener",
 			EventTypes: []string{
 				events.EventCardDraw,
-				events.EventCardPlay,
 				events.EventCardDiscard,
 				events.EventCardShuffle,
-				events.EventCardCompose,
 				events.EventDeckEmpty,
 				events.EventCardBonds,
 			},
@@ -140,10 +116,6 @@ func (c *CardEventListener) HandleEvent(eventType string, data interface{}) {
 	switch eventType {
 	case events.EventCardDraw:
 		c.handleCardDraw(data)
-	case events.EventCardPlay:
-		c.handleCardPlay(data)
-	case events.EventCardCompose:
-		c.handleCardCompose(data)
 	case events.EventDeckEmpty:
 		c.handleDeckEmpty(data)
 	case events.EventCardBonds:
@@ -161,23 +133,6 @@ func (c *CardEventListener) handleCardDraw(data interface{}) {
 		// 更新玩家手牌
 		// 检查手牌上限
 		// 触发抽卡特效
-	}
-}
-
-func (c *CardEventListener) handleCardPlay(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		// 使用PlayCardProcessor处理出牌逻辑（包含所有验证）
-		processor := NewPlayCardProcessor()
-		processor.ProcessPlayCard(eventData)
-	}
-}
-
-func (c *CardEventListener) handleCardCompose(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		// 使用CardComposeProcessor处理合成逻辑
-		processor := NewCardComposeProcessor()
-		processor.ProcessCardCompose(eventData)
-
 	}
 }
 
@@ -208,11 +163,11 @@ func (c *CardEventListener) handleCardBonds(data interface{}) {
 
 		// 获取玩家连接并发送消息
 		clientInfo, exists := connManager.GetConnectionByClientID(ClientID)
-		if !exists || clientInfo == nil || clientInfo.Conn == nil {
+		if !exists || clientInfo == nil || clientInfo.GetConn() == nil {
 			return
 		}
 
-		_ = sendTo(clientInfo.Conn, response)
+		_ = sendTo(clientInfo.GetConn(), response)
 
 	}
 }
@@ -486,12 +441,8 @@ func NewConnectionEventListener() *ConnectionEventListener {
 			Name: "ConnectionEventListener",
 			EventTypes: []string{
 				events.EventClientConnect,
-				events.EventClientDisconnect,
-				events.EventClientTimeout,
 				events.EventClientBind,
 				events.EventClientUnbind,
-				events.EventClientKicked,
-				events.EventClientReconnect,
 				events.EventConnectionCleanup,
 			},
 			Priority: 20, // 中等优先级
@@ -503,18 +454,10 @@ func (c *ConnectionEventListener) HandleEvent(eventType string, data interface{}
 	switch eventType {
 	case events.EventClientConnect:
 		c.handleClientConnect(data)
-	case events.EventClientDisconnect:
-		c.handleClientDisconnect(data)
-	case events.EventClientTimeout:
-		c.handleClientTimeout(data)
 	case events.EventClientBind:
 		c.handleClientBind(data)
 	case events.EventClientUnbind:
 		c.handleClientUnbind(data)
-	case events.EventClientKicked:
-		c.handleClientKicked(data)
-	case events.EventClientReconnect:
-		c.handleClientReconnect(data)
 	case events.EventConnectionCleanup:
 		c.handleConnectionCleanup(data)
 	default:
@@ -548,40 +491,6 @@ func (c *ConnectionEventListener) handleClientConnect(data interface{}) {
 	}
 }
 
-func (c *ConnectionEventListener) handleClientDisconnect(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		clientID, _ := eventData.GetString("client_id")
-		username, _ := eventData.GetString("username")
-		reason, _ := eventData.GetString("reason")
-
-		handler := NewDisconnectHandler()
-		err := handler.HandlePlayerDisconnect(clientID, username, reason)
-		if err != nil {
-		} else {
-		}
-	}
-}
-
-func (c *ConnectionEventListener) handleClientTimeout(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		clientID, _ := eventData.GetString("client_id")
-		username, _ := eventData.GetString("username")
-		lastActivity, _ := eventData.GetString("last_activity")
-
-		// 处理客户端超时逻辑
-		// 标记为超时状态
-		// 给予短暂重连时间
-		// 或直接断开连接
-
-		// 触发断开连接事件
-		disconnectData := events.CreateUserConnectionEventData(
-			events.EventClientDisconnect, clientID, username, "")
-		disconnectData.AddData("reason", "timeout")
-		disconnectData.AddData("last_activity", lastActivity)
-		events.Publish(events.EventClientDisconnect, disconnectData)
-	}
-}
-
 func (c *ConnectionEventListener) handleClientBind(data interface{}) {
 	if eventData, ok := data.(*events.EventData); ok {
 		_, _ = eventData.GetString("client_id")
@@ -606,47 +515,6 @@ func (c *ConnectionEventListener) handleClientUnbind(data interface{}) {
 		// 保存用户数据
 		// 设置离线状态
 		// 清理用户相关状态
-	}
-}
-
-func (c *ConnectionEventListener) handleClientKicked(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		clientID, _ := eventData.GetString("client_id")
-		username, _ := eventData.GetString("username")
-		kickReason, _ := eventData.GetString("kick_reason")
-		kickedBy, _ := eventData.GetString("kicked_by")
-		newClientID, _ := eventData.GetString("new_client_id")
-
-		// 获取连接管理器
-		connManager := service.GetConnectionManager()
-
-		// 先触发断开连接事件处理原客户端
-		disconnectData := events.CreateUserConnectionEventData(
-			events.EventClientDisconnect, clientID, username, "")
-		disconnectData.AddData("reason", "kicked")
-		disconnectData.AddData("kick_reason", kickReason)
-		disconnectData.AddData("kicked_by", kickedBy)
-		events.PublishSync(events.EventClientDisconnect, disconnectData)
-
-		// 通知被踢下线的旧连接，然后断开它；新连接的绑定由登录流程完成
-		if oldClient, exists := connManager.GetConnectionByClientID(clientID); exists && oldClient.Conn != nil {
-			_ = sendTo(oldClient.Conn, protocol.NewError(0, pb.ErrorCode_ERROR_CODE_SESSION_EXPIRED, config.Msg(config.MsgLoggedInElsewhere)))
-			_ = oldClient.Conn.Close()
-		}
-		_ = newClientID
-	}
-}
-
-func (c *ConnectionEventListener) handleClientReconnect(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		clientID, _ := eventData.GetString("client_id")
-		username, _ := eventData.GetString("username")
-
-		handler := NewReconnectionHandler()
-		err := handler.HandlePlayerReconnection(clientID, username)
-		if err != nil {
-		} else {
-		}
 	}
 }
 

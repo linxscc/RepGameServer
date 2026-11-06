@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"GoServer/tcpgameserver/config"
-	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/service"
+	"GoServer/tcpgameserver/types"
 )
 
 // ============================================================
@@ -22,7 +22,7 @@ import (
 //    match_wait_seconds 内没有匹配到真人对手，就为其安排机器人。
 // 2. 机器人只存在于房间中（没有网络连接）。轮到机器人时，回合调度器
 //    （room_timer_processor）在 think_delay_ms 后调用 PlayBotTurn。
-// 3. 机器人出牌走与真人完全相同的出牌流程（EventCardPlay），
+// 3. 机器人出牌走与真人完全相同的出牌流程（PlayCards），
 //    由服务器统一校验和结算，不存在特殊规则。
 // ============================================================
 
@@ -73,11 +73,11 @@ func ScheduleBotMatch(clientID string) {
 // PlayBotTurn 机器人出牌：选择伤害最高的出法，通过正常出牌流程提交
 func PlayBotTurn(roomID, botName string) {
 	room, err := service.GetRoomManager().GetRoom(roomID)
-	if err != nil || room.Status != "playing" {
+	if err != nil || room.GetStatus() != types.RoomStatusPlaying {
 		return
 	}
 	player, err := room.GetPlayerInfo(botName)
-	if err != nil || player.Round != "current" {
+	if err != nil || player.Round != types.RoundCurrent {
 		return
 	}
 
@@ -87,11 +87,7 @@ func PlayBotTurn(roomID, botName string) {
 	}
 
 	cards := ChooseBotPlay(hand, config.Game().Bot.MaxCardsPerPlay, NewBondCalculator().CalculateBondDamage)
-	events.Publish(events.EventCardPlay, events.NewEventData(events.EventCardPlay, "bot_player", map[string]interface{}{
-		"player":     botName,
-		"self_cards": cards,
-		"room_id":    roomID,
-	}))
+	PlayCards(PlayRequest{RoomID: roomID, Player: botName, CardUIDs: uidsOf(cards)})
 }
 
 // ChooseBotPlay 从手牌中选出要打出的卡牌。

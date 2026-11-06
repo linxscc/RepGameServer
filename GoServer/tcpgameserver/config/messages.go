@@ -25,6 +25,7 @@ const (
 	MsgUsernameSpaces     = "username_spaces"
 	MsgUsernameReserved   = "username_reserved"
 	MsgPasswordLength     = "password_length"
+	MsgTooManyAttempts    = "too_many_attempts"
 
 	MsgNoCardsToPlay       = "no_cards_to_play"
 	MsgComposeCountInvalid = "compose_count_invalid"
@@ -42,7 +43,7 @@ var requiredMessageKeys = []string{
 	MsgMalformedMessage, MsgEmptyMessageBody, MsgUnsupportedRequest,
 	MsgLoginRequired, MsgInvalidCredentials, MsgLoginUnavailable, MsgSessionExpired,
 	MsgLoggedInElsewhere, MsgUsernameTaken, MsgRegisterFailed, MsgUsernameLength,
-	MsgUsernameSpaces, MsgUsernameReserved, MsgPasswordLength,
+	MsgUsernameSpaces, MsgUsernameReserved, MsgPasswordLength, MsgTooManyAttempts,
 	MsgNoCardsToPlay, MsgComposeCountInvalid, MsgCardsInvalid, MsgNotYourTurn,
 	MsgReconnectPlayerNotFound, MsgReconnectNotWaiting, MsgReconnectNoGame,
 	MsgReconnectConnectionLost, MsgReconnectBindFailed,

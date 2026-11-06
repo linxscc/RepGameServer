@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -32,9 +33,36 @@ func bcryptCost() int {
 	return config.Game().Network.Auth.BcryptCost
 }
 
+// 同时进行的 bcrypt 计算数量上限（network.yaml 的 auth.max_concurrent_hashes，0 = CPU 核数）。
+// 超出的请求排队，保证登录高峰时游戏逻辑仍有 CPU 可用。
+var (
+	hashSlotsOnce sync.Once
+	hashSlots     chan struct{}
+)
+
+func withHashSlot(fn func()) {
+	hashSlotsOnce.Do(func() {
+		n := config.Game().Network.Auth.MaxConcurrentHashes
+		if n <= 0 {
+			n = runtime.NumCPU()
+		}
+		hashSlots = make(chan struct{}, n)
+	})
+	hashSlots <- struct{}{}
+	defer func() { <-hashSlots }()
+	fn()
+}
+
+func compareHash(hash []byte, password string) (err error) {
+	withHashSlot(func() { err = bcrypt.CompareHashAndPassword(hash, []byte(password)) })
+	return err
+}
+
 // HashPassword 生成 bcrypt 哈希。
 func HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost())
+	var hash []byte
+	var err error
+	withHashSlot(func() { hash, err = bcrypt.GenerateFromPassword([]byte(password), bcryptCost()) })
 	if err != nil {
 		return "", fmt.Errorf("hash password: %w", err)
 	}
@@ -69,15 +97,15 @@ func IsReservedUsername(username string) bool {
 func AuthenticateUser(username, password string) error {
 	user, err := GetUserAccount(username)
 	if err != nil {
-		if strings.Contains(err.Error(), "user not found") {
-			_ = bcrypt.CompareHashAndPassword(timingDummyHash(), []byte(password))
+		if errors.Is(err, ErrUserNotFound) {
+			_ = compareHash(timingDummyHash(), password)
 			return ErrInvalidCredentials
 		}
 		return err
 	}
 
 	if isBcryptHash(user.Password) {
-		if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
+		if compareHash([]byte(user.Password), password) != nil {
 			return ErrInvalidCredentials
 		}
 		return nil
@@ -85,7 +113,7 @@ func AuthenticateUser(username, password string) error {
 
 	// 旧的明文密码
 	if subtle.ConstantTimeCompare([]byte(user.Password), []byte(password)) != 1 {
-		_ = bcrypt.CompareHashAndPassword(timingDummyHash(), []byte(password))
+		_ = compareHash(timingDummyHash(), password)
 		return ErrInvalidCredentials
 	}
 	if hash, err := HashPassword(password); err == nil {
@@ -96,15 +124,4 @@ func AuthenticateUser(username, password string) error {
 
 func isBcryptHash(s string) bool {
 	return strings.HasPrefix(s, "$2a$") || strings.HasPrefix(s, "$2b$") || strings.HasPrefix(s, "$2y$")
-}
-
-func updatePasswordHash(username, hash string) error {
-	db, err := GetDBConnection()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	_, err = db.Exec("UPDATE UserAccount SET password = ? WHERE username = ?", hash, username)
-	return err
 }

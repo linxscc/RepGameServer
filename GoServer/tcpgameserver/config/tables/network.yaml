@@ -15,15 +15,28 @@ connection:
   # 超过该时间没有收到客户端任何消息即视为断线（秒）。
   # 客户端心跳间隔应明显小于该值（客户端默认 15 秒）。
   idle_timeout_seconds: 45
+  # 服务器向单个连接写一条消息的最长时间（秒）；对端长期不读数据时超时断开
+  write_timeout_seconds: 10
+  # 每个连接待发送消息队列的长度；队列写满说明对端处理不过来，直接断开
+  send_queue_size: 64
+  # 对局中断线后保留座位、等待重连的时长（秒）；超时后不再允许恢复对局
+  # （对局本身照常进行：轮到该玩家时按回合超时自动出牌）
+  reconnect_grace_seconds: 120
   # 连接管理器的兜底清理：超过 stale_connection_seconds 没有活动的连接记录会被移除，
   # 每 cleanup_interval_minutes 检查一次。正常断线由上面的 idle_timeout 处理，
-  # 这里只清理异常残留的记录；它也决定了“等待重连”的玩家最多能保留多久。
-  stale_connection_seconds: 30
-  cleanup_interval_minutes: 3600
+  # 这里只清理异常残留的记录（不包括等待重连的玩家，他们由 reconnect_grace_seconds 管理）。
+  stale_connection_seconds: 300
+  cleanup_interval_minutes: 5
 
 auth:
   # bcrypt 计算强度（10~14），越大越安全但登录越慢
   bcrypt_cost: 12
+  # 同时进行的密码哈希计算数量上限；0 表示等于 CPU 核数。超出的登录/注册请求排队等待
+  max_concurrent_hashes: 0
+  # 每个 IP 每分钟最多尝试登录/注册的次数；超过后在剩余时间内直接拒绝
+  login_attempts_per_ip_per_minute: 20
+  # 每个用户名每分钟最多尝试登录的次数（防止针对单个账号撞密码）
+  login_attempts_per_user_per_minute: 10
   # 登录后会话令牌的有效期（小时），用于断线重连免密恢复
   session_ttl_hours: 24
   # 用户名长度（字符数）

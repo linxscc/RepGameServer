@@ -3,100 +3,105 @@ package service
 import (
 	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/models"
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"sync"
 
-	_ "github.com/go-sql-driver/mysql" // MySQL驱动
+	"github.com/go-sql-driver/mysql" // MySQL驱动
 )
 
-// GetDBConnection 获取数据库连接
-func GetDBConnection() (*sql.DB, error) {
-	dbConfig := config.GetDBConfig()
+// ErrUserNotFound 账号不存在
+var ErrUserNotFound = errors.New("user not found")
 
-	// 构建MySQL连接字符串
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.DBName)
+// ErrUserExists 注册时用户名已被占用
+var ErrUserExists = errors.New("user already exists")
 
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return nil, err
-	}
+// 进程内共享一个连接池（*sql.DB 并发安全，内部复用连接）。
+// sql.Open 不会立即建立连接，数据库暂时不可用时查询返回错误，恢复后自动重连。
+var (
+	dbOnce sync.Once
+	dbPool *sql.DB
+	dbErr  error
+	dbCfg  config.DBConfig
+)
 
-	// 测试连接
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, err
-	}
-
-	return db, nil
+func database() (*sql.DB, error) {
+	dbOnce.Do(func() {
+		dbCfg = config.GetDBConfig()
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			dbCfg.User, dbCfg.Password, dbCfg.Host, dbCfg.Port, dbCfg.DBName)
+		dbPool, dbErr = sql.Open("mysql", dsn)
+		if dbErr != nil {
+			return
+		}
+		dbPool.SetMaxOpenConns(dbCfg.MaxOpenConns)
+		dbPool.SetMaxIdleConns(dbCfg.MaxIdleConns)
+		dbPool.SetConnMaxLifetime(dbCfg.ConnMaxLifetime)
+	})
+	return dbPool, dbErr
 }
 
-// CheckUserAccountExists 检查用户账户是否存在
-func CheckUserAccountExists(username string) (bool, error) {
-	db, err := GetDBConnection()
-	if err != nil {
-		return false, err
-	}
-	defer db.Close()
-
-	var count int
-	query := "SELECT COUNT(*) FROM UserAccount WHERE username = ?"
-	err = db.QueryRow(query, username).Scan(&count)
-	if err != nil {
-		return false, fmt.Errorf("failed to check user existence: %v", err)
-	}
-
-	return count > 0, nil
+// queryContext 每次查询都带超时，数据库卡住时不会无限占用连接协程
+func queryContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), dbCfg.QueryTimeout)
 }
 
-// GetUserAccount 获取用户账户信息（用于验证登录）
+// GetUserAccount 获取用户账户信息（用于验证登录）；账号不存在时返回 ErrUserNotFound
 func GetUserAccount(username string) (*models.UserAccount, error) {
-	db, err := GetDBConnection()
+	db, err := database()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	ctx, cancel := queryContext()
+	defer cancel()
 
 	var user models.UserAccount
-	query := "SELECT username, password FROM UserAccount WHERE username = ?"
-	err = db.QueryRow(query, username).Scan(&user.Username, &user.Password)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found: %s", username)
-		}
-		return nil, fmt.Errorf("failed to get user account: %v", err)
+	err = db.QueryRowContext(ctx, "SELECT username, password FROM UserAccount WHERE username = ?", username).
+		Scan(&user.Username, &user.Password)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrUserNotFound
 	}
-
+	if err != nil {
+		return nil, fmt.Errorf("get user account: %w", err)
+	}
 	return &user, nil
 }
 
-// CreateUserAccount 创建新用户账户
+// CreateUserAccount 创建新用户账户（只保存 bcrypt 哈希）；用户名已存在时返回 ErrUserExists
 func CreateUserAccount(username, password string) error {
-	db, err := GetDBConnection()
+	db, err := database()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-
-	// 检查用户是否已存在
-	exists, err := CheckUserAccountExists(username)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return fmt.Errorf("user already exists: %s", username)
-	}
-
 	hash, err := HashPassword(password)
 	if err != nil {
 		return err
 	}
+	ctx, cancel := queryContext()
+	defer cancel()
 
-	// 插入新用户（只保存 bcrypt 哈希）
-	query := "INSERT INTO UserAccount (username, password) VALUES (?, ?)"
-	_, err = db.Exec(query, username, hash)
+	// 依赖 username 唯一索引判断重名，没有"先查再插"的竞态
+	_, err = db.ExecContext(ctx, "INSERT INTO UserAccount (username, password) VALUES (?, ?)", username, hash)
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 { // ER_DUP_ENTRY
+		return ErrUserExists
+	}
 	if err != nil {
-		return fmt.Errorf("failed to create user account: %v", err)
+		return fmt.Errorf("create user account: %w", err)
 	}
 	return nil
+}
+
+// updatePasswordHash 把旧的明文密码升级为 bcrypt 哈希
+func updatePasswordHash(username, hash string) error {
+	db, err := database()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := queryContext()
+	defer cancel()
+	_, err = db.ExecContext(ctx, "UPDATE UserAccount SET password = ? WHERE username = ?", hash, username)
+	return err
 }

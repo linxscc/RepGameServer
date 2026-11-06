@@ -24,7 +24,7 @@ func sendTo(conn net.Conn, msg *pb.ServerMessage) error {
 
 func sendToClient(clientID string, msg *pb.ServerMessage) {
 	if info, ok := service.GetConnectionManager().GetConnectionByClientID(clientID); ok && info != nil {
-		_ = sendTo(info.Conn, msg)
+		_ = sendTo(info.GetConn(), msg)
 	}
 }
 
@@ -37,7 +37,7 @@ func notifyClientError(clientID string, replyTo uint32, code pb.ErrorCode, text 
 func notifyRoomPeers(roomID, exceptUser string, msg *pb.ServerMessage) {
 	for _, info := range service.GetConnectionManager().GetAllConnections() {
 		if info.GetGameRoom() == roomID && info.Username != "" && info.Username != exceptUser {
-			_ = sendTo(info.Conn, msg)
+			_ = sendTo(info.GetConn(), msg)
 		}
 	}
 }

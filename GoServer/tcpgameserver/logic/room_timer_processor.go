@@ -64,13 +64,7 @@ func (rtp *RoomTimerProcessor) startPlayerTimer(room *types.RoomInfo) error {
 	// 停止上一回合的计时器（如果存在）
 	rtp.stopRoomTimer(room.RoomID)
 
-	currentPlayer := ""
-	for _, player := range room.Players {
-		if player.Round == "current" {
-			currentPlayer = player.Username
-			break
-		}
-	}
+	currentPlayer := room.CurrentPlayer()
 	if currentPlayer == "" {
 		return nil
 	}
@@ -103,23 +97,9 @@ func (rtp *RoomTimerProcessor) startPlayerTimer(room *types.RoomInfo) error {
 }
 
 // forceCardPlay 真人玩家回合超时：由服务器替其打出手牌中的第一张。
-// 走正常出牌流程，结算后广播的状态原因为 FORCED_PLAY，客户端只需展示结果。
+// 走正常出牌流程（会再次校验是否仍是该玩家的回合），结算后广播的状态原因为 FORCED_PLAY。
 func (rtp *RoomTimerProcessor) forceCardPlay(roomID, username string) {
-	room, err := service.GetRoomManager().GetRoom(roomID)
-	if err != nil || room.Status != "playing" {
-		return
-	}
-	hand, err := room.GetPlayerHandCards(username)
-	if err != nil || len(hand) == 0 {
-		return
-	}
-
-	events.Publish(events.EventCardPlay, events.NewEventData(events.EventCardPlay, "force_cardplay_processor", map[string]interface{}{
-		"player":     username,
-		"self_cards": hand[:1],
-		"room_id":    roomID,
-		"forced":     true,
-	}))
+	PlayCards(PlayRequest{RoomID: roomID, Player: username, Forced: true})
 }
 
 // stopRoomTimer 结束房间计时

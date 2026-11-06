@@ -2,6 +2,8 @@ package events
 
 import (
 	"fmt"
+	"log"
+	"runtime/debug"
 	"sync"
 )
 
@@ -126,10 +128,7 @@ func (em *EventManager) Publish(eventType string, data interface{}) {
 	// 执行所有订阅者的处理函数
 	for _, subscription := range subscriptions {
 		go func(sub *EventSubscription) {
-			defer func() {
-				if r := recover(); r != nil {
-				}
-			}()
+			defer recoverHandler(eventType, sub.ID)
 
 			sub.Handler(data)
 		}(subscription)
@@ -150,16 +149,12 @@ func (em *EventManager) PublishSync(eventType string, data interface{}) {
 		return
 	}
 
-
 	var wg sync.WaitGroup
 	for _, subscription := range subscriptions {
 		wg.Add(1)
 		go func(sub *EventSubscription) {
 			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-				}
-			}()
+			defer recoverHandler(eventType, sub.ID)
 
 			sub.Handler(data)
 		}(subscription)
@@ -249,4 +244,11 @@ func (em *EventManager) Clear() {
 	em.subscribers = make(map[string][]*EventSubscription)
 	em.idCounter = 0
 
+}
+
+// recoverHandler 单个处理器 panic 不影响其他处理器，但必须留下日志
+func recoverHandler(eventType, subscriptionID string) {
+	if r := recover(); r != nil {
+		log.Printf("event handler %s for %s panicked: %v\n%s", subscriptionID, eventType, r, debug.Stack())
+	}
 }

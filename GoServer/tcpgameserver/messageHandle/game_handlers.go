@@ -7,7 +7,6 @@ import (
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/logic"
 	"GoServer/tcpgameserver/pb"
-	"GoServer/tcpgameserver/protocol"
 	"GoServer/tcpgameserver/types"
 )
 
@@ -49,6 +48,7 @@ func startMatchmaking(clientID string, readyCount int) {
 }
 
 // HandlePlayCards 出牌：只接收牌的 UID，校验与结算交给业务层。
+// 在连接协程内同步处理，同一连接的请求按到达顺序执行。
 func HandlePlayCards(ctx *Context, msg *pb.ClientMessage) {
 	req := msg.GetPlayCards()
 	if req.GetRoomId() == "" || len(req.GetCardUids()) == 0 {
@@ -56,13 +56,13 @@ func HandlePlayCards(ctx *Context, msg *pb.ClientMessage) {
 		return
 	}
 
-	events.Publish(events.EventCardPlay, events.NewEventData(events.EventCardPlay, "user_play_card_handler", map[string]interface{}{
-		"player":     ctx.Username(),
-		"self_cards": protocol.CardsFromUIDs(req.GetCardUids()),
-		"room_id":    req.GetRoomId(),
-		"client_id":  ctx.ClientID,
-		"seq":        ctx.Seq,
-	}))
+	logic.PlayCards(logic.PlayRequest{
+		RoomID:   req.GetRoomId(),
+		Player:   ctx.Username(),
+		CardUIDs: req.GetCardUids(),
+		ClientID: ctx.ClientID,
+		Seq:      ctx.Seq,
+	})
 }
 
 // HandleComposeCards 合成：数量须为 group_size（game_rules.yaml）的倍数，其余校验交给业务层。
@@ -74,11 +74,11 @@ func HandleComposeCards(ctx *Context, msg *pb.ClientMessage) {
 		return
 	}
 
-	events.Publish(events.EventCardCompose, events.NewEventData(events.EventCardCompose, "user_compose_card_handler", map[string]interface{}{
-		"room_id":   req.GetRoomId(),
-		"player":    ctx.Username(),
-		"cards":     protocol.CardsFromUIDs(req.GetCardUids()),
-		"client_id": ctx.ClientID,
-		"seq":       ctx.Seq,
-	}))
+	logic.ComposeCards(logic.ComposeRequest{
+		RoomID:   req.GetRoomId(),
+		Player:   ctx.Username(),
+		CardUIDs: req.GetCardUids(),
+		ClientID: ctx.ClientID,
+		Seq:      ctx.Seq,
+	})
 }

@@ -74,6 +74,9 @@ type NetworkConfig struct {
 		IdleTimeoutSeconds      int    `yaml:"idle_timeout_seconds"`      // 无消息断线时间
 		StaleConnectionSeconds  int    `yaml:"stale_connection_seconds"`  // 兜底清理：视为失效的无活动时长
 		CleanupIntervalMinutes  int    `yaml:"cleanup_interval_minutes"`  // 兜底清理的检查间隔
+		WriteTimeoutSeconds     int    `yaml:"write_timeout_seconds"`     // 单条消息写超时
+		SendQueueSize           int    `yaml:"send_queue_size"`           // 每连接待发送队列长度
+		ReconnectGraceSeconds   int    `yaml:"reconnect_grace_seconds"`   // 对局中断线后等待重连的时长
 	} `yaml:"connection"`
 	Auth struct {
 		BcryptCost        int `yaml:"bcrypt_cost"`         // bcrypt 强度
@@ -82,6 +85,10 @@ type NetworkConfig struct {
 		UsernameMaxLength int `yaml:"username_max_length"` // 用户名最长字符数
 		PasswordMinLength int `yaml:"password_min_length"` // 密码最短字节数
 		PasswordMaxLength int `yaml:"password_max_length"` // 密码最长字节数
+
+		MaxConcurrentHashes           int `yaml:"max_concurrent_hashes"`              // 并发密码哈希上限，0=CPU 核数
+		LoginAttemptsPerIPPerMinute   int `yaml:"login_attempts_per_ip_per_minute"`   // 每 IP 每分钟登录/注册次数
+		LoginAttemptsPerUserPerMinute int `yaml:"login_attempts_per_user_per_minute"` // 每用户名每分钟登录次数
 	} `yaml:"auth"`
 }
 
@@ -103,6 +110,16 @@ func (n NetworkConfig) StaleConnection() time.Duration {
 // CleanupInterval 连接兜底清理的检查间隔
 func (n NetworkConfig) CleanupInterval() time.Duration {
 	return time.Duration(n.Connection.CleanupIntervalMinutes) * time.Minute
+}
+
+// WriteTimeout 单条消息写超时
+func (n NetworkConfig) WriteTimeout() time.Duration {
+	return time.Duration(n.Connection.WriteTimeoutSeconds) * time.Second
+}
+
+// ReconnectGrace 对局中断线后等待重连的时长
+func (n NetworkConfig) ReconnectGrace() time.Duration {
+	return time.Duration(n.Connection.ReconnectGraceSeconds) * time.Second
 }
 
 // SessionTTL 会话令牌有效期
@@ -212,6 +229,12 @@ func (t *Tables) validate() error {
 	check(n.Connection.IdleTimeoutSeconds >= 20, "network.connection.idle_timeout_seconds must be >= 20 (client heartbeat is 15s)")
 	check(n.Connection.StaleConnectionSeconds > 0, "network.connection.stale_connection_seconds must be > 0")
 	check(n.Connection.CleanupIntervalMinutes > 0, "network.connection.cleanup_interval_minutes must be > 0")
+	check(n.Connection.WriteTimeoutSeconds > 0, "network.connection.write_timeout_seconds must be > 0")
+	check(n.Connection.SendQueueSize >= 8, "network.connection.send_queue_size must be >= 8")
+	check(n.Connection.ReconnectGraceSeconds > 0, "network.connection.reconnect_grace_seconds must be > 0")
+	check(n.Auth.MaxConcurrentHashes >= 0, "network.auth.max_concurrent_hashes must be >= 0")
+	check(n.Auth.LoginAttemptsPerIPPerMinute > 0, "network.auth.login_attempts_per_ip_per_minute must be > 0")
+	check(n.Auth.LoginAttemptsPerUserPerMinute > 0, "network.auth.login_attempts_per_user_per_minute must be > 0")
 	check(n.Auth.BcryptCost >= 10 && n.Auth.BcryptCost <= 14, "network.auth.bcrypt_cost must be 10..14")
 	check(n.Auth.SessionTTLHours > 0, "network.auth.session_ttl_hours must be > 0")
 	check(n.Auth.UsernameMinLength > 0 && n.Auth.UsernameMinLength <= n.Auth.UsernameMaxLength,

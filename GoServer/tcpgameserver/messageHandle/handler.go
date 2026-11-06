@@ -11,6 +11,7 @@ import (
 
 	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/events"
+	"GoServer/tcpgameserver/logic"
 	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/protocol"
 	"GoServer/tcpgameserver/service"
@@ -35,6 +36,15 @@ func (c *Context) Reply(msg *pb.ServerMessage) {
 // Fail 以错误回复当前请求。
 func (c *Context) Fail(code pb.ErrorCode, text string) {
 	c.Reply(protocol.NewError(0, code, text))
+}
+
+// RemoteIP 客户端 IP（不含端口），用于限流
+func (c *Context) RemoteIP() string {
+	addr := c.Conn.RemoteAddr().String()
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
 }
 
 // Username 当前连接已登录的用户名；未登录时为空。
@@ -135,18 +145,9 @@ func HandleNewConnection(conn net.Conn) string {
 	return clientID
 }
 
-// HandleConnectionClose 处理连接关闭
+// HandleConnectionClose 处理连接关闭（同步执行：对局中的玩家转为等待重连，其余清理记录）
 func HandleConnectionClose(clientID string) {
-	connManager := service.GetConnectionManager()
-
-	if clientInfo, exists := connManager.GetConnectionByClientID(clientID); exists {
-		disconnectData := events.CreateUserConnectionEventData(
-			events.EventClientDisconnect, clientID, clientInfo.Username, clientInfo.RemoteAddr)
-		disconnectData.AddData("reason", "connection_close")
-		events.Publish(events.EventClientDisconnect, disconnectData)
-	}
-
-	connManager.RemoveConnection(clientID)
+	logic.PlayerDisconnected(clientID, "connection_close")
 }
 
 // UpdateClientActivity 更新客户端活动时间

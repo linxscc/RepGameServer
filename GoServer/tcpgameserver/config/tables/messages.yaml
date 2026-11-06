@@ -30,6 +30,7 @@ username_spaces: "用户名首尾不能有空格"
 username_reserved: "用户名不能以“%s”开头"
 # 占位符：最短字节数、最长字节数
 password_length: "密码长度需为 %d-%d 字节"
+too_many_attempts: "尝试次数过多，请稍后再试"
 
 # ---------- 对局 ----------
 no_cards_to_play: "没有选择要打出的卡牌"
