@@ -54,7 +54,9 @@ func (m *Match) Begin() error {
 		}
 		m.applyFamily(p)
 	}
-	for _, i := range m.rng.Perm(2) {
+	order := m.rng.Perm(2)
+	m.FirstDealt = order[0]
+	for _, i := range order {
 		m.dealStart(m.P[i])
 	}
 	m.startRound()

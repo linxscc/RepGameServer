@@ -20,6 +20,8 @@ type Archetype struct {
 	Loop      bool               // buy-merge-sell loop for growth relics
 	SaveTo    int                // interest reserve while healthy
 	LevelPlan []int              // LevelPlan[lv] = round from which to be at least lv (0 = never)
+	Adaptive  bool               // re-picks its lines every round: what it owns, what is left in the pool, what the opponent is not taking
+	Deny      bool               // hate-buys a cheap copy the opponent needs for a 3★
 }
 
 // Archetypes are the playstyles a bot can pick, mirroring the simulator.
@@ -43,6 +45,9 @@ func Archetypes() []Archetype {
 			Relics:   map[string]float64{"hidden": 5, "storehouse": 5, "lone_wolf": 4, "vanguard": 3, "tailwind": 3, "mirror": 3, "rubbing": 2},
 			Families: []string{"merchant", "noble", "hermit"}},
 		{Name: "均衡", SaveTo: 30, LevelPlan: normal, Trade: "letter", Families: []string{"merchant", "scholar", "noble"}},
+		{Name: "应变", Adaptive: true, Deny: true, SaveTo: 30, LevelPlan: normal, Trade: "letter",
+			Relics:   map[string]float64{"tailwind": 4, "mirror": 4, "master_seal": 3, "fellowship": 3, "furnace": 3, "multitude": 2, "rubbing": 2},
+			Families: []string{"merchant", "artisan", "noble"}},
 	}
 }
 
@@ -80,10 +85,16 @@ func New(m *rules.Match, arch Archetype, rng *rand.Rand) *Bot {
 	return b
 }
 
-// NewRandom picks a random archetype.
+// NewRandom picks a random normal-difficulty archetype. The adaptive one (应变) is much
+// stronger than the rest (about 85% against them in tools/balance), so it is left out.
 func NewRandom(m *rules.Match, rng *rand.Rand) *Bot {
-	all := Archetypes()
-	return New(m, all[rng.Intn(len(all))], rng)
+	var normal []Archetype
+	for _, a := range Archetypes() {
+		if !a.Adaptive {
+			normal = append(normal, a)
+		}
+	}
+	return New(m, normal[rng.Intn(len(normal))], rng)
 }
 
 // ---------- phase decisions ----------
@@ -131,6 +142,9 @@ func (b *Bot) Prep(m *rules.Match, p *rules.Player) {
 	if m.Phase != rules.PhasePrep {
 		return
 	}
+	if b.Arch.Adaptive {
+		b.retarget(m, p)
+	}
 	b.relicPass(m, p)
 	for lv := 2; lv < len(b.Arch.LevelPlan) && lv <= m.Config().MaxLevel(); lv++ {
 		for p.Level < lv && b.Arch.LevelPlan[lv] > 0 && m.Round >= b.Arch.LevelPlan[lv] && p.Gold-m.Config().Rules.Economy.XPCost >= b.reserve(p)/2 {
@@ -140,6 +154,9 @@ func (b *Bot) Prep(m *rules.Match, p *rules.Player) {
 		}
 	}
 	b.buyPass(m, p)
+	if b.Arch.Deny {
+		b.denyPass(m, p)
+	}
 	for rolls := 0; rolls < 12; rolls++ {
 		free := m.FreeRefreshesLeft(p) > 0
 		if !free && (m.Round < 4 || p.Gold-m.Config().Rules.Economy.RefreshCost < b.reserve(p)+2) {
@@ -162,6 +179,85 @@ func (b *Bot) Prep(m *rules.Match, p *rules.Player) {
 		}
 	}
 	_ = m.SetReady(p, true)
+}
+
+// ---------- adaptive play ----------
+
+// retarget picks the three lines worth building this round: copies already owned weigh
+// most, then copies still in the pool; lines the opponent fielded last round are avoided.
+func (b *Bot) retarget(m *rules.Match, p *rules.Player) {
+	cfg := m.Config()
+	opp := m.Opponent(p)
+	oppHas := map[int]int{}
+	for _, c := range opp.LastBoard {
+		oppHas[c.Line] += c.Star
+	}
+	type cand struct {
+		line  int
+		score float64
+	}
+	var cs []cand
+	for l, def := range cfg.Lines {
+		if m.HasThreeStar(p, l) {
+			continue
+		}
+		owned := 0
+		for _, cards := range [][]rules.Card{p.Board, p.Bench} {
+			for _, c := range cards {
+				if c.Line == l {
+					owned += pow(cfg.Rules.Merge.GroupSize, c.Star-1)
+				}
+			}
+		}
+		left := float64(m.Pool[l]) / float64(def.Pool)
+		s := 3*float64(owned) + 4*left - 2.5*float64(oppHas[l])
+		if odds := cfg.Level(p.Level).ShopOdds; def.Cost-1 < len(odds) && odds[def.Cost-1] == 0 {
+			s -= 2 // the shop cannot offer this cost at the current level
+		}
+		cs = append(cs, cand{l, s})
+	}
+	for i := range cs { // simple selection of the top 3
+		for j := i + 1; j < len(cs); j++ {
+			if cs[j].score > cs[i].score {
+				cs[i], cs[j] = cs[j], cs[i]
+			}
+		}
+	}
+	b.lines = map[int]bool{}
+	for i := 0; i < len(cs) && i < 3; i++ {
+		b.lines[cs[i].line] = true
+	}
+}
+
+// denyPass buys a cheap shop card the opponent fielded at 2★ last round when the pool is
+// nearly out, so they cannot finish the 3★. Only with spare gold and bench room.
+func (b *Bot) denyPass(m *rules.Match, p *rules.Player) {
+	cfg := m.Config()
+	need := cfg.Rules.Merge.GroupSize
+	opp := m.Opponent(p)
+	threat := map[int]bool{}
+	for _, c := range opp.LastBoard {
+		if c.Star == cfg.Rules.Merge.MaxStar-1 {
+			threat[c.Line] = true
+		}
+	}
+	for i, l := range p.Shop {
+		if l < 0 || !threat[l] || m.Pool[l] > need {
+			continue
+		}
+		if p.Gold-cfg.Lines[l].Cost < b.reserve(p) || len(p.Bench) >= cfg.Rules.Board.BenchSize {
+			continue
+		}
+		_, _ = m.BuyCard(p, i)
+	}
+}
+
+func pow(b, e int) int {
+	r := 1
+	for i := 0; i < e; i++ {
+		r *= b
+	}
+	return r
 }
 
 // ---------- helpers ----------

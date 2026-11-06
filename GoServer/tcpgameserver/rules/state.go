@@ -84,6 +84,8 @@ type Match struct {
 	Pool   []int // remaining copies per line
 	P      [2]*Player
 	Winner int // 0/1, -1 = draw (valid once Phase == PhaseOver)
+	// FirstDealt is the seat that drew its opening cards first (for balance analysis).
+	FirstDealt int
 
 	uidSeq int
 }
