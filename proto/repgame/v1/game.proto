@@ -250,6 +250,7 @@ message GameAction {
     SetReady set_ready = 10;
     PickVault pick_vault = 11;
     SkipVault skip_vault = 12;
+    Surrender surrender = 13;
   }
 }
 
@@ -273,6 +274,7 @@ message PickVault {
   int32 trade_choice = 3;
 }
 message SkipVault {}
+message Surrender {}   // 认输：对局立即结束，发起方判负
 
 // ---------- 静态数据（开局下发一次） ----------
 
@@ -479,4 +481,5 @@ message MatchOver {
   int32 rounds = 3;
   int32 hp = 4;
   int32 opponent_hp = 5;
+  bool surrendered = 6;  // 有一方认输而结束（result 为 -1 时是自己认输）
 }

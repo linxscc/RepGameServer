@@ -208,5 +208,6 @@ func matchOverMessage(cr *chessRoom, seat int) *pb.ServerMessage {
 	}
 	return &pb.ServerMessage{Body: &pb.ServerMessage_MatchOver{MatchOver: &pb.MatchOver{
 		RoomId: cr.roomID, Result: result, Rounds: int32(m.Round), Hp: int32(m.P[seat].HP), OpponentHp: int32(m.P[1-seat].HP),
+		Surrendered: m.Surrendered,
 	}}}
 }

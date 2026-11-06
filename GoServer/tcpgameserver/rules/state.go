@@ -86,6 +86,8 @@ type Match struct {
 	Winner int // 0/1, -1 = draw (valid once Phase == PhaseOver)
 	// FirstDealt is the seat that drew its opening cards first (for balance analysis).
 	FirstDealt int
+	// Surrendered is set when the match ended because a player gave up.
+	Surrendered bool
 
 	uidSeq int
 }

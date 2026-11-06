@@ -274,3 +274,17 @@ func TestPhaseTimerAdvancesOnItsOwn(t *testing.T) {
 		t.Fatalf("expected the timer to settle the round, got %v", cr.phase)
 	}
 }
+
+// Surrender ends the match immediately: the surrendering player loses and the room is freed.
+func TestSurrenderEndsMatch(t *testing.T) {
+	room, fc := newChessTestRoom(t, "kate", "c-kate")
+	act("kate", "c-kate", 1, pickFamily(0))
+	act("kate", "c-kate", 2, &pb.GameAction{Action: &pb.GameAction_Surrender{Surrender: &pb.Surrender{}}})
+	over := fc.waitFor(t, "MatchOver", func(m *pb.ServerMessage) bool { return m.GetMatchOver() != nil }).GetMatchOver()
+	if over.GetResult() != -1 || !over.GetSurrendered() {
+		t.Fatalf("surrendering player must lose: %v", over)
+	}
+	if _, err := service.GetRoomManager().GetRoom(room.RoomID); err == nil {
+		t.Fatal("room must be removed after surrender")
+	}
+}

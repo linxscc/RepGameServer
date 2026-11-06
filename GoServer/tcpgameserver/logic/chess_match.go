@@ -271,6 +271,10 @@ func HandleGameAction(req GameActionRequest) {
 		if err := cr.apply(seat, req.Action); err != nil {
 			return err
 		}
+		if cr.match.Phase == rules.PhaseOver {
+			cr.finish(room) // surrender: MatchOver goes to both players
+			return nil
+		}
 		cr.sendTo(seat, matchStateMessage(cr, seat, req.Seq))
 		cr.sendTo(1-seat, matchStateMessage(cr, 1-seat, 0))
 		cr.advanceIfReady()
@@ -297,6 +301,11 @@ func (cr *chessRoom) apply(seat int, a *pb.GameAction) error {
 	case *pb.GameAction_SetReady:
 		allowed[pb.MatchPhase_MATCH_PHASE_FAMILY] = true
 		allowed[pb.MatchPhase_MATCH_PHASE_PREP] = true
+	case *pb.GameAction_Surrender:
+		for _, ph := range []pb.MatchPhase{pb.MatchPhase_MATCH_PHASE_FAMILY, pb.MatchPhase_MATCH_PHASE_PREP,
+			pb.MatchPhase_MATCH_PHASE_SETTLE, pb.MatchPhase_MATCH_PHASE_VAULT} {
+			allowed[ph] = true
+		}
 	default:
 		allowed[pb.MatchPhase_MATCH_PHASE_PREP] = true
 	}
@@ -340,6 +349,8 @@ func (cr *chessRoom) apply(seat int, a *pb.GameAction) error {
 		return m.PickVault(p, int(pv.GetOfferIndex()), int(pv.GetSellRelicSlot()), int(pv.GetTradeChoice()))
 	case *pb.GameAction_SkipVault:
 		return m.SkipVault(p)
+	case *pb.GameAction_Surrender:
+		return m.Surrender(p)
 	}
 	return rules.ErrBadChoice
 }

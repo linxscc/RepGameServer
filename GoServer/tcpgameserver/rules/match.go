@@ -299,6 +299,20 @@ func (m *Match) win(p *Player) {
 	p.WonLast, p.LostLast = true, false
 }
 
+// Surrender ends the match at once; the surrendering player loses.
+func (m *Match) Surrender(p *Player) error {
+	if m.Phase == PhaseOver || p == nil {
+		return ErrWrongPhase
+	}
+	m.Phase = PhaseOver
+	m.Winner = 0
+	if m.P[0] == p {
+		m.Winner = 1
+	}
+	m.Surrendered = true
+	return nil
+}
+
 // ---------- vault ----------
 
 func (m *Match) openVault() {
