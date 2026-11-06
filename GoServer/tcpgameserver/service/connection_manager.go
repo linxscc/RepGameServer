@@ -1,6 +1,8 @@
 package service
 
 import (
+	"GoServer/tcpgameserver/config"
+	"GoServer/tcpgameserver/protocol"
 	"fmt"
 	"log"
 	"net"
@@ -34,8 +36,8 @@ func NewConnectionManager() *ConnectionManager {
 		connections:      make(map[string]*types.ClientInfo),
 		userConns:        make(map[string]string),
 		addrConns:        make(map[string]string),
-		heartbeatTimeout: 30 * time.Second,
-		cleanupInterval:  60 * time.Hour,
+		heartbeatTimeout: config.Game().Network.StaleConnection(),
+		cleanupInterval:  config.Game().Network.CleanupInterval(),
 		stopChan:         make(chan struct{}),
 	}
 }
@@ -91,11 +93,28 @@ func (cm *ConnectionManager) removeConnectionUnsafe(clientID string) bool {
 		delete(cm.userConns, clientInfo.Username)
 	}
 
-	// 关闭连接
-	if clientInfo.Conn != nil {
-		clientInfo.Conn.Close()
+	// 关闭连接（先发完已排队的消息，例如"账号在别处登录"的通知）
+	if conn := clientInfo.GetConn(); conn != nil {
+		protocol.CloseAfterFlush(conn)
 	}
 
+	return true
+}
+
+// MarkWaitingReconnect 对局中断线：保留玩家记录（用户名映射不变）以便重连恢复，
+// 但解除与已断开网络连接的关联。记录不存在时返回 false。
+func (cm *ConnectionManager) MarkWaitingReconnect(clientID string) bool {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	clientInfo, exists := cm.connections[clientID]
+	if !exists {
+		return false
+	}
+	if cm.addrConns[clientInfo.RemoteAddr] == clientID {
+		delete(cm.addrConns, clientInfo.RemoteAddr)
+	}
+	clientInfo.DetachConn()
 	return true
 }
 
@@ -281,11 +300,12 @@ func (cm *ConnectionManager) SendToUser(username string, data []byte) error {
 		return fmt.Errorf("user %s not found or not connected", username)
 	}
 
-	if clientInfo.Conn == nil {
+	conn := clientInfo.GetConn()
+	if conn == nil {
 		return fmt.Errorf("connection is nil for user %s", username)
 	}
 
-	_, err := clientInfo.Conn.Write(data)
+	err := protocol.WriteFrame(conn, data)
 	if err != nil {
 		// 连接出错，移除该连接
 		cm.RemoveConnection(clientInfo.ClientID)
@@ -304,11 +324,12 @@ func (cm *ConnectionManager) SendToClient(clientID string, data []byte) error {
 		return fmt.Errorf("client %s not found", clientID)
 	}
 
-	if clientInfo.Conn == nil {
+	conn := clientInfo.GetConn()
+	if conn == nil {
 		return fmt.Errorf("connection is nil for client %s", clientID)
 	}
 
-	_, err := clientInfo.Conn.Write(data)
+	err := protocol.WriteFrame(conn, data)
 	if err != nil {
 		// 连接出错，移除该连接
 		cm.RemoveConnection(clientID)
@@ -330,8 +351,8 @@ func (cm *ConnectionManager) Broadcast(data []byte) {
 	cm.mutex.RUnlock()
 
 	for _, clientInfo := range connections {
-		if clientInfo.Conn != nil {
-			_, err := clientInfo.Conn.Write(data)
+		if conn := clientInfo.GetConn(); conn != nil {
+			err := protocol.WriteFrame(conn, data)
 			if err != nil {
 				// 连接出错，移除该连接
 				cm.RemoveConnection(clientInfo.ClientID)
@@ -364,6 +385,10 @@ func (cm *ConnectionManager) performCleanup() {
 
 	var toRemove []string
 	for clientID, clientInfo := range cm.connections {
+		// 等待重连的玩家由重连宽限计时器负责清理
+		if clientInfo.GetStatus() == types.StatusWaitingReconnect {
+			continue
+		}
 		if !clientInfo.IsActive(cm.heartbeatTimeout) {
 			toRemove = append(toRemove, clientID)
 		}
@@ -374,6 +399,7 @@ func (cm *ConnectionManager) performCleanup() {
 	}
 
 	if len(toRemove) > 0 {
+		log.Printf("connection cleanup removed %d stale records", len(toRemove))
 	}
 }
 

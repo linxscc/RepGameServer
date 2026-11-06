@@ -1,86 +1,128 @@
 package tcpserver
 
 import (
-	"GoServer/tcpgameserver/events"
-	messagehandle "GoServer/tcpgameserver/messageHandle"
-	"GoServer/tcpgameserver/setup"
+	"bufio"
+	"crypto/tls"
 	"log"
 	"net"
+	"os"
+	"strings"
+	"time"
+
+	"GoServer/tcpgameserver/config"
+	messagehandle "GoServer/tcpgameserver/messageHandle"
+	"GoServer/tcpgameserver/protocol"
+	"GoServer/tcpgameserver/setup"
+	"GoServer/tcpgameserver/tlsutil"
 )
 
-// 启动TCP服务器
+// StartTCPServer 启动游戏服务器（默认启用 TLS）。
 func StartTCPServer() {
-	// 初始化服务器组件（响应码、卡牌池、游戏开始回调等）
+	// 先加载并校验配置表，配置有误时在启动阶段就失败
+	cfg := config.Game()
+	log.Printf("config loaded: %d players/room, turn %ds, bot match after %ds (enabled=%v)",
+		cfg.Rules.Match.PlayersPerRoom, cfg.Rules.Turn.TimeoutSeconds, cfg.Bot.MatchWaitSeconds, cfg.Bot.Enabled)
+
 	setup.InitializeServer()
 
-	// 启动TCP监听
-	ln, err := net.Listen("tcp", ":9060")
+	ln, err := listen()
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("TCP server listening on :9060")
 
-	// 处理连接请求
+	var backoff time.Duration
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
+			// 例如文件描述符耗尽：退避重试，避免空转占满 CPU
+			if backoff == 0 {
+				backoff = 5 * time.Millisecond
+			} else if backoff < time.Second {
+				backoff *= 2
+			}
+			log.Printf("accept failed: %v; retrying in %v", err, backoff)
+			time.Sleep(backoff)
 			continue
 		}
+		backoff = 0
 		go handleConnection(conn)
 	}
 }
 
-// 处理客户端连接
-func handleConnection(conn net.Conn) {
-	// 使用连接管理器处理新连接
-	clientID := messagehandle.HandleNewConnection(conn)
-	clientAddr := conn.RemoteAddr().String()
-	defer func() {
-		messagehandle.HandleConnectionClose(clientID)
-
-		conn.Close()
-	}()
-
-	buf := make([]byte, 4096) // 8KB buffer to handle 6KB data with safety margin
-	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			// 发布连接超时或错误事件
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				timeoutData := events.NewEventData(events.EventClientDisconnect, "tcp_server", map[string]interface{}{
-					"client_id":      clientID,
-					"client_address": clientAddr,
-					"error":          err.Error(),
-				})
-				events.Publish(events.EventClientDisconnect, timeoutData)
-			}
-			break // 连接断开或出错，退出循环
+// listen 根据环境变量创建监听器。
+//
+//	TLS_CERT_FILE / TLS_KEY_FILE  证书路径，不存在时自动生成自签名证书
+//	TLS_HOSTS                     自签名证书包含的 IP/域名，逗号分隔
+//	TLS_DISABLED=true             仅限本地调试：使用明文 TCP
+func listen() (net.Listener, error) {
+	listenAddr := config.Game().Network.Connection.ListenAddr
+	if strings.EqualFold(os.Getenv("TLS_DISABLED"), "true") {
+		log.Println("WARNING: TLS disabled, traffic is NOT encrypted. Use only for local debugging.")
+		ln, err := net.Listen("tcp", listenAddr)
+		if err == nil {
+			log.Printf("TCP server listening on %s (plaintext)", listenAddr)
 		}
-
-		// 更新客户端活动时间
-		messagehandle.UpdateClientActivity(clientID)
-
-		msg := string(buf[:n])
-		messagehandle.HandleTCPMessage(msg, conn, clientID)
+		return ln, err
 	}
+
+	cfg, fingerprint, err := tlsutil.ServerConfig(tlsutil.Options{
+		CertFile: envOr("TLS_CERT_FILE", "certs/server.crt"),
+		KeyFile:  envOr("TLS_KEY_FILE", "certs/server.key"),
+		Hosts:    strings.Split(envOr("TLS_HOSTS", "localhost,127.0.0.1"), ","),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ln, err := tls.Listen("tcp", listenAddr, cfg)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("TLS server listening on %s", listenAddr)
+	log.Printf("TLS certificate SHA-256 fingerprint (set SERVER_CERT_SHA256 in the client .env): %s", fingerprint)
+	return ln, nil
 }
 
-// 启动UDP服务器
-func StartUDPServer() {
-	addr, err := net.ResolveUDPAddr("udp", ":9060")
-	if err != nil {
-		log.Fatal(err)
+func envOr(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
 	}
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("UDP server listening on :9060")
-	for {
-		buf := make([]byte, 1024)
-		_, remoteAddr, err := conn.ReadFromUDP(buf)
-		if err == nil {
-			conn.WriteToUDP([]byte("pong"), remoteAddr)
+	return fallback
+}
+
+// handleConnection 处理单个客户端连接：完成握手后循环读取帧并分发。
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+
+	if tlsConn, ok := conn.(*tls.Conn); ok {
+		_ = conn.SetDeadline(time.Now().Add(config.Game().Network.HandshakeTimeout()))
+		if err := tlsConn.Handshake(); err != nil {
+			return
 		}
+		_ = conn.SetDeadline(time.Time{})
+	}
+
+	protocol.Attach(conn)
+	defer protocol.Detach(conn)
+
+	clientID := messagehandle.HandleNewConnection(conn)
+	clientAddr := conn.RemoteAddr().String()
+	defer messagehandle.HandleConnectionClose(clientID)
+
+	// 超过 network.yaml 的 idle_timeout_seconds 没有任何消息（含心跳）即断开
+	idleTimeout := config.Game().Network.IdleTimeout()
+	reader := bufio.NewReader(conn)
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))
+		payload, err := protocol.ReadFrame(reader)
+		if err != nil {
+			// 断线处理统一由上面 defer 的 HandleConnectionClose 完成
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				log.Printf("client %s (%s) idle timeout", clientID, clientAddr)
+			}
+			return
+		}
+
+		messagehandle.HandleTCPMessage(payload, conn, clientID)
 	}
 }

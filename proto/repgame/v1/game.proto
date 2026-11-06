@@ -1,0 +1,217 @@
+// RepGame 客户端 <-> 服务器协议（唯一事实来源）。
+//
+// 传输层：TLS 之上，每条消息 = 4 字节大端序长度 + 一条序列化后的
+// ClientMessage / ServerMessage。
+//
+// 设计约定：
+// - 消息类型由 oneof 的分支本身决定，不再依赖字符串 key 或数据库里的响应码。
+// - 客户端只发送“意图”（要出哪几张牌的 UID），所有数值（伤害、血量、合成结果）
+//   一律由服务器计算，客户端上报的数值不被信任。
+// - 只追加字段，不复用/修改已有字段编号；删除字段时用 reserved 占位。
+// - 枚举 0 值统一为 *_UNSPECIFIED，表示“未设置”。
+syntax = "proto3";
+
+package repgame.v1;
+
+option go_package = "GoServer/tcpgameserver/pb;pb";
+option csharp_namespace = "RepGame.Protocol";
+
+// ============================================================
+// 信封
+// ============================================================
+
+// 客户端 -> 服务器
+message ClientMessage {
+  // 客户端自增请求序号；服务器在对应回复的 reply_to 中原样带回。
+  uint32 seq = 1;
+
+  oneof body {
+    LoginRequest login = 10;
+    RegisterRequest register = 11;
+    ResumeSessionRequest resume_session = 12;
+    ReadyRequest ready = 13;
+    PlayCardsRequest play_cards = 14;
+    ComposeCardsRequest compose_cards = 15;
+    RestartRequest restart = 16;
+    Ping ping = 17;
+  }
+}
+
+// 服务器 -> 客户端
+message ServerMessage {
+  // 回复的是哪条请求（ClientMessage.seq）；服务器主动推送时为 0。
+  uint32 reply_to = 1;
+
+  oneof body {
+    Error error = 2;
+    Welcome welcome = 10;
+    AuthResult auth_result = 11;
+    RegisterResult register_result = 12;
+    GameState game_state = 13;
+    BondList bond_list = 14;
+    PlayerPresence player_presence = 15;
+    Pong pong = 16;
+  }
+}
+
+// ============================================================
+// 通用
+// ============================================================
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_INVALID_REQUEST = 1;      // 消息无法解析或缺少必要字段
+  ERROR_CODE_NOT_AUTHENTICATED = 2;    // 需要先登录
+  ERROR_CODE_INVALID_CREDENTIALS = 3;  // 用户名或密码错误
+  ERROR_CODE_USER_EXISTS = 4;          // 注册时用户名已存在
+  ERROR_CODE_SESSION_EXPIRED = 5;      // 会话令牌无效或已过期
+  ERROR_CODE_INVALID_GAME_STATE = 6;   // 当前状态下不能执行该操作
+  ERROR_CODE_INVALID_CARDS = 7;        // 牌不在手牌中、重复或数量不合法
+  ERROR_CODE_INTERNAL = 8;             // 服务器内部错误
+}
+
+message Error {
+  ErrorCode code = 1;
+  string message = 2; // 给人看的说明，客户端逻辑不应依赖其内容
+}
+
+message Ping {
+  int64 client_time_ms = 1;
+}
+
+message Pong {
+  int64 client_time_ms = 1; // 原样带回，用于计算延迟
+  int64 server_time_ms = 2;
+}
+
+// ============================================================
+// 连接与账号
+// ============================================================
+
+message Welcome {
+  int64 server_time_ms = 1;
+  uint32 protocol_version = 2;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2; // 仅在 TLS 连接中传输；服务器以 bcrypt 哈希存储
+}
+
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+}
+
+// 断线重连时用登录拿到的令牌恢复会话，无需再次发送密码。
+message ResumeSessionRequest {
+  string session_token = 1;
+}
+
+// 登录或恢复会话成功
+message AuthResult {
+  string username = 1;
+  string session_token = 2;
+  int64 session_expires_at_ms = 3;
+}
+
+message RegisterResult {
+  string username = 1;
+}
+
+// ============================================================
+// 对局：客户端意图
+// ============================================================
+
+message ReadyRequest {}
+
+message RestartRequest {}
+
+message PlayCardsRequest {
+  string room_id = 1;
+  repeated string card_uids = 2; // 只传手牌 UID，牌面数值以服务器为准
+}
+
+message ComposeCardsRequest {
+  string room_id = 1;
+  repeated string card_uids = 2; // 数量必须是 3 的倍数
+}
+
+// ============================================================
+// 对局：服务器状态
+// ============================================================
+
+message Card {
+  string uid = 1;
+  int32 id = 2;
+  string name = 3;
+  double damage = 4;
+  optional string target_name = 5; // 合成目标；为空表示不可合成
+  int32 level = 6;
+}
+
+message Bond {
+  int32 id = 1;
+  string name = 2;
+  int32 level = 3;
+  repeated string card_names = 4;
+  double damage = 5;
+  string description = 6;
+  string skill = 7;
+}
+
+message BondList {
+  repeated Bond bonds = 1;
+}
+
+message OtherPlayer {
+  string username = 1;
+  string round = 2;
+  double health = 3;
+  int32 cards_count = 4;
+}
+
+message DamageInfo {
+  string source = 1;
+  string target = 2;
+  string type = 3;
+  double value = 4;
+  repeated Bond triggered_bonds = 5;
+}
+
+// 为什么推送这次状态
+enum GameStateReason {
+  GAME_STATE_REASON_UNSPECIFIED = 0;
+  GAME_STATE_REASON_GAME_STARTED = 1;
+  GAME_STATE_REASON_CARDS_PLAYED = 2;
+  GAME_STATE_REASON_CARDS_COMPOSED = 3;
+  GAME_STATE_REASON_FORCED_PLAY = 4;   // 超时被系统自动出牌
+  GAME_STATE_REASON_RECONNECTED = 5;
+  GAME_STATE_REASON_GAME_OVER = 6;
+}
+
+// 某个玩家视角下的完整对局状态
+message GameState {
+  GameStateReason reason = 1;
+  string room_id = 2;
+  string username = 3;
+  string round = 4;
+  double health = 5;
+  repeated Card self_cards = 6;
+  repeated OtherPlayer other_players = 7;
+  repeated DamageInfo damage_info = 8;
+}
+
+enum PresenceStatus {
+  PRESENCE_STATUS_UNSPECIFIED = 0;
+  PRESENCE_STATUS_DISCONNECTED = 1; // 掉线，等待重连
+  PRESENCE_STATUS_RECONNECTED = 2;
+}
+
+// 同房间其他玩家的在线状态变化
+message PlayerPresence {
+  string username = 1;
+  string room_id = 2;
+  PresenceStatus status = 3;
+  string reason = 4;
+}

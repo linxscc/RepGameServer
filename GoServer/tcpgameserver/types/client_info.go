@@ -55,6 +55,30 @@ func NewClientInfo(conn net.Conn, clientID string) *ClientInfo {
 	}
 }
 
+// GetConn 当前网络连接；断线等待重连期间为 nil
+func (c *ClientInfo) GetConn() net.Conn {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	return c.Conn
+}
+
+// DetachConn 断开网络连接但保留玩家记录（等待重连）
+func (c *ClientInfo) DetachConn() net.Conn {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	conn := c.Conn
+	c.Conn = nil
+	c.Status = StatusWaitingReconnect
+	return conn
+}
+
+// GetUsername 已登录的用户名；未登录时为空
+func (c *ClientInfo) GetUsername() string {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	return c.Username
+}
+
 // UpdateActivity 更新最后活动时间
 func (c *ClientInfo) UpdateActivity() {
 	c.mutex.Lock()

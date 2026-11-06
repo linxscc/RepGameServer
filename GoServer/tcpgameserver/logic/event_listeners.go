@@ -1,16 +1,13 @@
 package logic
 
 import (
-	"encoding/json"
-	"net"
-	"time"
+	"GoServer/tcpgameserver/pb"
+	"GoServer/tcpgameserver/protocol"
 
 	"GoServer/tcpgameserver/cards"
 	"GoServer/tcpgameserver/events"
 	"GoServer/tcpgameserver/models"
 	"GoServer/tcpgameserver/service"
-	"GoServer/tcpgameserver/tools"
-	"GoServer/tcpgameserver/types"
 )
 
 // EventListener 事件监听器接口
@@ -49,12 +46,11 @@ func NewGameEventListener() *GameEventListener {
 	return &GameEventListener{
 		BaseEventListener: BaseEventListener{
 			Name: "GameEventListener",
+			// 出牌/合成/状态推送/对局结束不走事件总线，由 PlayCards、ComposeCards 在房间锁内直接完成
 			EventTypes: []string{
 				events.EventGameStart,
-				events.EventGameEnd,
 				events.EventGamePause,
 				events.EventGameResume,
-				events.EventGameStateUpdate,
 			},
 			Priority: 10, // 高优先级
 		},
@@ -65,14 +61,10 @@ func (g *GameEventListener) HandleEvent(eventType string, data interface{}) {
 	switch eventType {
 	case events.EventGameStart:
 		g.handleGameStart(data)
-	case events.EventGameEnd:
-		g.handleGameEnd(data)
 	case events.EventGamePause:
 		g.handleGamePause(data)
 	case events.EventGameResume:
 		g.handleGameResume(data)
-	case events.EventGameStateUpdate:
-		g.handleGameStateUpdate(data)
 	default:
 	}
 }
@@ -87,13 +79,6 @@ func (g *GameEventListener) handleGameStart(data interface{}) {
 	}
 }
 
-func (g *GameEventListener) handleGameEnd(data interface{}) {
-
-	// 直接创建并使用GameEndProcessor处理游戏结束逻辑
-	processor := NewGameEndProcessor()
-	processor.ProcessGameEnd(data)
-}
-
 func (g *GameEventListener) handleGamePause(data interface{}) {
 	if _, ok := data.(*events.EventData); ok {
 		// 暂停游戏逻辑
@@ -103,15 +88,6 @@ func (g *GameEventListener) handleGamePause(data interface{}) {
 func (g *GameEventListener) handleGameResume(data interface{}) {
 	if _, ok := data.(*events.EventData); ok {
 		// 恢复游戏逻辑
-	}
-}
-
-func (g *GameEventListener) handleGameStateUpdate(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-
-		// 向房间内所有玩家发送游戏状态更新
-		broadcaster := NewGameStateBroadcaster()
-		broadcaster.BroadcastGameStateToRoom(eventData)
 	}
 }
 
@@ -126,10 +102,8 @@ func NewCardEventListener() *CardEventListener {
 			Name: "CardEventListener",
 			EventTypes: []string{
 				events.EventCardDraw,
-				events.EventCardPlay,
 				events.EventCardDiscard,
 				events.EventCardShuffle,
-				events.EventCardCompose,
 				events.EventDeckEmpty,
 				events.EventCardBonds,
 			},
@@ -142,10 +116,6 @@ func (c *CardEventListener) HandleEvent(eventType string, data interface{}) {
 	switch eventType {
 	case events.EventCardDraw:
 		c.handleCardDraw(data)
-	case events.EventCardPlay:
-		c.handleCardPlay(data)
-	case events.EventCardCompose:
-		c.handleCardCompose(data)
 	case events.EventDeckEmpty:
 		c.handleDeckEmpty(data)
 	case events.EventCardBonds:
@@ -163,23 +133,6 @@ func (c *CardEventListener) handleCardDraw(data interface{}) {
 		// 更新玩家手牌
 		// 检查手牌上限
 		// 触发抽卡特效
-	}
-}
-
-func (c *CardEventListener) handleCardPlay(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		// 使用PlayCardProcessor处理出牌逻辑（包含所有验证）
-		processor := NewPlayCardProcessor()
-		processor.ProcessPlayCard(eventData)
-	}
-}
-
-func (c *CardEventListener) handleCardCompose(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		// 使用CardComposeProcessor处理合成逻辑
-		processor := NewCardComposeProcessor()
-		processor.ProcessCardCompose(eventData)
-
 	}
 }
 
@@ -206,16 +159,15 @@ func (c *CardEventListener) handleCardBonds(data interface{}) {
 			bondList = append(bondList, bond)
 		}
 
-		// 发送羁绊数据消息 (5002)
-		response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(5002, bondList)
+		response := &pb.ServerMessage{Body: &pb.ServerMessage_BondList{BondList: protocol.ToBondList(bondList)}}
 
 		// 获取玩家连接并发送消息
 		clientInfo, exists := connManager.GetConnectionByClientID(ClientID)
-		if !exists || clientInfo == nil || clientInfo.Conn == nil {
+		if !exists || clientInfo == nil || clientInfo.GetConn() == nil {
 			return
 		}
 
-		sendTCPResponse(clientInfo.Conn, response)
+		_ = sendTo(clientInfo.GetConn(), response)
 
 	}
 }
@@ -293,7 +245,6 @@ func (b *BattleEventListener) handleDamage(data interface{}) {
 		_, _ = eventData.GetFloat64("damage")
 		_, _ = eventData.GetString("source")
 
-
 		// 应用伤害
 		// 检查死亡条件
 		// 触发伤害效果
@@ -315,7 +266,6 @@ func (b *BattleEventListener) handleHeal(data interface{}) {
 		_, _ = eventData.GetString("target")
 		_, _ = eventData.GetFloat64("heal_amount")
 		_, _ = eventData.GetString("source")
-
 
 		// 应用治疗
 		// 检查HP上限
@@ -365,11 +315,6 @@ func (s *SystemEventListener) handleSystemStart(data interface{}) {
 		// 加载配置
 		// 启动服务
 
-		// 加载响应码配置文件
-		if err := tools.LoadResponseCodes(); err != nil {
-		} else {
-		}
-
 		// 初始化卡牌池
 		if err := cards.InitCardPool(); err != nil {
 		} else {
@@ -397,7 +342,6 @@ func (s *SystemEventListener) handleSystemError(data interface{}) {
 	if eventData, ok := data.(*events.EventData); ok {
 		_, _ = eventData.GetString("error")
 		_, _ = eventData.GetString("severity")
-
 
 		// 错误处理逻辑
 		// 记录错误日志
@@ -497,12 +441,8 @@ func NewConnectionEventListener() *ConnectionEventListener {
 			Name: "ConnectionEventListener",
 			EventTypes: []string{
 				events.EventClientConnect,
-				events.EventClientDisconnect,
-				events.EventClientTimeout,
 				events.EventClientBind,
 				events.EventClientUnbind,
-				events.EventClientKicked,
-				events.EventClientReconnect,
 				events.EventConnectionCleanup,
 			},
 			Priority: 20, // 中等优先级
@@ -514,18 +454,10 @@ func (c *ConnectionEventListener) HandleEvent(eventType string, data interface{}
 	switch eventType {
 	case events.EventClientConnect:
 		c.handleClientConnect(data)
-	case events.EventClientDisconnect:
-		c.handleClientDisconnect(data)
-	case events.EventClientTimeout:
-		c.handleClientTimeout(data)
 	case events.EventClientBind:
 		c.handleClientBind(data)
 	case events.EventClientUnbind:
 		c.handleClientUnbind(data)
-	case events.EventClientKicked:
-		c.handleClientKicked(data)
-	case events.EventClientReconnect:
-		c.handleClientReconnect(data)
 	case events.EventConnectionCleanup:
 		c.handleConnectionCleanup(data)
 	default:
@@ -550,20 +482,6 @@ func (c *ConnectionEventListener) handleClientConnect(data interface{}) {
 				clientInfo.SetMetadata("first_connect_time", firstConnectTime)
 			}
 
-			// 发送欢迎消息
-			welcomeResponse := tools.GlobalResponseHelper.CreateSuccessTcpResponse(1001, map[string]interface{}{
-				"client_id":   clientID,
-				"server_time": time.Now().Unix(),
-				"status":      "connected",
-				"message":     "Welcome to the game server!",
-			})
-
-			// 通过连接发送欢迎消息
-			if welcomeData, err := json.Marshal(welcomeResponse); err == nil {
-				welcomeData = append(welcomeData, '\n')
-				if _, writeErr := clientInfo.Conn.Write(welcomeData); writeErr != nil {
-				}
-			}
 		}
 
 		// 处理客户端连接逻辑
@@ -573,47 +491,11 @@ func (c *ConnectionEventListener) handleClientConnect(data interface{}) {
 	}
 }
 
-func (c *ConnectionEventListener) handleClientDisconnect(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		clientID, _ := eventData.GetString("client_id")
-		username, _ := eventData.GetString("username")
-		reason, _ := eventData.GetString("reason")
-
-		handler := NewDisconnectHandler()
-		err := handler.HandlePlayerDisconnect(clientID, username, reason)
-		if err != nil {
-		} else {
-		}
-	}
-}
-
-func (c *ConnectionEventListener) handleClientTimeout(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		clientID, _ := eventData.GetString("client_id")
-		username, _ := eventData.GetString("username")
-		lastActivity, _ := eventData.GetString("last_activity")
-
-
-		// 处理客户端超时逻辑
-		// 标记为超时状态
-		// 给予短暂重连时间
-		// 或直接断开连接
-
-		// 触发断开连接事件
-		disconnectData := events.CreateUserConnectionEventData(
-			events.EventClientDisconnect, clientID, username, "")
-		disconnectData.AddData("reason", "timeout")
-		disconnectData.AddData("last_activity", lastActivity)
-		events.Publish(events.EventClientDisconnect, disconnectData)
-	}
-}
-
 func (c *ConnectionEventListener) handleClientBind(data interface{}) {
 	if eventData, ok := data.(*events.EventData); ok {
 		_, _ = eventData.GetString("client_id")
 		_, _ = eventData.GetString("username")
 		_, _ = eventData.GetString("remote_addr")
-
 
 		// 处理用户绑定逻辑
 		// 加载用户数据
@@ -629,68 +511,10 @@ func (c *ConnectionEventListener) handleClientUnbind(data interface{}) {
 		_, _ = eventData.GetString("username")
 		_, _ = eventData.GetString("reason")
 
-
 		// 处理用户解绑逻辑
 		// 保存用户数据
 		// 设置离线状态
 		// 清理用户相关状态
-	}
-}
-
-func (c *ConnectionEventListener) handleClientKicked(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		clientID, _ := eventData.GetString("client_id")
-		username, _ := eventData.GetString("username")
-		kickReason, _ := eventData.GetString("kick_reason")
-		kickedBy, _ := eventData.GetString("kicked_by")
-		newClientID, _ := eventData.GetString("new_client_id")
-
-		// 获取连接管理器
-		connManager := service.GetConnectionManager()
-
-		// 先触发断开连接事件处理原客户端
-		disconnectData := events.CreateUserConnectionEventData(
-			events.EventClientDisconnect, clientID, username, "")
-		disconnectData.AddData("reason", "kicked")
-		disconnectData.AddData("kick_reason", kickReason)
-		disconnectData.AddData("kicked_by", kickedBy)
-		events.Publish(events.EventClientDisconnect, disconnectData) // 处理新客户端绑定
-		if newClientID != "" {
-			// 获取新客户端连接
-			newClient, exists := connManager.GetConnectionByClientID(newClientID)
-			if exists && newClient != nil {
-				// 绑定用户到新连接
-				err := connManager.BindUser(newClientID, username)
-				if err != nil {
-					return
-				}
-
-				// 设置新客户端状态为已登录
-				connManager.SetPlayerStatus(newClientID, types.StatusLoggedIn)
-
-				// 发送登录成功响应给新客户端
-				if newClient.Conn != nil {
-					response := tools.GlobalResponseHelper.CreateSuccessTcpResponse(2001, map[string]interface{}{
-						"username": username,
-					})
-					sendTCPResponse(newClient.Conn, response)
-				}
-			} else {
-			}
-		}
-	}
-}
-
-func (c *ConnectionEventListener) handleClientReconnect(data interface{}) {
-	if eventData, ok := data.(*events.EventData); ok {
-		clientID, _ := eventData.GetString("client_id")
-		username, _ := eventData.GetString("username")
-
-		handler := NewReconnectionHandler()
-		err := handler.HandlePlayerReconnection(clientID, username)
-		if err != nil {
-		} else {
-		}
 	}
 }
 
@@ -700,23 +524,10 @@ func (c *ConnectionEventListener) handleConnectionCleanup(data interface{}) {
 		_, _ = eventData.GetInt("total_connections")
 		_, _ = eventData.GetString("cleanup_duration")
 
-
 		// 处理连接清理逻辑
 		// 记录清理统计
 		// 优化内存使用
 		// 更新连接监控数据
-	}
-}
-
-// sendTCPResponse 发送TCP响应消息
-func sendTCPResponse(conn net.Conn, resp *models.TcpResponse) {
-	jsonBytes, err := json.Marshal(resp)
-	if err != nil {
-		return
-	}
-	jsonBytes = append(jsonBytes, '\n')
-	_, err = conn.Write(jsonBytes)
-	if err != nil {
 	}
 }
 

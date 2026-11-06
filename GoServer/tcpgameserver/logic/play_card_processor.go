@@ -1,442 +1,214 @@
 package logic
 
 import (
+	"errors"
 	"fmt"
+	"log"
 
-	"GoServer/tcpgameserver/events"
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/models"
-	"GoServer/tcpgameserver/service"
+	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/types"
 )
 
-// PlayCardProcessor 出牌逻辑处理器
+// PlayRequest 一次出牌（真人出牌、超时自动出牌、机器人出牌共用）
+type PlayRequest struct {
+	RoomID   string
+	Player   string
+	CardUIDs []string // 客户端只提供 UID，牌面数据一律取服务器手牌中的值
+	// Forced 回合超时由服务器代为出牌；CardUIDs 为空时打出手牌中的第一张
+	Forced bool
+	// 发起请求的连接与请求序号，用于回复错误；服务器内部发起时为空
+	ClientID string
+	Seq      uint32
+}
+
+// errNotYourTurn 出牌时不是该玩家的回合
+var errNotYourTurn = errors.New("not your turn")
+
+// PlayCards 处理一次出牌：校验、结算、切换回合、广播，并安排下一回合。
+func PlayCards(req PlayRequest) {
+	err := withRoom(req.RoomID, func(room *types.RoomInfo) error {
+		return defaultPlayCardProcessor.play(room, req)
+	})
+	if err == nil {
+		return
+	}
+
+	log.Printf("reject play from %s in room %s: %v", req.Player, req.RoomID, err)
+	if errors.Is(err, errNotYourTurn) {
+		notifyClientError(req.ClientID, req.Seq, pb.ErrorCode_ERROR_CODE_INVALID_GAME_STATE, config.Msg(config.MsgNotYourTurn))
+	} else {
+		notifyClientError(req.ClientID, req.Seq, pb.ErrorCode_ERROR_CODE_INVALID_CARDS, config.Msg(config.MsgCardsInvalid))
+	}
+}
+
+// PlayCardProcessor 出牌结算。调用方必须持有房间操作锁（见 room_sync.go）。
 type PlayCardProcessor struct {
-	Name           string
 	bondCalculator *BondCalculator
 }
 
+var defaultPlayCardProcessor = NewPlayCardProcessor()
+
 // NewPlayCardProcessor 创建新的出牌逻辑处理器
 func NewPlayCardProcessor() *PlayCardProcessor {
-	return &PlayCardProcessor{
-		Name:           "PlayCardProcessor",
-		bondCalculator: NewBondCalculator(),
-	}
+	return &PlayCardProcessor{bondCalculator: NewBondCalculator()}
 }
 
-// PlayCardData 出牌事件数据
-type PlayCardData struct {
-	RoomID      string        `json:"room_id"`
-	Player      string        `json:"player"`
-	CardsToPlay []models.Card `json:"cards_to_play"` // 要出的所有卡牌
-	TargetType  string        `json:"target_type"`
+func (p *PlayCardProcessor) play(room *types.RoomInfo, req PlayRequest) error {
+	cards, err := p.validate(room, req)
+	if err != nil {
+		return err
+	}
+
+	bondResult := p.bondCalculator.CalculateBondDamage(cards)
+	if err := p.settle(room, req.Player, cards, &bondResult); err != nil {
+		// 校验已保证结算各步骤成功；走到这里说明房间数据异常
+		return fmt.Errorf("settle play: %w", err)
+	}
+
+	if room.AnyPlayerDefeated() {
+		finishGame(room)
+		return nil
+	}
+
+	reason := pb.GameStateReason_GAME_STATE_REASON_CARDS_PLAYED
+	if req.Forced {
+		reason = pb.GameStateReason_GAME_STATE_REASON_FORCED_PLAY
+	}
+	broadcastRoomState(room, reason)
+	return GlobalRoomTimerProcessor.StartRoomTimer(room.RoomID)
 }
 
-// ProcessPlayCard 处理出牌逻辑
-func (p *PlayCardProcessor) ProcessPlayCard(eventData *events.EventData) {
-
-
-	// 获取玩家名称
-	player, _ := eventData.GetString("player")
-	// 获取房间ID
-	roomID, _ := eventData.GetString("room_id")
-	// 获取玩家发送的自身卡牌数据
-	selfCardsData, _ := eventData.GetData("self_cards")
-
-	// 转换为卡牌切片
-	receivedSelfCards, _ := selfCardsData.([]models.Card)
-
-	// 构建出牌数据（所有验证交给ProcessPlayCard处理）
-	data := &PlayCardData{
-		RoomID:      roomID,
-		Player:      player,
-		CardsToPlay: receivedSelfCards,
-		TargetType:  "opponent",
+// validate 校验房间状态、回合与卡牌，返回服务器手牌中对应的卡牌
+func (p *PlayCardProcessor) validate(room *types.RoomInfo, req PlayRequest) ([]models.Card, error) {
+	if status := room.GetStatus(); status != types.RoomStatusPlaying {
+		return nil, fmt.Errorf("room is not playing: %s", status)
 	}
 
-	// 步骤1: 验证出牌信息是否正确
-	room, validatedCards, err := p.validatePlayCardRequest(data)
+	player, err := room.GetPlayerInfo(req.Player)
 	if err != nil {
-		return
+		return nil, err
+	}
+	if player.Round != types.RoundCurrent {
+		return nil, fmt.Errorf("%w: player %s (round status: %s)", errNotYourTurn, req.Player, player.Round)
 	}
 
-	// 步骤2: 计算羁绊伤害加成，得到伤害结果和触发羁绊
-	bondResult := p.bondCalculator.CalculateBondDamage(validatedCards)
-
-	// 步骤3: 为房间内玩家更新信息（血量、收到伤害、造成伤害等）并为出牌方抽取新卡牌
-	gameEnded, err := p.updateRoomPlayersInfo(room, data.Player, bondResult.TotalDamage, data.TargetType, &bondResult, validatedCards)
-	if err != nil {
-		return
+	uids := req.CardUIDs
+	if req.Forced && len(uids) == 0 && len(player.HandCards) > 0 {
+		uids = []string{player.HandCards[0].UID}
+	}
+	if len(uids) == 0 {
+		return nil, fmt.Errorf("no cards to play for player %s", req.Player)
 	}
 
-	// 步骤4: 发送游戏状态更新事件（仅在游戏未结束时）
-	if !gameEnded {
-		p.publishGameStateUpdateWithBonds(room)
+	hand := make(map[string]models.Card, len(player.HandCards))
+	for _, c := range player.HandCards {
+		hand[c.UID] = c
 	}
-}
-
-// validatePlayCardRequest 验证出牌请求信息
-func (p *PlayCardProcessor) validatePlayCardRequest(data *PlayCardData) (*types.RoomInfo, []models.Card, error) {
-	// 获取房间管理器
-	roomManager := service.GetRoomManager()
-
-	// 获取房间信息
-	room, err := roomManager.GetRoom(data.RoomID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get room %s: %v", data.RoomID, err)
-	}
-
-	// 验证房间状态
-	if room.Status != "playing" {
-		return nil, nil, fmt.Errorf("room %s is not in playing state: %s", data.RoomID, room.Status)
-	}
-
-	// 获取玩家信息
-	playerInfo, err := room.GetPlayerInfo(data.Player)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get player info for %s: %v", data.Player, err)
-	}
-
-	// 验证玩家回合状态
-	if playerInfo.Round != "current" {
-		return nil, nil, fmt.Errorf("it's not player %s's turn (round status: %s)", data.Player, playerInfo.Round)
-	}
-
-	// 验证是否有卡牌要出
-	if len(data.CardsToPlay) == 0 {
-		return nil, nil, fmt.Errorf("no cards to play for player %s", data.Player)
-	}
-	// 构建手牌UID映射用于快速查找和验证
-	handCardMap := make(map[string]models.Card)
-	for _, handCard := range playerInfo.HandCards {
-		handCardMap[handCard.UID] = handCard
-	}
-
-	// 验证所有要出的卡牌都在玩家手牌中
-	var validatedCards []models.Card
-	for _, cardToPlay := range data.CardsToPlay {
-		if handCard, exists := handCardMap[cardToPlay.UID]; exists {
-			// 验证卡牌详细信息匹配
-			if handCard.Name != cardToPlay.Name || handCard.ID != cardToPlay.ID {
-				return nil, nil, fmt.Errorf("card information mismatch for UID %s: expected %s (ID: %d), got %s (ID: %d)",
-					cardToPlay.UID, handCard.Name, handCard.ID, cardToPlay.Name, cardToPlay.ID)
-			}
-			validatedCards = append(validatedCards, cardToPlay)
-		} else {
-			return nil, nil, fmt.Errorf("card UID %s not found in player %s's hand", cardToPlay.UID, data.Player)
+	seen := make(map[string]bool, len(uids))
+	cards := make([]models.Card, 0, len(uids))
+	for _, uid := range uids {
+		if seen[uid] {
+			return nil, fmt.Errorf("duplicate card UID %s in play request", uid)
 		}
-	}
-
-	// 检查是否有重复的卡牌UID
-	uidSet := make(map[string]bool)
-	for _, card := range validatedCards {
-		if uidSet[card.UID] {
-			return nil, nil, fmt.Errorf("duplicate card UID %s in play request", card.UID)
+		seen[uid] = true
+		c, ok := hand[uid]
+		if !ok {
+			return nil, fmt.Errorf("card UID %s not found in player %s's hand", uid, req.Player)
 		}
-		uidSet[card.UID] = true
+		cards = append(cards, c)
 	}
-
-	return room, validatedCards, nil
+	return cards, nil
 }
 
-// updateRoomPlayersInfo 更新房间内玩家信息（血量、伤害统计、羁绊、移除卡牌、切换回合、抽取新卡牌等）
-// 返回值：(gameEnded bool, error) - gameEnded表示游戏是否结束
-func (p *PlayCardProcessor) updateRoomPlayersInfo(room *types.RoomInfo, playerName string, totalDamage float64, targetType string, bondResult *BondCalculationResult, playedCards []models.Card) (bool, error) { // 1. 根据目标类型执行伤害效果
-	err := p.executeCardEffectWithBondDamage(room, playerName, totalDamage, targetType, bondResult)
-	if err != nil {
-		return false, fmt.Errorf("failed to execute card effect: %v", err)
+// settle 结算：移除出的牌 → 造成伤害 → 记录伤害信息 → 切换回合 → 补牌
+func (p *PlayCardProcessor) settle(room *types.RoomInfo, playerName string, cards []models.Card, bondResult *BondCalculationResult) error {
+	uids := make([]string, 0, len(cards))
+	for _, c := range cards {
+		uids = append(uids, c.UID)
+	}
+	if err := room.RemoveCardsFromPlayerByUID(playerName, uids); err != nil {
+		return err
 	}
 
-	// 2. 更新玩家战斗统计数据
-	err = p.updatePlayerBattleStats(room, playerName, totalDamage, targetType, bondResult)
-	if err != nil {
-		return false, fmt.Errorf("failed to update battle stats: %v", err)
-	}
-	// 3. 从手牌中移除出的卡牌
-	var cardUIDs []string
-	for _, card := range playedCards {
-		cardUIDs = append(cardUIDs, card.UID)
-	}
-	err = room.RemoveCardsFromPlayerByUID(playerName, cardUIDs)
-	if err != nil {
-		return false, fmt.Errorf("failed to remove cards from player %s: %v", playerName, err)
-	}
-
-	// 4. 切换到下一个玩家的回合
-	err = p.switchToNextPlayer(room, playerName)
-	if err != nil {
-		return false, fmt.Errorf("failed to switch to next player: %v", err)
-	} // 5. 检查游戏是否结束
-	gameEnded := p.checkGameEnd(room)
-	if gameEnded {
-		// 游戏已结束，不再执行后续逻辑
-		return true, nil
-	}
-
-	// 6. 为出牌方新增三张卡牌（如果游戏仍在进行）
-	if room.Status == "playing" {
-		err = p.drawCardsForPlayer(room, playerName, 3)
-		if err != nil {
-		}
-	}
-
-	return false, nil
-}
-
-// executeCardEffectWithBondDamage 使用羁绊计算后的伤害执行效果
-func (p *PlayCardProcessor) executeCardEffectWithBondDamage(room *types.RoomInfo, playerName string, totalDamage float64, targetType string, bondResult *BondCalculationResult) error {
-	switch targetType {
-	case "opponent":
-		return p.applyDamageToOpponent(room, playerName, totalDamage)
-	case "self":
-		return p.applySelfHeal(room, playerName, totalDamage)
-	case "all":
-		return p.applyAOEDamage(room, playerName, totalDamage)
-	default:
-		// 默认对对手造成伤害
-		return p.applyDamageToOpponent(room, playerName, totalDamage)
-	}
-}
-
-// applyDamageToOpponent 对对手造成伤害
-func (p *PlayCardProcessor) applyDamageToOpponent(room *types.RoomInfo, playerName string, damage float64) error {
-	// 获取对手名称
-	var opponentName string
-	for _, player := range room.Players {
-		if player.Username != playerName {
-			opponentName = player.Username
-			break
-		}
-	}
-
-	if opponentName == "" {
+	opponent := opponentOf(room, playerName)
+	if opponent == "" {
 		return fmt.Errorf("opponent not found for player %s", playerName)
 	}
-
-	// 获取对手当前血量
-	currentHealth, err := room.GetPlayerCurrentHealth(opponentName)
+	health, err := room.GetPlayerCurrentHealth(opponent)
 	if err != nil {
-		return fmt.Errorf("failed to get opponent health: %v", err)
+		return err
+	}
+	if err := room.SetPlayerHealth(opponent, health-bondResult.TotalDamage); err != nil {
+		return err
 	}
 
-	// 计算伤害后的血量
-	newHealth := currentHealth - damage
-	if newHealth < 0 {
-		newHealth = 0
+	p.recordDamage(room, playerName, opponent, bondResult)
+
+	if err := room.SetPlayerRound(playerName, types.RoundWaiting); err != nil {
+		return err
+	}
+	if err := room.SetPlayerRound(opponent, types.RoundCurrent); err != nil {
+		return err
 	}
 
-	// 设置对手新血量
-	err = room.SetPlayerHealth(opponentName, newHealth)
-	if err != nil {
-		return fmt.Errorf("failed to set opponent health: %v", err)
-	}
-
-	return nil
-}
-
-// applySelfHeal 对自己应用治疗效果
-func (p *PlayCardProcessor) applySelfHeal(room *types.RoomInfo, playerName string, healAmount float64) error {
-	// 获取玩家当前血量
-	currentHealth, err := room.GetPlayerCurrentHealth(playerName)
-	if err != nil {
-		return fmt.Errorf("failed to get player health: %v", err)
-	}
-
-	// 获取玩家信息以获取最大血量
-	playerInfo, err := room.GetPlayerInfo(playerName)
-	if err != nil {
-		return fmt.Errorf("failed to get player info: %v", err)
-	}
-
-	// 计算治疗后的血量
-	newHealth := currentHealth + healAmount
-	if newHealth > playerInfo.MaxHealth {
-		newHealth = playerInfo.MaxHealth
-	}
-
-	// 设置新血量
-	err = room.SetPlayerHealth(playerName, newHealth)
-	if err != nil {
-		return fmt.Errorf("failed to set player health: %v", err)
+	if !room.AnyPlayerDefeated() {
+		p.drawCards(room, playerName, config.Game().Rules.Player.DrawAfterPlay)
 	}
 	return nil
 }
 
-// applyAOEDamage 对所有玩家应用AOE伤害
-func (p *PlayCardProcessor) applyAOEDamage(room *types.RoomInfo, playerName string, damage float64) error {
-	// 对所有玩家造成伤害（AOE效果）
-	for _, player := range room.Players {
-		if player.Username != playerName { // 通常AOE不影响施法者
-			// 获取玩家当前血量
-			currentHealth, err := room.GetPlayerCurrentHealth(player.Username)
-			if err != nil {
-				continue
-			}
-
-			// 计算伤害后的血量
-			newHealth := currentHealth - damage
-			if newHealth < 0 {
-				newHealth = 0
-			}
-
-			// 设置新血量
-			err = room.SetPlayerHealth(player.Username, newHealth)
-			if err != nil {
-				continue
-			}
-		}
+// recordDamage 让房间内每个玩家都收到这次伤害的信息（用于客户端展示），广播后清空
+func (p *PlayCardProcessor) recordDamage(room *types.RoomInfo, attacker, target string, bondResult *BondCalculationResult) {
+	bonds := make([]models.BondModel, 0, len(bondResult.TriggeredBonds))
+	for _, tb := range bondResult.TriggeredBonds {
+		bonds = append(bonds, *tb.Bond)
 	}
-
-	return nil
+	info := models.DamageInfo{
+		DamageSource:   attacker,
+		DamageTarget:   target,
+		DamageType:     "Attacked",
+		DamageValue:    bondResult.TotalDamage,
+		TriggeredBonds: bonds,
+	}
+	for _, name := range room.PlayerNames() {
+		_ = room.SetPlayerDamage(name, info)
+	}
 }
 
-// switchToNextPlayer 切换到下一个玩家
-func (p *PlayCardProcessor) switchToNextPlayer(room *types.RoomInfo, currentPlayer string) error {
-	// 获取所有玩家
-	players := room.Players
-	if len(players) != 2 {
-		return fmt.Errorf("invalid number of players: %d", len(players))
-	}
-
-	// 找到下一个玩家
-	var nextPlayer string
-	for _, player := range players {
-		if player.Username != currentPlayer {
-			nextPlayer = player.Username
-			break
-		}
-	}
-
-	if nextPlayer == "" {
-		return fmt.Errorf("next player not found")
-	}
-	roomManager := service.GetRoomManager()
-	roomManager.SetPlayerRound(room.RoomID, currentPlayer, "waiting")
-	roomManager.SetPlayerRound(room.RoomID, nextPlayer, "current")
-
-	return nil
-}
-
-// checkGameEnd 检查游戏是否结束，返回true表示游戏已结束
-func (p *PlayCardProcessor) checkGameEnd(room *types.RoomInfo) bool {
-	for _, player := range room.Players {
-		if player.CurrentHealth <= 0 {
-
-			// 发布游戏结束事件
-			gameEndData := events.NewEventData(events.EventGameEnd, "play_card_processor", map[string]interface{}{})
-			gameEndData.SetRoom(room.RoomID)
-			events.Publish(events.EventGameEnd, gameEndData)
-
-			return true // 游戏已结束
-		}
-	}
-	return false // 游戏继续
-}
-
-// publishGameStateUpdateWithBonds 发布包含羁绊信息的游戏状态更新事件
-func (p *PlayCardProcessor) publishGameStateUpdateWithBonds(room *types.RoomInfo) {
-	// 发布游戏状态更新事件
-	stateUpdateData := events.NewEventData(events.EventGameStateUpdate, "play_card_processor", map[string]interface{}{})
-	stateUpdateData.SetRoom(room.RoomID)
-	events.Publish(events.EventGameStateUpdate, stateUpdateData)
-}
-
-// drawCardsForPlayer 为玩家从1级卡牌池抽取指定数量的卡牌
-func (p *PlayCardProcessor) drawCardsForPlayer(room *types.RoomInfo, playerName string, count int) error {
-	// 检查玩家当前手牌数量
-	playerInfo, err := room.GetPlayerInfo(playerName)
+// drawCards 出牌方补牌，不超过手牌上限；卡池不足时少抽或不抽
+func (p *PlayCardProcessor) drawCards(room *types.RoomInfo, playerName string, count int) {
+	hand, err := room.GetPlayerHandCards(playerName)
 	if err != nil {
-		return fmt.Errorf("failed to get player info: %v", err)
+		return
+	}
+	if free := room.MaxHandCards - len(hand); count > free {
+		count = free
+	}
+	if count <= 0 {
+		return
 	}
 
-	// 检查是否有足够空间添加卡牌
-	if len(playerInfo.HandCards)+count > room.MaxHandCards {
-		availableSlots := room.MaxHandCards - len(playerInfo.HandCards)
-		if availableSlots <= 0 {
-			return nil // 不返回错误，只是无法抽卡
-		}
-		count = availableSlots // 只抽取可用槽位数量的卡牌
-	}
-
-	// 从1级卡牌池抽取卡牌
-	drawnCards, err := room.DrawRandomCardsFromLevel1Pool(count)
+	drawn, err := room.DrawRandomCardsFromLevel1Pool(count)
 	if err != nil {
-		return fmt.Errorf("failed to draw %d cards from level 1 pool: %v", count, err)
+		log.Printf("room %s: draw %d cards for %s: %v", room.RoomID, count, playerName, err)
+		return
 	}
-
-	// 将抽取的卡牌添加到玩家手牌
-	successCount := 0
-	for _, card := range drawnCards {
-		err = room.AddCardToPlayer(playerName, card)
-		if err != nil {
-			// 如果添加失败，将剩余未添加的卡牌放回卡牌池
-			for i := successCount; i < len(drawnCards); i++ {
-				room.Level1CardPool = append(room.Level1CardPool, drawnCards[i])
-			}
-			return fmt.Errorf("failed to add card %s to player %s after %d successful additions: %v",
-				card.Name, playerName, successCount, err)
+	for i, c := range drawn {
+		if err := room.AddCardToPlayer(playerName, c); err != nil {
+			room.ReturnCardsToPool(drawn[i:])
+			return
 		}
-		successCount++
 	}
-
-	return nil
 }
 
-// updatePlayerBattleStats 更新双方玩家的战斗数据
-func (p *PlayCardProcessor) updatePlayerBattleStats(room *types.RoomInfo, attackerName string, totalDamage float64, targetType string, bondResult *BondCalculationResult) error {
-	// 将触发的羁绊转换为BondModel切片
-	triggeredBondModels := make([]models.BondModel, 0, len(bondResult.TriggeredBonds))
-	for _, triggeredBond := range bondResult.TriggeredBonds {
-		triggeredBondModels = append(triggeredBondModels, *triggeredBond.Bond)
+// opponentOf 双人房间中 playerName 的对手
+func opponentOf(room *types.RoomInfo, playerName string) string {
+	for _, name := range room.PlayerNames() {
+		if name != playerName {
+			return name
+		}
 	}
-
-	switch targetType {
-	case "opponent":
-		// 为其他玩家设置承受伤害
-		for _, player := range room.Players {
-			DamageInfo := models.DamageInfo{
-				DamageSource:   attackerName,
-				DamageTarget:   player.Username,
-				DamageType:     "Attacked",
-				DamageValue:    totalDamage,
-				TriggeredBonds: triggeredBondModels,
-			}
-			room.SetPlayerDamage(player.Username, DamageInfo)
-		}
-	case "self":
-		// 治疗情况
-		for _, player := range room.Players {
-			DamageInfo := models.DamageInfo{
-				DamageSource:   attackerName,
-				DamageTarget:   attackerName,
-				DamageType:     "Recover",
-				DamageValue:    totalDamage,
-				TriggeredBonds: triggeredBondModels,
-			}
-			room.SetPlayerDamage(player.Username, DamageInfo)
-		}
-
-	case "all":
-		// 为所有其他玩家设置承受伤害
-		for _, player := range room.Players {
-			// 更新被攻击方数据
-			DamageInfo := models.DamageInfo{
-				DamageSource:   attackerName,
-				DamageTarget:   player.Username,
-				DamageType:     "AOE",
-				DamageValue:    totalDamage,
-				TriggeredBonds: triggeredBondModels,
-			}
-			err := room.SetPlayerDamage(player.Username, DamageInfo)
-			if err != nil {
-				return fmt.Errorf("failed to set attacker bonds: %v", err)
-			}
-		}
-
-	default:
-		// 默认按对手处理
-		return p.updatePlayerBattleStats(room, attackerName, totalDamage, "opponent", bondResult)
-	}
-
-
-	return nil
+	return ""
 }

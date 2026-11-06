@@ -3,260 +3,105 @@ package service
 import (
 	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/models"
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"sync"
 
-	_ "github.com/go-sql-driver/mysql" // MySQL驱动
+	"github.com/go-sql-driver/mysql" // MySQL驱动
 )
 
-// GetDBConnection 获取数据库连接
-func GetDBConnection() (*sql.DB, error) {
-	dbConfig := config.GetDBConfig()
+// ErrUserNotFound 账号不存在
+var ErrUserNotFound = errors.New("user not found")
 
-	// 构建MySQL连接字符串
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.DBName)
+// ErrUserExists 注册时用户名已被占用
+var ErrUserExists = errors.New("user already exists")
 
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return nil, err
-	}
+// 进程内共享一个连接池（*sql.DB 并发安全，内部复用连接）。
+// sql.Open 不会立即建立连接，数据库暂时不可用时查询返回错误，恢复后自动重连。
+var (
+	dbOnce sync.Once
+	dbPool *sql.DB
+	dbErr  error
+	dbCfg  config.DBConfig
+)
 
-	// 测试连接
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, err
-	}
-
-	return db, nil
-}
-
-// GetAllResponseInfo 获取所有响应信息
-func GetAllResponseInfo() ([]models.ResponseInfo, error) {
-	db, err := GetDBConnection()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	query := "SELECT id, code, response_key, COALESCE(message, '') as message FROM ResponseInfo ORDER BY id"
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query ResponseInfo: %v", err)
-	}
-	defer rows.Close()
-
-	var responseInfos []models.ResponseInfo
-	for rows.Next() {
-		var info models.ResponseInfo
-		err := rows.Scan(&info.ID, &info.Code, &info.ResponseKey, &info.Message)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan ResponseInfo: %v", err)
+func database() (*sql.DB, error) {
+	dbOnce.Do(func() {
+		dbCfg = config.GetDBConfig()
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			dbCfg.User, dbCfg.Password, dbCfg.Host, dbCfg.Port, dbCfg.DBName)
+		dbPool, dbErr = sql.Open("mysql", dsn)
+		if dbErr != nil {
+			return
 		}
-		responseInfos = append(responseInfos, info)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error during ResponseInfo iteration: %v", err)
-	}
-
-	return responseInfos, nil
+		dbPool.SetMaxOpenConns(dbCfg.MaxOpenConns)
+		dbPool.SetMaxIdleConns(dbCfg.MaxIdleConns)
+		dbPool.SetConnMaxLifetime(dbCfg.ConnMaxLifetime)
+	})
+	return dbPool, dbErr
 }
 
-// GetAllCardDeck 获取所有卡牌信息
-func GetAllCardDeck() ([]models.CardDeck, error) {
-	db, err := GetDBConnection()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	query := "SELECT id, name, cards_num, damage, targetname, level FROM CardDeck ORDER BY level, id"
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query CardDeck: %v", err)
-	}
-	defer rows.Close()
-
-	var cardDecks []models.CardDeck
-	for rows.Next() {
-		var card models.CardDeck
-		var targetname sql.NullString
-
-		err := rows.Scan(&card.ID, &card.Name, &card.CardsNum, &card.Damage, &targetname, &card.Level)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan CardDeck: %v", err)
-		}
-
-		// 处理可能为NULL的targetname字段
-		if targetname.Valid {
-			card.TargetName = &targetname.String
-		} else {
-			card.TargetName = nil
-		}
-
-		cardDecks = append(cardDecks, card)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error during CardDeck iteration: %v", err)
-	}
-
-	return cardDecks, nil
+// queryContext 每次查询都带超时，数据库卡住时不会无限占用连接协程
+func queryContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), dbCfg.QueryTimeout)
 }
 
-// CheckUserAccountExists 检查用户账户是否存在
-func CheckUserAccountExists(username string) (bool, error) {
-	db, err := GetDBConnection()
-	if err != nil {
-		return false, err
-	}
-	defer db.Close()
-
-	var count int
-	query := "SELECT COUNT(*) FROM UserAccount WHERE username = ?"
-	err = db.QueryRow(query, username).Scan(&count)
-	if err != nil {
-		return false, fmt.Errorf("failed to check user existence: %v", err)
-	}
-
-	return count > 0, nil
-}
-
-// GetUserAccount 获取用户账户信息（用于验证登录）
+// GetUserAccount 获取用户账户信息（用于验证登录）；账号不存在时返回 ErrUserNotFound
 func GetUserAccount(username string) (*models.UserAccount, error) {
-	db, err := GetDBConnection()
+	db, err := database()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	ctx, cancel := queryContext()
+	defer cancel()
 
 	var user models.UserAccount
-	query := "SELECT username, password FROM UserAccount WHERE username = ?"
-	err = db.QueryRow(query, username).Scan(&user.Username, &user.Password)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found: %s", username)
-		}
-		return nil, fmt.Errorf("failed to get user account: %v", err)
+	err = db.QueryRowContext(ctx, "SELECT username, password FROM UserAccount WHERE username = ?", username).
+		Scan(&user.Username, &user.Password)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrUserNotFound
 	}
-
+	if err != nil {
+		return nil, fmt.Errorf("get user account: %w", err)
+	}
 	return &user, nil
 }
 
-// ValidateUserLogin 验证用户登录
-func ValidateUserLogin(username, password string) (bool, error) {
-	user, err := GetUserAccount(username)
-	if err != nil {
-		return false, err
-	}
-
-	// 这里应该使用加密密码比较，暂时使用明文比较
-	// 在生产环境中应该使用 bcrypt 等加密方式
-	if user.Password == password {
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// CreateUserAccount 创建新用户账户
+// CreateUserAccount 创建新用户账户（只保存 bcrypt 哈希）；用户名已存在时返回 ErrUserExists
 func CreateUserAccount(username, password string) error {
-	db, err := GetDBConnection()
+	db, err := database()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-
-	// 检查用户是否已存在
-	exists, err := CheckUserAccountExists(username)
+	hash, err := HashPassword(password)
 	if err != nil {
 		return err
 	}
-	if exists {
-		return fmt.Errorf("user already exists: %s", username)
-	}
+	ctx, cancel := queryContext()
+	defer cancel()
 
-	// 插入新用户
-	query := "INSERT INTO UserAccount (username, password) VALUES (?, ?)"
-	_, err = db.Exec(query, username, password)
+	// 依赖 username 唯一索引判断重名，没有"先查再插"的竞态
+	_, err = db.ExecContext(ctx, "INSERT INTO UserAccount (username, password) VALUES (?, ?)", username, hash)
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 { // ER_DUP_ENTRY
+		return ErrUserExists
+	}
 	if err != nil {
-		return fmt.Errorf("failed to create user account: %v", err)
+		return fmt.Errorf("create user account: %w", err)
 	}
 	return nil
 }
 
-// GetAllBonds 获取所有羁绊数据（包含关联的卡牌）
-func GetAllBonds() ([]models.BondModel, error) {
-	db, err := GetDBConnection()
+// updatePasswordHash 把旧的明文密码升级为 bcrypt 哈希
+func updatePasswordHash(username, hash string) error {
+	db, err := database()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer db.Close()
-
-	// 查询羁绊基本信息
-	bondsQuery := `
-		SELECT id, name, level, damage, 
-		       COALESCE(skill, '') as skill, 
-		       description 
-		FROM Bonds ORDER BY id`
-
-	bondRows, err := db.Query(bondsQuery)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query bonds: %v", err)
-	}
-	defer bondRows.Close()
-	var bonds []models.BondModel
-	bondIndexMap := make(map[int]int)
-	// 读取羁绊基本信息
-	for bondRows.Next() {
-		var bond models.BondModel
-		err := bondRows.Scan(
-			&bond.ID,
-			&bond.Name,
-			&bond.Level,
-			&bond.Damage,
-			&bond.Skill,
-			&bond.Description,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan bond: %v", err)
-		}
-
-		// 初始化卡牌切片
-		bond.CardNames = make([]string, 0)
-		bonds = append(bonds, bond)
-		bondIndexMap[bond.ID] = len(bonds) - 1
-	}
-	// 查询羁绊关联的卡牌
-	cardQuery := `
-		SELECT br.bond_id, br.card_name1, br.card_name2, br.card_name3, 
-		       br.card_name4, br.card_name5, br.card_name6, br.card_name7
-		FROM BondCards br
-		ORDER BY br.bond_id`
-	cardRows, err := db.Query(cardQuery)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query BondCards: %v", err)
-	}
-	defer cardRows.Close() // 读取羁绊关联的卡牌信息
-	for cardRows.Next() {
-		var bondID int
-		var cardName1, cardName2, cardName3, cardName4, cardName5, cardName6, cardName7 sql.NullString
-		err := cardRows.Scan(&bondID, &cardName1, &cardName2, &cardName3, &cardName4, &cardName5, &cardName6, &cardName7)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan BondCards: %v", err)
-		}
-
-		// 将非空的卡牌名称添加到对应的羁绊中
-		if index, exists := bondIndexMap[bondID]; exists {
-			cardNames := []sql.NullString{cardName1, cardName2, cardName3, cardName4, cardName5, cardName6, cardName7}
-			for _, cardName := range cardNames {
-				if cardName.Valid && cardName.String != "" {
-					bonds[index].CardNames = append(bonds[index].CardNames, cardName.String)
-				}
-			}
-		} else {
-		}
-	}
-	return bonds, nil
+	ctx, cancel := queryContext()
+	defer cancel()
+	_, err = db.ExecContext(ctx, "UPDATE UserAccount SET password = ? WHERE username = ?", hash, username)
+	return err
 }

@@ -25,4 +25,10 @@ Thumbs.db
 *.log
 logs/
 *.pem
+*.key
+*.crt
+GoServer/certs/
 .aws/
+
+# Private local docs (paths, domain, LAN info)
+*.private.md

@@ -163,7 +163,7 @@ func (rm *RoomManager) FindRoomByPlayer(username string) (*types.RoomInfo, error
 	defer rm.mutex.RUnlock()
 
 	for _, room := range rm.rooms {
-		if _, err := room.GetPlayerInfo(username); err == nil {
+		if room.HasPlayer(username) {
 			return room, nil
 		}
 	}
@@ -178,7 +178,7 @@ func (rm *RoomManager) GetAvailableRooms() []*types.RoomInfo {
 
 	var availableRooms []*types.RoomInfo
 	for _, room := range rm.rooms {
-		if !room.IsRoomFull() && room.Status == "waiting" {
+		if !room.IsRoomFull() && room.GetStatus() == types.RoomStatusWaiting {
 			availableRooms = append(availableRooms, room)
 		}
 	}
@@ -212,10 +212,10 @@ func (rm *RoomManager) GetRoomStats() map[string]interface{} {
 		stats := room.GetRoomStats()
 		totalPlayers += stats["current_players"].(int)
 
-		switch room.Status {
-		case "waiting":
+		switch room.GetStatus() {
+		case types.RoomStatusWaiting:
 			waitingRooms++
-		case "playing":
+		case types.RoomStatusPlaying:
 			playingRooms++
 		}
 	}
@@ -227,56 +227,16 @@ func (rm *RoomManager) GetRoomStats() map[string]interface{} {
 	}
 }
 
-// GetPlayerGameInfo 获取玩家游戏信息
+// GetPlayerGameInfo 获取玩家游戏信息；房间不在对局中时返回 (nil, nil)
 func (rm *RoomManager) GetPlayerGameInfo(roomID string, username string) (*models.PlayerGameInfo, error) {
 	room, err := rm.GetRoom(roomID)
 	if err != nil {
 		return nil, err
 	}
-
-	// 检查房间是否在游戏状态
-	if room.Status != "playing" {
-		return nil, nil // 不在游戏中
+	if room.GetStatus() != types.RoomStatusPlaying {
+		return nil, nil
 	}
-
-	// 获取房间内所有玩家
-	allPlayers := make([]string, 0, len(room.Players))
-	for username := range room.Players {
-		allPlayers = append(allPlayers, username)
-	}
-
-	// 创建游戏信息
-	return rm.createPlayerGameInfo(room, username, allPlayers), nil
-}
-
-// createPlayerGameInfo 创建玩家游戏信息
-func (rm *RoomManager) createPlayerGameInfo(room *types.RoomInfo, username string, allPlayers []string) *models.PlayerGameInfo {
-	roomPlayer := room.Players[username]
-
-	OtherPlayers := make([]models.OtherPlayerGameInfo, 0, len(allPlayers)-1)
-	for _, playerName := range allPlayers {
-		if playerName != username {
-			if otherPlayer, exists := room.Players[playerName]; exists {
-				OtherPlayerGameInfo := models.OtherPlayerGameInfo{
-					Username:   otherPlayer.Username,
-					Round:      otherPlayer.Round,
-					Health:     otherPlayer.CurrentHealth,
-					CardsCount: len(otherPlayer.HandCards),
-				}
-				OtherPlayers = append(OtherPlayers, OtherPlayerGameInfo)
-			}
-		}
-	}
-
-	return &models.PlayerGameInfo{
-		RoomId:       room.RoomID,
-		Username:     username,
-		Round:        roomPlayer.Round,
-		Health:       roomPlayer.CurrentHealth,
-		SelfCards:    roomPlayer.HandCards,
-		OtherPlayers: OtherPlayers,
-		DamageInfo:   roomPlayer.DamageInfo,
-	}
+	return room.Snapshot(username)
 }
 
 // DrawCardFromLevel1Pool 从指定房间的一级卡牌池中抽取一张卡牌
@@ -316,7 +276,7 @@ func (rm *RoomManager) DrawCardForPlayer(roomID, username string) error {
 	err = room.AddCardToPlayer(username, *card)
 	if err != nil {
 		// 如果添加失败，需要将卡牌放回卡牌池
-		room.Level1CardPool = append(room.Level1CardPool, *card)
+		room.ReturnCardsToPool([]models.Card{*card})
 		return fmt.Errorf("failed to add card to player %s: %v", username, err)
 	}
 
@@ -354,9 +314,7 @@ func (rm *RoomManager) DrawCardsForPlayer(roomID, username string, count int) er
 		err = room.AddCardToPlayer(username, card)
 		if err != nil {
 			// 如果添加失败，将已抽取但未添加的卡牌放回卡牌池
-			for i := successCount; i < len(cards); i++ {
-				room.Level1CardPool = append(room.Level1CardPool, cards[i])
-			}
+			room.ReturnCardsToPool(cards[successCount:])
 			return fmt.Errorf("failed to add card %s to player %s after %d successful additions: %v",
 				card.Name, username, successCount, err)
 		}

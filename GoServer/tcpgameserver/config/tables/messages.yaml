@@ -1,0 +1,47 @@
+# ============================================================
+# 服务器消息文本配置表
+# ------------------------------------------------------------
+# 服务器回复给客户端的 Error.message 文本，以及业务日志里的原因说明。
+# 注意：客户端界面显示的是它自己按错误码配置的中文提示
+# （客户端 StreamingAssets/Config/error_messages.json），
+# 这里的文本主要用于调试和日志；客户端逻辑不应依赖其内容。
+#
+# 键名由代码中的 config.Msg* 常量引用，删除或改名会导致启动校验失败。
+# 文本中的 %d / %s 是格式化占位符，顺序不能改变。
+# ============================================================
+
+# ---------- 请求格式 ----------
+malformed_message: "无法解析的消息"
+empty_message_body: "消息内容为空"
+unsupported_request: "不支持的请求类型 %s"
+
+# ---------- 账号 ----------
+login_required: "请先登录"
+invalid_credentials: "用户名或密码错误"
+login_unavailable: "登录服务暂时不可用"
+session_expired: "登录已失效，请重新登录"
+logged_in_elsewhere: "账号已在其他设备登录"
+username_taken: "用户名已被注册"
+register_failed: "注册失败"
+# 占位符：最短长度、最长长度
+username_length: "用户名长度需为 %d-%d 个字符"
+username_spaces: "用户名首尾不能有空格"
+# 占位符：机器人名称前缀
+username_reserved: "用户名不能以“%s”开头"
+# 占位符：最短字节数、最长字节数
+password_length: "密码长度需为 %d-%d 字节"
+too_many_attempts: "尝试次数过多，请稍后再试"
+
+# ---------- 对局 ----------
+no_cards_to_play: "没有选择要打出的卡牌"
+# 占位符：合成所需的同名卡牌数量
+compose_count_invalid: "合成的卡牌数量必须是 %d 的倍数"
+cards_invalid: "所选卡牌不在手牌中或已被使用"
+not_your_turn: "还没轮到你出牌"
+
+# ---------- 断线重连 ----------
+reconnect_player_not_found: "找不到该玩家"
+reconnect_not_waiting: "该玩家不在等待重连状态"
+reconnect_no_game: "没有进行中的对局"
+reconnect_connection_lost: "连接已失效"
+reconnect_bind_failed: "恢复对局失败"

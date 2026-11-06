@@ -1,9 +1,8 @@
 package cards
 
 import (
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/models"
-	"GoServer/tcpgameserver/service"
-	"fmt"
 	"sync"
 )
 
@@ -34,19 +33,18 @@ func InitBondPool() error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 
-
-	// 从数据库获取所有羁绊数据
-	bonds, err := service.GetAllBonds()
-	if err != nil {
-		return fmt.Errorf("failed to load bonds from database: %v", err)
-	}
-
-	// 清空现有羁绊池
+	// 从羁绊配置表（config/tables/bonds.yaml）读取，启动时已校验过
 	manager.bonds = make(map[int]*models.BondModel)
-
-	// 加载羁绊数据到池中
-	for _, bond := range bonds {
-		manager.bonds[bond.ID] = &bond
+	for _, b := range config.Game().Bonds.Bonds {
+		manager.bonds[b.ID] = &models.BondModel{
+			ID:          b.ID,
+			Name:        b.Name,
+			Level:       b.Level,
+			CardNames:   append([]string(nil), b.Cards...),
+			Damage:      b.Damage,
+			Description: b.Description,
+			Skill:       b.Skill,
+		}
 	}
 	return nil
 }

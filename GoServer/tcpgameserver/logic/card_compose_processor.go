@@ -1,248 +1,141 @@
 package logic
 
 import (
+	"errors"
 	"fmt"
+	"log"
 
 	"GoServer/tcpgameserver/cards"
-	"GoServer/tcpgameserver/events"
+	"GoServer/tcpgameserver/config"
 	"GoServer/tcpgameserver/models"
-	"GoServer/tcpgameserver/service"
+	"GoServer/tcpgameserver/pb"
 	"GoServer/tcpgameserver/types"
 )
 
-// CardComposeProcessor 卡牌合成处理器
+// ComposeRequest 一次合成：每 group_size 张同名卡合成 1 张目标卡（game_rules.yaml）
+type ComposeRequest struct {
+	RoomID   string
+	Player   string
+	CardUIDs []string
+	ClientID string
+	Seq      uint32
+}
+
+// errNothingComposed 校验通过但一张也没合成出来（例如目标卡的共享卡池已空）
+var errNothingComposed = errors.New("nothing composed")
+
+// ComposeCards 处理一次合成并广播结果；失败时回复发起请求的客户端。
+func ComposeCards(req ComposeRequest) {
+	err := withRoom(req.RoomID, func(room *types.RoomInfo) error {
+		return defaultComposeProcessor.compose(room, req)
+	})
+	if err != nil {
+		log.Printf("reject compose from %s in room %s: %v", req.Player, req.RoomID, err)
+		notifyClientError(req.ClientID, req.Seq, pb.ErrorCode_ERROR_CODE_INVALID_CARDS, config.Msg(config.MsgCardsInvalid))
+	}
+}
+
+// CardComposeProcessor 合成结算。调用方必须持有房间操作锁（见 room_sync.go）。
 type CardComposeProcessor struct {
-	Name            string
 	cardPoolManager *cards.CardPoolManager
 }
 
+var defaultComposeProcessor = NewCardComposeProcessor()
+
 // NewCardComposeProcessor 创建新的卡牌合成处理器
 func NewCardComposeProcessor() *CardComposeProcessor {
-	return &CardComposeProcessor{
-		Name:            "CardComposeProcessor",
-		cardPoolManager: cards.GetCardPoolManager(),
-	}
+	return &CardComposeProcessor{cardPoolManager: cards.GetCardPoolManager()}
 }
 
-// CardComposeData 卡牌合成事件数据
-type CardComposeData struct {
-	RoomID   string        `json:"room_id"`
-	Player   string        `json:"player"`
-	Cards    []models.Card `json:"cards"`
-	ClientID string        `json:"client_id"`
-}
-
-// ComposeResult 合成结果
-type ComposeResult struct {
-	Success       bool          `json:"success"`
-	Message       string        `json:"message"`
-	ComposedCards []models.Card `json:"composed_cards"`
-	RemovedCards  []models.Card `json:"removed_cards"`
-	NewCards      []models.Card `json:"new_cards"`
-}
-
-// ProcessCardCompose 处理卡牌合成逻辑
-func (ccp *CardComposeProcessor) ProcessCardCompose(eventData *events.EventData) {
-
-
-	// 获取玩家名称
-	player, _ := eventData.GetString("player")
-	// 获取房间ID
-	roomID, _ := eventData.GetString("room_id")
-	// 获取客户端ID
-	clientID, _ := eventData.GetString("client_id")
-	// 获取卡牌数据
-	cardsData, _ := eventData.GetData("cards")
-	// 转换为卡牌切片
-	cards, ok := cardsData.([]models.Card)
-	if !ok {
-		return
-	}
-
-		// 构建合成数据
-	data := &CardComposeData{
-		RoomID:   roomID,
-		Player:   player,
-		Cards:    cards,
-		ClientID: clientID,
-	}
-
-
-	// 步骤1: 验证卡牌信息
-	room, validatedCardGroups, err := ccp.validateComposeRequest(data)
+func (ccp *CardComposeProcessor) compose(room *types.RoomInfo, req ComposeRequest) error {
+	groups, err := ccp.validate(room, req)
 	if err != nil {
-		return
+		return err
 	}
 
-	// 步骤2: 进行合成
-	composeResult := ccp.performComposition(room, validatedCardGroups)
-	if !composeResult.Success {
-		return
+	removed, added := ccp.drawTargets(room, groups)
+	if len(added) == 0 {
+		return errNothingComposed
 	}
 
-	// 步骤3: 更新房间内玩家信息
-	err = ccp.updatePlayerInfo(room, data.Player, &composeResult)
-	if err != nil {
-		return
+	if err := room.RemoveCardsFromPlayerByUID(req.Player, uidsOf(removed)); err != nil {
+		room.ReturnCardsToPool(added)
+		return err
 	}
-	// 步骤4: 发布游戏状态更新事件
-	ccp.publishComposeResult(room)
+	for _, c := range added {
+		// 每 group_size 张换 1 张，手牌只会变少，不会超出上限
+		if err := room.AddCardToPlayer(req.Player, c); err != nil {
+			return fmt.Errorf("add composed card %s: %w", c.Name, err)
+		}
+	}
+
+	broadcastRoomState(room, pb.GameStateReason_GAME_STATE_REASON_CARDS_COMPOSED)
+	return nil
 }
 
-// performComposition 执行卡牌合成逻辑
-func (ccp *CardComposeProcessor) performComposition(room *types.RoomInfo, cardGroups map[string][]models.Card) ComposeResult {
-	var removedCards []models.Card
-	var newCards []models.Card
-	composedCount := 0
+// validate 校验房间、卡牌归属与数量，返回按名称分组的服务器手牌
+func (ccp *CardComposeProcessor) validate(room *types.RoomInfo, req ComposeRequest) (map[string][]models.Card, error) {
+	if status := room.GetStatus(); status != types.RoomStatusPlaying {
+		return nil, fmt.Errorf("room is not playing: %s", status)
+	}
+	player, err := room.GetPlayerInfo(req.Player)
+	if err != nil {
+		return nil, err
+	}
+	need := config.Game().Rules.Compose.GroupSize
+	if len(req.CardUIDs) == 0 || len(req.CardUIDs)%need != 0 {
+		return nil, fmt.Errorf("invalid card count for composition: %d (must be multiple of %d)", len(req.CardUIDs), need)
+	}
 
-	for _, cards := range cardGroups {
-		// 检查是否有足够的卡牌合成（每3张合成1张）
-		groupSize := len(cards)
-		canCompose := groupSize / 3
-
-		if canCompose == 0 {
-			continue
+	hand := make(map[string]models.Card, len(player.HandCards))
+	for _, c := range player.HandCards {
+		hand[c.UID] = c
+	}
+	seen := make(map[string]bool, len(req.CardUIDs))
+	groups := make(map[string][]models.Card)
+	for _, uid := range req.CardUIDs {
+		if seen[uid] {
+			return nil, fmt.Errorf("duplicate card UID %s in compose request", uid)
 		}
-
-		// 获取第一张卡牌作为模板
-		templateCard := cards[0]
-
-		// 检查TargetName是否为空（不可合成卡牌）
-		if templateCard.TargetName == nil || *templateCard.TargetName == "" {
-			continue
+		seen[uid] = true
+		c, ok := hand[uid]
+		if !ok {
+			return nil, fmt.Errorf("card UID %s not found in player %s's hand", uid, req.Player)
 		}
+		groups[c.Name] = append(groups[c.Name], c)
+	}
+	return groups, nil
+}
 
-		// 获取目标卡牌信息
-		targetCard, err := ccp.cardPoolManager.GetCardByName(*templateCard.TargetName)
+// drawTargets 为每组凑满的同名卡从共享卡池抽取目标卡。
+// 只有成功抽到目标卡的那一组才计入 removed，抽不到时这组牌原样留在手里。
+func (ccp *CardComposeProcessor) drawTargets(room *types.RoomInfo, groups map[string][]models.Card) (removed, added []models.Card) {
+	need := config.Game().Rules.Compose.GroupSize
+	for _, group := range groups {
+		template := group[0]
+		if template.TargetName == nil || *template.TargetName == "" {
+			continue // 不可合成的卡
+		}
+		target, err := ccp.cardPoolManager.GetCardByName(*template.TargetName)
 		if err != nil {
 			continue
 		}
-		// 合成指定数量的新卡牌
-		for i := 0; i < canCompose; i++ {
-			// 选择3张要移除的卡牌
-			startIdx := i * 3
-			endIdx := startIdx + 3
-			cardsToRemove := cards[startIdx:endIdx]
-			removedCards = append(removedCards, cardsToRemove...)
-
-			// 从对应等级的卡牌池中抽取目标卡牌
-			drawnCard, err := room.DrawCardByNameFromPool(*templateCard.TargetName, targetCard.Level)
+		for i := 0; i+need <= len(group); i += need {
+			drawn, err := room.DrawCardByNameFromPool(*template.TargetName, target.Level)
 			if err != nil {
-
-				// 如果抽取失败，将已移除的卡牌放回原组
-				// 这里简化处理，可以根据需要实现更复杂的回滚逻辑
-				continue
+				break // 目标卡池已空
 			}
-
-			newCards = append(newCards, *drawnCard)
-			composedCount++
-
-			}
-	}
-
-	if composedCount == 0 {
-		return ComposeResult{
-			Success: false,
-			Message: "No valid compositions found",
+			removed = append(removed, group[i:i+need]...)
+			added = append(added, *drawn)
 		}
 	}
-
-	return ComposeResult{
-		Success:       true,
-		Message:       fmt.Sprintf("Successfully composed %d new cards", composedCount),
-		ComposedCards: append(removedCards, newCards...),
-		RemovedCards:  removedCards,
-		NewCards:      newCards,
-	}
+	return removed, added
 }
 
-// publishComposeResult 发布合成结果事件
-func (ccp *CardComposeProcessor) publishComposeResult(room *types.RoomInfo) {
-
-	// 发布游戏状态更新事件
-	stateUpdateData := events.NewEventData(events.EventGameStateUpdate, "card_compose_processor", map[string]interface{}{})
-	stateUpdateData.SetRoom(room.RoomID)
-	events.Publish(events.EventGameStateUpdate, stateUpdateData)
-}
-
-// validateComposeRequest 验证合成请求信息
-func (ccp *CardComposeProcessor) validateComposeRequest(data *CardComposeData) (*types.RoomInfo, map[string][]models.Card, error) {
-	// 获取房间管理器
-	roomManager := service.GetRoomManager()
-
-	// 获取房间信息
-	room, err := roomManager.GetRoom(data.RoomID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get room %s: %v", data.RoomID, err)
+func uidsOf(cards []models.Card) []string {
+	uids := make([]string, 0, len(cards))
+	for _, c := range cards {
+		uids = append(uids, c.UID)
 	}
-
-	// 验证房间状态
-	if room.Status != "playing" {
-		return nil, nil, fmt.Errorf("room %s is not in playing state: %s", data.RoomID, room.Status)
-	}
-
-	// 获取玩家信息
-	playerInfo, err := room.GetPlayerInfo(data.Player)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get player info for %s: %v", data.Player, err)
-	}
-
-	// 验证卡牌数量（必须是3的倍数）
-	if len(data.Cards)%3 != 0 {
-		return nil, nil, fmt.Errorf("invalid card count for composition: %d (must be multiple of 3)", len(data.Cards))
-	}
-
-	// 构建手牌UID映射用于快速查找和验证
-	handCardMap := make(map[string]models.Card)
-	for _, handCard := range playerInfo.HandCards {
-		handCardMap[handCard.UID] = handCard
-	}
-
-	// 验证所有要合成的卡牌都在玩家手牌中
-	var validatedCards []models.Card
-	for _, cardToCompose := range data.Cards {
-		if handCard, exists := handCardMap[cardToCompose.UID]; exists {
-			// 验证卡牌详细信息匹配
-			if handCard.Name != cardToCompose.Name || handCard.ID != cardToCompose.ID {
-				return nil, nil, fmt.Errorf("card information mismatch for UID %s: expected %s (ID: %d), got %s (ID: %d)",
-					cardToCompose.UID, handCard.Name, handCard.ID, cardToCompose.Name, cardToCompose.ID)
-			}
-			validatedCards = append(validatedCards, cardToCompose)
-		} else {
-			return nil, nil, fmt.Errorf("card UID %s not found in player %s's hand", cardToCompose.UID, data.Player)
-		}
-	}
-
-	// 按照卡牌名称分组
-	cardGroups := make(map[string][]models.Card)
-	for _, card := range validatedCards {
-		cardGroups[card.Name] = append(cardGroups[card.Name], card)
-	}
-
-	return room, cardGroups, nil
-}
-
-// updatePlayerInfo 更新玩家信息（移除旧卡牌，添加新卡牌）
-func (ccp *CardComposeProcessor) updatePlayerInfo(room *types.RoomInfo, playerName string, result *ComposeResult) error {
-	// 1. 从玩家手牌中移除已合成的卡牌
-	var cardUIDs []string
-	for _, card := range result.RemovedCards {
-		cardUIDs = append(cardUIDs, card.UID)
-	}
-
-	err := room.RemoveCardsFromPlayerByUID(playerName, cardUIDs)
-	if err != nil {
-		return fmt.Errorf("failed to remove composed cards from player %s: %v", playerName, err)
-	}
-
-	// 2. 将新合成的卡牌添加到玩家手牌
-	for _, newCard := range result.NewCards {
-		err = room.AddCardToPlayer(playerName, newCard)
-		if err != nil {
-			// 如果添加失败，需要考虑回滚已移除的卡牌
-			return fmt.Errorf("failed to add new card %s to player %s: %v", newCard.Name, playerName, err)
-		}
-	}
-
-		return nil
+	return uids
 }
