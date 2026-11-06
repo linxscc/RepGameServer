@@ -260,9 +260,12 @@ message GameAction {
     PickVault pick_vault = 11;
     SkipVault skip_vault = 12;
     Surrender surrender = 13;
+    SettleDone settle_done = 14;
   }
 }
 
+// 结算过场（含伤害动画）播放完毕；双方都发出后立即进入下一阶段，不必等结算倒计时。
+message SettleDone {}
 message PickFamily { int32 offer_index = 1; }        // MatchState.family_offer 的下标
 message BuyCard { int32 shop_slot = 1; }              // MatchState.self.shop 的下标
 message SellCard { string card_uid = 1; }

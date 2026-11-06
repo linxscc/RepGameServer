@@ -288,3 +288,24 @@ func TestSurrenderEndsMatch(t *testing.T) {
 		t.Fatal("room must be removed after surrender")
 	}
 }
+
+// The settle pause ends as soon as the human's client reports the cutscene finished.
+func TestSettleDoneEndsPauseEarly(t *testing.T) {
+	room, _ := newChessTestRoom(t, "liam", "c-liam")
+	act("liam", "c-liam", 1, pickFamily(0))
+	act("liam", "c-liam", 2, ready())
+	if cr := getChessRoom(room.RoomID); cr.phase != pb.MatchPhase_MATCH_PHASE_SETTLE {
+		t.Fatalf("expected settle, got %v", cr.phase)
+	}
+	settleDone := &pb.GameAction{Action: &pb.GameAction_SettleDone{SettleDone: &pb.SettleDone{}}}
+	act("liam", "c-liam", 3, settleDone)
+	cr := getChessRoom(room.RoomID)
+	if cr == nil || cr.phase == pb.MatchPhase_MATCH_PHASE_SETTLE {
+		t.Fatal("settle_done from the only human must end the pause")
+	}
+	// a late ack outside the pause is ignored, not an error
+	act("liam", "c-liam", 4, settleDone)
+	if getChessRoom(room.RoomID).phase == pb.MatchPhase_MATCH_PHASE_SETTLE {
+		t.Fatal("late ack must not change the phase")
+	}
+}

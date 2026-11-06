@@ -29,6 +29,9 @@ type chessRoom struct {
 	token     int // invalidates stale timers
 	lastScore [2]float64
 	settled   int // round shown during the SETTLE pause (the engine has already moved on)
+	// settleDone: the seat's client finished the settle cutscene (incl. the damage animation).
+	// When every connected human is done the pause ends early; settle_seconds is only a cap.
+	settleDone [2]bool
 }
 
 var chessRooms sync.Map // roomID -> *chessRoom
@@ -140,8 +143,24 @@ func (cr *chessRoom) allReady() bool {
 	return true
 }
 
+// allSettleDone: every connected human has finished watching the settlement (bots never block).
+func (cr *chessRoom) allSettleDone() bool {
+	for seat := range cr.match.P {
+		if !cr.settleDone[seat] && cr.conn(seat) != nil {
+			return false
+		}
+	}
+	return true
+}
+
 func (cr *chessRoom) advanceIfReady() {
 	switch cr.phase {
+	case pb.MatchPhase_MATCH_PHASE_SETTLE:
+		if cr.allSettleDone() {
+			if room, err := service.GetRoomManager().GetRoom(cr.roomID); err == nil {
+				cr.advance(room)
+			}
+		}
 	case pb.MatchPhase_MATCH_PHASE_FAMILY, pb.MatchPhase_MATCH_PHASE_PREP, pb.MatchPhase_MATCH_PHASE_VAULT:
 		if cr.allReady() {
 			if room, err := service.GetRoomManager().GetRoom(cr.roomID); err == nil {
@@ -172,6 +191,7 @@ func (cr *chessRoom) advance(room *types.RoomInfo) {
 			cr.lastScore[seat] = res.Scores[seat].Score
 		}
 		cr.settled = res.Round
+		cr.settleDone = [2]bool{}
 		cr.phase = pb.MatchPhase_MATCH_PHASE_SETTLE
 		cr.schedule(phaseSeconds(timers.SettleSeconds))
 		for seat := range m.P {
@@ -289,6 +309,13 @@ func HandleGameAction(req GameActionRequest) {
 func (cr *chessRoom) apply(seat int, a *pb.GameAction) error {
 	m := cr.match
 	p := m.P[seat]
+	if _, ok := a.GetAction().(*pb.GameAction_SettleDone); ok {
+		// a late ack (the cap already ended the pause) is harmless, so never an error
+		if cr.phase == pb.MatchPhase_MATCH_PHASE_SETTLE {
+			cr.settleDone[seat] = true
+		}
+		return nil
+	}
 	allowed := map[pb.MatchPhase]bool{}
 	switch a.GetAction().(type) {
 	case *pb.GameAction_PickFamily:
