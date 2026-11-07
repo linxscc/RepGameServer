@@ -25,7 +25,7 @@ func SuitArchetypes() []Archetype {
 			Relics: map[string]float64{"night_parade": 5, "yin_yang": 3, "four_symbols": 3, "tailwind": 3, "mirror": 3}}),
 		mk(Archetype{Name: "特攻",
 			Relics: map[string]float64{"demon_mirror": 5, "god_breaker": 5, "behead": 4, "color_counter": 4, "usurp": 4, "tailwind": 3}}),
-		mk(Archetype{Name: "经济", SaveTo: 40,
+		mk(Archetype{Name: "经济", SaveTo: 20,
 			Relics: map[string]float64{"treasure": 5, "piggy": 4, "thrifty": 4, "graduation": 4, "market_pass": 4, "academy": 4, "expansion": 5}}),
 	}
 }
