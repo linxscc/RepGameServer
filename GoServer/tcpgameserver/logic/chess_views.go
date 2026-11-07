@@ -119,10 +119,20 @@ func scoreBreakdown(r rules.ScoreResult) *pb.ScoreBreakdown {
 		out.Steps = append(out.Steps, &pb.ScoreStep{
 			Phase: int32(s.Phase), Source: s.Source, CardUid: s.CardUID, RelicSlot: int32(s.Relic),
 			Kind: kind, Value: s.Value, Points: s.Points, Mult: s.Mult,
-			Trigger: int32(s.Trigger), Triggers: int32(s.Triggers),
+			Trigger: int32(s.Trigger), Triggers: int32(s.Triggers), Origin: stepOrigin(s.Origin),
 		})
 	}
 	return out
+}
+
+func stepOrigin(o rules.StepOrigin) pb.StepOrigin {
+	switch o {
+	case rules.OriginFoeRelic:
+		return pb.StepOrigin_STEP_ORIGIN_FOE_RELIC
+	case rules.OriginOmen:
+		return pb.StepOrigin_STEP_ORIGIN_OMEN
+	}
+	return pb.StepOrigin_STEP_ORIGIN_OWN
 }
 
 func selfView(m *rules.Match, p *rules.Player) *pb.SelfView {
@@ -133,7 +143,7 @@ func selfView(m *rules.Match, p *rules.Player) *pb.SelfView {
 		Board: chessCards(m, p.Board), Bench: chessCards(m, p.Bench), Relics: relicSlots(m, p.Relics),
 		ShopLocked: p.Locked, FreeRefreshes: int32(m.FreeRefreshesLeft(p)), Interest: int32(m.Interest(p)),
 		Family: int32(p.Family), WinStreak: int32(p.WinStreak), LossStreak: int32(p.LossStreak), Ready: p.Ready,
-		Preview: scoreBreakdown(m.Score(p)),
+		Preview: scoreBreakdown(m.Preview(p)),
 	}
 	for i, l := range p.Shop {
 		if l < 0 {

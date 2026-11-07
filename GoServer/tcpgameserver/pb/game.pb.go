@@ -372,6 +372,55 @@ func (ScoreStepKind) EnumDescriptor() ([]byte, []int) {
 	return file_repgame_v1_game_proto_rawDescGZIP(), []int{5}
 }
 
+type StepOrigin int32
+
+const (
+	StepOrigin_STEP_ORIGIN_OWN       StepOrigin = 0 // 自己的卡 / 羁绊 / 法宝
+	StepOrigin_STEP_ORIGIN_FOE_RELIC StepOrigin = 1 // 对手的法宝
+	StepOrigin_STEP_ORIGIN_OMEN      StepOrigin = 2 // 天象（relic_slot = -1，source = 天象名）
+)
+
+// Enum value maps for StepOrigin.
+var (
+	StepOrigin_name = map[int32]string{
+		0: "STEP_ORIGIN_OWN",
+		1: "STEP_ORIGIN_FOE_RELIC",
+		2: "STEP_ORIGIN_OMEN",
+	}
+	StepOrigin_value = map[string]int32{
+		"STEP_ORIGIN_OWN":       0,
+		"STEP_ORIGIN_FOE_RELIC": 1,
+		"STEP_ORIGIN_OMEN":      2,
+	}
+)
+
+func (x StepOrigin) Enum() *StepOrigin {
+	p := new(StepOrigin)
+	*p = x
+	return p
+}
+
+func (x StepOrigin) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (StepOrigin) Descriptor() protoreflect.EnumDescriptor {
+	return file_repgame_v1_game_proto_enumTypes[6].Descriptor()
+}
+
+func (StepOrigin) Type() protoreflect.EnumType {
+	return &file_repgame_v1_game_proto_enumTypes[6]
+}
+
+func (x StepOrigin) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use StepOrigin.Descriptor instead.
+func (StepOrigin) EnumDescriptor() ([]byte, []int) {
+	return file_repgame_v1_game_proto_rawDescGZIP(), []int{6}
+}
+
 // 客户端 -> 服务器
 type ClientMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -3190,7 +3239,7 @@ func (x *BondCount) GetTier() int32 {
 
 type ScoreStep struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Phase         int32                  `protobuf:"varint,1,opt,name=phase,proto3" json:"phase,omitempty"`  // 1 逐卡 2 备战席 3 羁绊 4 3★ 技能 5 法宝
+	Phase         int32                  `protobuf:"varint,1,opt,name=phase,proto3" json:"phase,omitempty"`  // 1 逐卡 2 备战席 3 羁绊 4 3★ 技能 5 法宝；origin 为对手法宝时 relic_slot 是对手法宝栏位置
 	Source        string                 `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"` // 卡名 / 羁绊名 / 法宝名
 	CardUid       string                 `protobuf:"bytes,3,opt,name=card_uid,json=cardUid,proto3" json:"card_uid,omitempty"`
 	RelicSlot     int32                  `protobuf:"varint,4,opt,name=relic_slot,json=relicSlot,proto3" json:"relic_slot,omitempty"` // -1 表示不是法宝
@@ -3198,8 +3247,9 @@ type ScoreStep struct {
 	Value         float64                `protobuf:"fixed64,6,opt,name=value,proto3" json:"value,omitempty"`
 	Points        float64                `protobuf:"fixed64,7,opt,name=points,proto3" json:"points,omitempty"` // 本步之后
 	Mult          float64                `protobuf:"fixed64,8,opt,name=mult,proto3" json:"mult,omitempty"`
-	Trigger       int32                  `protobuf:"varint,9,opt,name=trigger,proto3" json:"trigger,omitempty"`    // 本步是第几次触发（从 1 开始）
-	Triggers      int32                  `protobuf:"varint,10,opt,name=triggers,proto3" json:"triggers,omitempty"` // 共触发几次；>1 时客户端显示"第 n/N 次触发"
+	Trigger       int32                  `protobuf:"varint,9,opt,name=trigger,proto3" json:"trigger,omitempty"`                           // 本步是第几次触发（从 1 开始）
+	Triggers      int32                  `protobuf:"varint,10,opt,name=triggers,proto3" json:"triggers,omitempty"`                        // 共触发几次；>1 时客户端显示"第 n/N 次触发"
+	Origin        StepOrigin             `protobuf:"varint,11,opt,name=origin,proto3,enum=repgame.v1.StepOrigin" json:"origin,omitempty"` // 步骤来源：自己 / 对手法宝 / 天象
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3302,6 +3352,13 @@ func (x *ScoreStep) GetTriggers() int32 {
 		return x.Triggers
 	}
 	return 0
+}
+
+func (x *ScoreStep) GetOrigin() StepOrigin {
+	if x != nil {
+		return x.Origin
+	}
+	return StepOrigin_STEP_ORIGIN_OWN
 }
 
 type ScoreBreakdown struct {
@@ -4422,7 +4479,7 @@ var file_repgame_v1_game_proto_rawDesc = string([]byte{
 	0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x63, 0x6f, 0x75, 0x6e,
 	0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x05, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x12,
 	0x0a, 0x04, 0x74, 0x69, 0x65, 0x72, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05, 0x52, 0x04, 0x74, 0x69,
-	0x65, 0x72, 0x22, 0x9a, 0x02, 0x0a, 0x09, 0x53, 0x63, 0x6f, 0x72, 0x65, 0x53, 0x74, 0x65, 0x70,
+	0x65, 0x72, 0x22, 0xca, 0x02, 0x0a, 0x09, 0x53, 0x63, 0x6f, 0x72, 0x65, 0x53, 0x74, 0x65, 0x70,
 	0x12, 0x14, 0x0a, 0x05, 0x70, 0x68, 0x61, 0x73, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52,
 	0x05, 0x70, 0x68, 0x61, 0x73, 0x65, 0x12, 0x16, 0x0a, 0x06, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65,
 	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x12, 0x19,
@@ -4439,7 +4496,10 @@ var file_repgame_v1_game_proto_rawDesc = string([]byte{
 	0x01, 0x28, 0x01, 0x52, 0x04, 0x6d, 0x75, 0x6c, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x74, 0x72, 0x69,
 	0x67, 0x67, 0x65, 0x72, 0x18, 0x09, 0x20, 0x01, 0x28, 0x05, 0x52, 0x07, 0x74, 0x72, 0x69, 0x67,
 	0x67, 0x65, 0x72, 0x12, 0x1a, 0x0a, 0x08, 0x74, 0x72, 0x69, 0x67, 0x67, 0x65, 0x72, 0x73, 0x18,
-	0x0a, 0x20, 0x01, 0x28, 0x05, 0x52, 0x08, 0x74, 0x72, 0x69, 0x67, 0x67, 0x65, 0x72, 0x73, 0x22,
+	0x0a, 0x20, 0x01, 0x28, 0x05, 0x52, 0x08, 0x74, 0x72, 0x69, 0x67, 0x67, 0x65, 0x72, 0x73, 0x12,
+	0x2e, 0x0a, 0x06, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x18, 0x0b, 0x20, 0x01, 0x28, 0x0e, 0x32,
+	0x16, 0x2e, 0x72, 0x65, 0x70, 0x67, 0x61, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x65,
+	0x70, 0x4f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x52, 0x06, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x22,
 	0x7f, 0x0a, 0x0e, 0x53, 0x63, 0x6f, 0x72, 0x65, 0x42, 0x72, 0x65, 0x61, 0x6b, 0x64, 0x6f, 0x77,
 	0x6e, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28,
 	0x01, 0x52, 0x06, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x6d, 0x75, 0x6c,
@@ -4647,10 +4707,16 @@ var file_repgame_v1_game_proto_rawDesc = string([]byte{
 	0x45, 0x50, 0x5f, 0x4b, 0x49, 0x4e, 0x44, 0x5f, 0x41, 0x44, 0x44, 0x5f, 0x4d, 0x55, 0x4c, 0x54,
 	0x10, 0x02, 0x12, 0x1e, 0x0a, 0x1a, 0x53, 0x43, 0x4f, 0x52, 0x45, 0x5f, 0x53, 0x54, 0x45, 0x50,
 	0x5f, 0x4b, 0x49, 0x4e, 0x44, 0x5f, 0x54, 0x49, 0x4d, 0x45, 0x53, 0x5f, 0x4d, 0x55, 0x4c, 0x54,
-	0x10, 0x03, 0x42, 0x31, 0x5a, 0x1c, 0x47, 0x6f, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x74,
-	0x63, 0x70, 0x67, 0x61, 0x6d, 0x65, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x70, 0x62, 0x3b,
-	0x70, 0x62, 0xaa, 0x02, 0x10, 0x52, 0x65, 0x70, 0x47, 0x61, 0x6d, 0x65, 0x2e, 0x50, 0x72, 0x6f,
-	0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x10, 0x03, 0x2a, 0x52, 0x0a, 0x0a, 0x53, 0x74, 0x65, 0x70, 0x4f, 0x72, 0x69, 0x67, 0x69, 0x6e,
+	0x12, 0x13, 0x0a, 0x0f, 0x53, 0x54, 0x45, 0x50, 0x5f, 0x4f, 0x52, 0x49, 0x47, 0x49, 0x4e, 0x5f,
+	0x4f, 0x57, 0x4e, 0x10, 0x00, 0x12, 0x19, 0x0a, 0x15, 0x53, 0x54, 0x45, 0x50, 0x5f, 0x4f, 0x52,
+	0x49, 0x47, 0x49, 0x4e, 0x5f, 0x46, 0x4f, 0x45, 0x5f, 0x52, 0x45, 0x4c, 0x49, 0x43, 0x10, 0x01,
+	0x12, 0x14, 0x0a, 0x10, 0x53, 0x54, 0x45, 0x50, 0x5f, 0x4f, 0x52, 0x49, 0x47, 0x49, 0x4e, 0x5f,
+	0x4f, 0x4d, 0x45, 0x4e, 0x10, 0x02, 0x42, 0x31, 0x5a, 0x1c, 0x47, 0x6f, 0x53, 0x65, 0x72, 0x76,
+	0x65, 0x72, 0x2f, 0x74, 0x63, 0x70, 0x67, 0x61, 0x6d, 0x65, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
+	0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xaa, 0x02, 0x10, 0x52, 0x65, 0x70, 0x47, 0x61, 0x6d, 0x65,
+	0x2e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x33,
 })
 
 var (
@@ -4665,7 +4731,7 @@ func file_repgame_v1_game_proto_rawDescGZIP() []byte {
 	return file_repgame_v1_game_proto_rawDescData
 }
 
-var file_repgame_v1_game_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_repgame_v1_game_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
 var file_repgame_v1_game_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_repgame_v1_game_proto_goTypes = []any{
 	(ErrorCode)(0),               // 0: repgame.v1.ErrorCode
@@ -4674,125 +4740,127 @@ var file_repgame_v1_game_proto_goTypes = []any{
 	(CardKind)(0),                // 3: repgame.v1.CardKind
 	(MatchPhase)(0),              // 4: repgame.v1.MatchPhase
 	(ScoreStepKind)(0),           // 5: repgame.v1.ScoreStepKind
-	(*ClientMessage)(nil),        // 6: repgame.v1.ClientMessage
-	(*ServerMessage)(nil),        // 7: repgame.v1.ServerMessage
-	(*Error)(nil),                // 8: repgame.v1.Error
-	(*Ping)(nil),                 // 9: repgame.v1.Ping
-	(*Pong)(nil),                 // 10: repgame.v1.Pong
-	(*Welcome)(nil),              // 11: repgame.v1.Welcome
-	(*LoginRequest)(nil),         // 12: repgame.v1.LoginRequest
-	(*RegisterRequest)(nil),      // 13: repgame.v1.RegisterRequest
-	(*ResumeSessionRequest)(nil), // 14: repgame.v1.ResumeSessionRequest
-	(*AuthResult)(nil),           // 15: repgame.v1.AuthResult
-	(*RegisterResult)(nil),       // 16: repgame.v1.RegisterResult
-	(*ReadyRequest)(nil),         // 17: repgame.v1.ReadyRequest
-	(*CancelMatchRequest)(nil),   // 18: repgame.v1.CancelMatchRequest
-	(*MatchmakingState)(nil),     // 19: repgame.v1.MatchmakingState
-	(*PlayerPresence)(nil),       // 20: repgame.v1.PlayerPresence
-	(*GameAction)(nil),           // 21: repgame.v1.GameAction
-	(*SettleDone)(nil),           // 22: repgame.v1.SettleDone
-	(*PickFamily)(nil),           // 23: repgame.v1.PickFamily
-	(*BuyCard)(nil),              // 24: repgame.v1.BuyCard
-	(*SellCard)(nil),             // 25: repgame.v1.SellCard
-	(*RefreshShop)(nil),          // 26: repgame.v1.RefreshShop
-	(*BuyXp)(nil),                // 27: repgame.v1.BuyXp
-	(*BuyRelic)(nil),             // 28: repgame.v1.BuyRelic
-	(*SellRelic)(nil),            // 29: repgame.v1.SellRelic
-	(*ArrangeBoard)(nil),         // 30: repgame.v1.ArrangeBoard
-	(*LockShop)(nil),             // 31: repgame.v1.LockShop
-	(*SetReady)(nil),             // 32: repgame.v1.SetReady
-	(*PickVault)(nil),            // 33: repgame.v1.PickVault
-	(*SkipVault)(nil),            // 34: repgame.v1.SkipVault
-	(*Surrender)(nil),            // 35: repgame.v1.Surrender
-	(*TierInfo)(nil),             // 36: repgame.v1.TierInfo
-	(*BondInfo)(nil),             // 37: repgame.v1.BondInfo
-	(*LineInfo)(nil),             // 38: repgame.v1.LineInfo
-	(*RelicInfo)(nil),            // 39: repgame.v1.RelicInfo
-	(*RarityInfo)(nil),           // 40: repgame.v1.RarityInfo
-	(*FamilyInfo)(nil),           // 41: repgame.v1.FamilyInfo
-	(*MatchConfig)(nil),          // 42: repgame.v1.MatchConfig
-	(*ChessCard)(nil),            // 43: repgame.v1.ChessCard
-	(*RelicSlot)(nil),            // 44: repgame.v1.RelicSlot
-	(*ShopSlot)(nil),             // 45: repgame.v1.ShopSlot
-	(*BondCount)(nil),            // 46: repgame.v1.BondCount
-	(*ScoreStep)(nil),            // 47: repgame.v1.ScoreStep
-	(*ScoreBreakdown)(nil),       // 48: repgame.v1.ScoreBreakdown
-	(*SelfView)(nil),             // 49: repgame.v1.SelfView
-	(*OpponentView)(nil),         // 50: repgame.v1.OpponentView
-	(*MatchState)(nil),           // 51: repgame.v1.MatchState
-	(*SideResult)(nil),           // 52: repgame.v1.SideResult
-	(*RoundResult)(nil),          // 53: repgame.v1.RoundResult
-	(*MatchOver)(nil),            // 54: repgame.v1.MatchOver
+	(StepOrigin)(0),              // 6: repgame.v1.StepOrigin
+	(*ClientMessage)(nil),        // 7: repgame.v1.ClientMessage
+	(*ServerMessage)(nil),        // 8: repgame.v1.ServerMessage
+	(*Error)(nil),                // 9: repgame.v1.Error
+	(*Ping)(nil),                 // 10: repgame.v1.Ping
+	(*Pong)(nil),                 // 11: repgame.v1.Pong
+	(*Welcome)(nil),              // 12: repgame.v1.Welcome
+	(*LoginRequest)(nil),         // 13: repgame.v1.LoginRequest
+	(*RegisterRequest)(nil),      // 14: repgame.v1.RegisterRequest
+	(*ResumeSessionRequest)(nil), // 15: repgame.v1.ResumeSessionRequest
+	(*AuthResult)(nil),           // 16: repgame.v1.AuthResult
+	(*RegisterResult)(nil),       // 17: repgame.v1.RegisterResult
+	(*ReadyRequest)(nil),         // 18: repgame.v1.ReadyRequest
+	(*CancelMatchRequest)(nil),   // 19: repgame.v1.CancelMatchRequest
+	(*MatchmakingState)(nil),     // 20: repgame.v1.MatchmakingState
+	(*PlayerPresence)(nil),       // 21: repgame.v1.PlayerPresence
+	(*GameAction)(nil),           // 22: repgame.v1.GameAction
+	(*SettleDone)(nil),           // 23: repgame.v1.SettleDone
+	(*PickFamily)(nil),           // 24: repgame.v1.PickFamily
+	(*BuyCard)(nil),              // 25: repgame.v1.BuyCard
+	(*SellCard)(nil),             // 26: repgame.v1.SellCard
+	(*RefreshShop)(nil),          // 27: repgame.v1.RefreshShop
+	(*BuyXp)(nil),                // 28: repgame.v1.BuyXp
+	(*BuyRelic)(nil),             // 29: repgame.v1.BuyRelic
+	(*SellRelic)(nil),            // 30: repgame.v1.SellRelic
+	(*ArrangeBoard)(nil),         // 31: repgame.v1.ArrangeBoard
+	(*LockShop)(nil),             // 32: repgame.v1.LockShop
+	(*SetReady)(nil),             // 33: repgame.v1.SetReady
+	(*PickVault)(nil),            // 34: repgame.v1.PickVault
+	(*SkipVault)(nil),            // 35: repgame.v1.SkipVault
+	(*Surrender)(nil),            // 36: repgame.v1.Surrender
+	(*TierInfo)(nil),             // 37: repgame.v1.TierInfo
+	(*BondInfo)(nil),             // 38: repgame.v1.BondInfo
+	(*LineInfo)(nil),             // 39: repgame.v1.LineInfo
+	(*RelicInfo)(nil),            // 40: repgame.v1.RelicInfo
+	(*RarityInfo)(nil),           // 41: repgame.v1.RarityInfo
+	(*FamilyInfo)(nil),           // 42: repgame.v1.FamilyInfo
+	(*MatchConfig)(nil),          // 43: repgame.v1.MatchConfig
+	(*ChessCard)(nil),            // 44: repgame.v1.ChessCard
+	(*RelicSlot)(nil),            // 45: repgame.v1.RelicSlot
+	(*ShopSlot)(nil),             // 46: repgame.v1.ShopSlot
+	(*BondCount)(nil),            // 47: repgame.v1.BondCount
+	(*ScoreStep)(nil),            // 48: repgame.v1.ScoreStep
+	(*ScoreBreakdown)(nil),       // 49: repgame.v1.ScoreBreakdown
+	(*SelfView)(nil),             // 50: repgame.v1.SelfView
+	(*OpponentView)(nil),         // 51: repgame.v1.OpponentView
+	(*MatchState)(nil),           // 52: repgame.v1.MatchState
+	(*SideResult)(nil),           // 53: repgame.v1.SideResult
+	(*RoundResult)(nil),          // 54: repgame.v1.RoundResult
+	(*MatchOver)(nil),            // 55: repgame.v1.MatchOver
 }
 var file_repgame_v1_game_proto_depIdxs = []int32{
-	12, // 0: repgame.v1.ClientMessage.login:type_name -> repgame.v1.LoginRequest
-	13, // 1: repgame.v1.ClientMessage.register:type_name -> repgame.v1.RegisterRequest
-	14, // 2: repgame.v1.ClientMessage.resume_session:type_name -> repgame.v1.ResumeSessionRequest
-	17, // 3: repgame.v1.ClientMessage.ready:type_name -> repgame.v1.ReadyRequest
-	9,  // 4: repgame.v1.ClientMessage.ping:type_name -> repgame.v1.Ping
-	21, // 5: repgame.v1.ClientMessage.game_action:type_name -> repgame.v1.GameAction
-	18, // 6: repgame.v1.ClientMessage.cancel_match:type_name -> repgame.v1.CancelMatchRequest
-	8,  // 7: repgame.v1.ServerMessage.error:type_name -> repgame.v1.Error
-	11, // 8: repgame.v1.ServerMessage.welcome:type_name -> repgame.v1.Welcome
-	15, // 9: repgame.v1.ServerMessage.auth_result:type_name -> repgame.v1.AuthResult
-	16, // 10: repgame.v1.ServerMessage.register_result:type_name -> repgame.v1.RegisterResult
-	20, // 11: repgame.v1.ServerMessage.player_presence:type_name -> repgame.v1.PlayerPresence
-	10, // 12: repgame.v1.ServerMessage.pong:type_name -> repgame.v1.Pong
-	42, // 13: repgame.v1.ServerMessage.match_config:type_name -> repgame.v1.MatchConfig
-	51, // 14: repgame.v1.ServerMessage.match_state:type_name -> repgame.v1.MatchState
-	53, // 15: repgame.v1.ServerMessage.round_result:type_name -> repgame.v1.RoundResult
-	54, // 16: repgame.v1.ServerMessage.match_over:type_name -> repgame.v1.MatchOver
-	19, // 17: repgame.v1.ServerMessage.matchmaking:type_name -> repgame.v1.MatchmakingState
+	13, // 0: repgame.v1.ClientMessage.login:type_name -> repgame.v1.LoginRequest
+	14, // 1: repgame.v1.ClientMessage.register:type_name -> repgame.v1.RegisterRequest
+	15, // 2: repgame.v1.ClientMessage.resume_session:type_name -> repgame.v1.ResumeSessionRequest
+	18, // 3: repgame.v1.ClientMessage.ready:type_name -> repgame.v1.ReadyRequest
+	10, // 4: repgame.v1.ClientMessage.ping:type_name -> repgame.v1.Ping
+	22, // 5: repgame.v1.ClientMessage.game_action:type_name -> repgame.v1.GameAction
+	19, // 6: repgame.v1.ClientMessage.cancel_match:type_name -> repgame.v1.CancelMatchRequest
+	9,  // 7: repgame.v1.ServerMessage.error:type_name -> repgame.v1.Error
+	12, // 8: repgame.v1.ServerMessage.welcome:type_name -> repgame.v1.Welcome
+	16, // 9: repgame.v1.ServerMessage.auth_result:type_name -> repgame.v1.AuthResult
+	17, // 10: repgame.v1.ServerMessage.register_result:type_name -> repgame.v1.RegisterResult
+	21, // 11: repgame.v1.ServerMessage.player_presence:type_name -> repgame.v1.PlayerPresence
+	11, // 12: repgame.v1.ServerMessage.pong:type_name -> repgame.v1.Pong
+	43, // 13: repgame.v1.ServerMessage.match_config:type_name -> repgame.v1.MatchConfig
+	52, // 14: repgame.v1.ServerMessage.match_state:type_name -> repgame.v1.MatchState
+	54, // 15: repgame.v1.ServerMessage.round_result:type_name -> repgame.v1.RoundResult
+	55, // 16: repgame.v1.ServerMessage.match_over:type_name -> repgame.v1.MatchOver
+	20, // 17: repgame.v1.ServerMessage.matchmaking:type_name -> repgame.v1.MatchmakingState
 	0,  // 18: repgame.v1.Error.code:type_name -> repgame.v1.ErrorCode
 	1,  // 19: repgame.v1.PlayerPresence.status:type_name -> repgame.v1.PresenceStatus
-	23, // 20: repgame.v1.GameAction.pick_family:type_name -> repgame.v1.PickFamily
-	24, // 21: repgame.v1.GameAction.buy_card:type_name -> repgame.v1.BuyCard
-	25, // 22: repgame.v1.GameAction.sell_card:type_name -> repgame.v1.SellCard
-	26, // 23: repgame.v1.GameAction.refresh_shop:type_name -> repgame.v1.RefreshShop
-	27, // 24: repgame.v1.GameAction.buy_xp:type_name -> repgame.v1.BuyXp
-	28, // 25: repgame.v1.GameAction.buy_relic:type_name -> repgame.v1.BuyRelic
-	29, // 26: repgame.v1.GameAction.sell_relic:type_name -> repgame.v1.SellRelic
-	30, // 27: repgame.v1.GameAction.arrange:type_name -> repgame.v1.ArrangeBoard
-	31, // 28: repgame.v1.GameAction.lock_shop:type_name -> repgame.v1.LockShop
-	32, // 29: repgame.v1.GameAction.set_ready:type_name -> repgame.v1.SetReady
-	33, // 30: repgame.v1.GameAction.pick_vault:type_name -> repgame.v1.PickVault
-	34, // 31: repgame.v1.GameAction.skip_vault:type_name -> repgame.v1.SkipVault
-	35, // 32: repgame.v1.GameAction.surrender:type_name -> repgame.v1.Surrender
-	22, // 33: repgame.v1.GameAction.settle_done:type_name -> repgame.v1.SettleDone
-	36, // 34: repgame.v1.BondInfo.tiers:type_name -> repgame.v1.TierInfo
+	24, // 20: repgame.v1.GameAction.pick_family:type_name -> repgame.v1.PickFamily
+	25, // 21: repgame.v1.GameAction.buy_card:type_name -> repgame.v1.BuyCard
+	26, // 22: repgame.v1.GameAction.sell_card:type_name -> repgame.v1.SellCard
+	27, // 23: repgame.v1.GameAction.refresh_shop:type_name -> repgame.v1.RefreshShop
+	28, // 24: repgame.v1.GameAction.buy_xp:type_name -> repgame.v1.BuyXp
+	29, // 25: repgame.v1.GameAction.buy_relic:type_name -> repgame.v1.BuyRelic
+	30, // 26: repgame.v1.GameAction.sell_relic:type_name -> repgame.v1.SellRelic
+	31, // 27: repgame.v1.GameAction.arrange:type_name -> repgame.v1.ArrangeBoard
+	32, // 28: repgame.v1.GameAction.lock_shop:type_name -> repgame.v1.LockShop
+	33, // 29: repgame.v1.GameAction.set_ready:type_name -> repgame.v1.SetReady
+	34, // 30: repgame.v1.GameAction.pick_vault:type_name -> repgame.v1.PickVault
+	35, // 31: repgame.v1.GameAction.skip_vault:type_name -> repgame.v1.SkipVault
+	36, // 32: repgame.v1.GameAction.surrender:type_name -> repgame.v1.Surrender
+	23, // 33: repgame.v1.GameAction.settle_done:type_name -> repgame.v1.SettleDone
+	37, // 34: repgame.v1.BondInfo.tiers:type_name -> repgame.v1.TierInfo
 	3,  // 35: repgame.v1.LineInfo.kind:type_name -> repgame.v1.CardKind
-	38, // 36: repgame.v1.MatchConfig.lines:type_name -> repgame.v1.LineInfo
-	37, // 37: repgame.v1.MatchConfig.trades:type_name -> repgame.v1.BondInfo
-	37, // 38: repgame.v1.MatchConfig.origins:type_name -> repgame.v1.BondInfo
-	39, // 39: repgame.v1.MatchConfig.relics:type_name -> repgame.v1.RelicInfo
-	40, // 40: repgame.v1.MatchConfig.rarities:type_name -> repgame.v1.RarityInfo
-	41, // 41: repgame.v1.MatchConfig.families:type_name -> repgame.v1.FamilyInfo
+	39, // 36: repgame.v1.MatchConfig.lines:type_name -> repgame.v1.LineInfo
+	38, // 37: repgame.v1.MatchConfig.trades:type_name -> repgame.v1.BondInfo
+	38, // 38: repgame.v1.MatchConfig.origins:type_name -> repgame.v1.BondInfo
+	40, // 39: repgame.v1.MatchConfig.relics:type_name -> repgame.v1.RelicInfo
+	41, // 40: repgame.v1.MatchConfig.rarities:type_name -> repgame.v1.RarityInfo
+	42, // 41: repgame.v1.MatchConfig.families:type_name -> repgame.v1.FamilyInfo
 	2,  // 42: repgame.v1.ChessCard.color:type_name -> repgame.v1.CardColor
 	2,  // 43: repgame.v1.ShopSlot.color:type_name -> repgame.v1.CardColor
 	5,  // 44: repgame.v1.ScoreStep.kind:type_name -> repgame.v1.ScoreStepKind
-	47, // 45: repgame.v1.ScoreBreakdown.steps:type_name -> repgame.v1.ScoreStep
-	43, // 46: repgame.v1.SelfView.board:type_name -> repgame.v1.ChessCard
-	43, // 47: repgame.v1.SelfView.bench:type_name -> repgame.v1.ChessCard
-	44, // 48: repgame.v1.SelfView.relics:type_name -> repgame.v1.RelicSlot
-	45, // 49: repgame.v1.SelfView.shop:type_name -> repgame.v1.ShopSlot
-	46, // 50: repgame.v1.SelfView.trade_bonds:type_name -> repgame.v1.BondCount
-	46, // 51: repgame.v1.SelfView.origin_bonds:type_name -> repgame.v1.BondCount
-	48, // 52: repgame.v1.SelfView.preview:type_name -> repgame.v1.ScoreBreakdown
-	44, // 53: repgame.v1.OpponentView.relics:type_name -> repgame.v1.RelicSlot
-	43, // 54: repgame.v1.OpponentView.last_board:type_name -> repgame.v1.ChessCard
-	4,  // 55: repgame.v1.MatchState.phase:type_name -> repgame.v1.MatchPhase
-	49, // 56: repgame.v1.MatchState.self:type_name -> repgame.v1.SelfView
-	50, // 57: repgame.v1.MatchState.opponent:type_name -> repgame.v1.OpponentView
-	43, // 58: repgame.v1.SideResult.board:type_name -> repgame.v1.ChessCard
-	44, // 59: repgame.v1.SideResult.relics:type_name -> repgame.v1.RelicSlot
-	48, // 60: repgame.v1.SideResult.score:type_name -> repgame.v1.ScoreBreakdown
-	52, // 61: repgame.v1.RoundResult.self:type_name -> repgame.v1.SideResult
-	52, // 62: repgame.v1.RoundResult.opponent:type_name -> repgame.v1.SideResult
-	63, // [63:63] is the sub-list for method output_type
-	63, // [63:63] is the sub-list for method input_type
-	63, // [63:63] is the sub-list for extension type_name
-	63, // [63:63] is the sub-list for extension extendee
-	0,  // [0:63] is the sub-list for field type_name
+	6,  // 45: repgame.v1.ScoreStep.origin:type_name -> repgame.v1.StepOrigin
+	48, // 46: repgame.v1.ScoreBreakdown.steps:type_name -> repgame.v1.ScoreStep
+	44, // 47: repgame.v1.SelfView.board:type_name -> repgame.v1.ChessCard
+	44, // 48: repgame.v1.SelfView.bench:type_name -> repgame.v1.ChessCard
+	45, // 49: repgame.v1.SelfView.relics:type_name -> repgame.v1.RelicSlot
+	46, // 50: repgame.v1.SelfView.shop:type_name -> repgame.v1.ShopSlot
+	47, // 51: repgame.v1.SelfView.trade_bonds:type_name -> repgame.v1.BondCount
+	47, // 52: repgame.v1.SelfView.origin_bonds:type_name -> repgame.v1.BondCount
+	49, // 53: repgame.v1.SelfView.preview:type_name -> repgame.v1.ScoreBreakdown
+	45, // 54: repgame.v1.OpponentView.relics:type_name -> repgame.v1.RelicSlot
+	44, // 55: repgame.v1.OpponentView.last_board:type_name -> repgame.v1.ChessCard
+	4,  // 56: repgame.v1.MatchState.phase:type_name -> repgame.v1.MatchPhase
+	50, // 57: repgame.v1.MatchState.self:type_name -> repgame.v1.SelfView
+	51, // 58: repgame.v1.MatchState.opponent:type_name -> repgame.v1.OpponentView
+	44, // 59: repgame.v1.SideResult.board:type_name -> repgame.v1.ChessCard
+	45, // 60: repgame.v1.SideResult.relics:type_name -> repgame.v1.RelicSlot
+	49, // 61: repgame.v1.SideResult.score:type_name -> repgame.v1.ScoreBreakdown
+	53, // 62: repgame.v1.RoundResult.self:type_name -> repgame.v1.SideResult
+	53, // 63: repgame.v1.RoundResult.opponent:type_name -> repgame.v1.SideResult
+	64, // [64:64] is the sub-list for method output_type
+	64, // [64:64] is the sub-list for method input_type
+	64, // [64:64] is the sub-list for extension type_name
+	64, // [64:64] is the sub-list for extension extendee
+	0,  // [0:64] is the sub-list for field type_name
 }
 
 func init() { file_repgame_v1_game_proto_init() }
@@ -4843,7 +4911,7 @@ func file_repgame_v1_game_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_repgame_v1_game_proto_rawDesc), len(file_repgame_v1_game_proto_rawDesc)),
-			NumEnums:      6,
+			NumEnums:      7,
 			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   0,

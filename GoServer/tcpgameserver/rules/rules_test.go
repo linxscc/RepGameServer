@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"math"
 	"math/rand"
 	"reflect"
 	"strings"
@@ -1345,5 +1346,120 @@ func TestCloseVaultCanEnterOmen(t *testing.T) {
 	}
 	if m.Phase != PhaseOmen || m.Round != 11 {
 		t.Fatalf("phase %d round %d, want omen round 11", m.Phase, m.Round)
+	}
+}
+
+func approx(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
+
+// foeSetup gives the opponent (P[1]) the relics; P[0] fields the board.
+func foeSetup(t *testing.T, m *Match, board []Card, foeRelics ...string) *Player {
+	p, o := m.P[0], m.P[1]
+	p.Board = board
+	o.Relics = nil
+	for _, k := range foeRelics {
+		o.Relics = append(o.Relics, relic(t, m, k, 0))
+	}
+	return p
+}
+
+func TestDemonMirrorHitsFoeGhosts(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	soldier, clerk := coloredCard(m, t, "soldier", 1, Red), coloredCard(m, t, "clerk", 1, Red)
+	p := foeSetup(t, m, []Card{soldier, clerk}, "demon_mirror")
+	st := stepsBy(m.Score(p), "照妖镜")
+	if len(st) != 1 || st[0].Origin != OriginFoeRelic || st[0].Relic != 0 || st[0].CardUID != soldier.UID ||
+		st[0].Kind != StepPoints || st[0].Phase != 1 || !approx(st[0].Value, -0.3*float64(m.Points(soldier))) {
+		t.Fatalf("照妖镜 steps %+v", st)
+	}
+}
+
+func TestGodBreakerHitsFoeGods(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	soldier, clerk := coloredCard(m, t, "soldier", 1, Red), coloredCard(m, t, "clerk", 1, Red)
+	p := foeSetup(t, m, []Card{soldier, clerk}, "god_breaker")
+	st := stepsBy(m.Score(p), "破神符")
+	if len(st) != 1 || st[0].Origin != OriginFoeRelic || st[0].Relic != 0 || st[0].CardUID != clerk.UID ||
+		!approx(st[0].Value, -0.3*float64(m.Points(clerk))) {
+		t.Fatalf("破神符 steps %+v", st)
+	}
+}
+
+func TestBeheadZeroesLeftmost(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	clerk, soldier := coloredCard(m, t, "clerk", 1, Red), coloredCard(m, t, "soldier", 1, Red)
+	p := foeSetup(t, m, []Card{clerk, soldier}, "behead")
+	p.Relics = []RelicInst{relic(t, m, "vanguard", 0)}
+	res := m.Score(p)
+	st := stepsBy(res, "斩首")
+	if len(st) != 1 || st[0].Origin != OriginFoeRelic || st[0].CardUID != clerk.UID || st[0].Value != -float64(m.Points(clerk)) {
+		t.Fatalf("斩首 steps %+v", st)
+	}
+	if s := stepsBy(res, "先锋旗"); len(s) != 0 {
+		t.Fatalf("先锋旗 should not fire on a beheaded card: %+v", s)
+	}
+	net := 0.0
+	for _, s := range res.Steps {
+		if s.CardUID == clerk.UID && s.Kind == StepPoints {
+			net += s.Value
+		}
+	}
+	if net != 0 {
+		t.Fatalf("beheaded card net points %v", net)
+	}
+}
+
+func TestMirroredDemonMirrorStacks(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	soldier := coloredCard(m, t, "soldier", 1, Red)
+	p := foeSetup(t, m, []Card{soldier}, "mirror", "demon_mirror")
+	st := stepsBy(m.Score(p), "照妖镜")
+	pts := float64(m.Points(soldier))
+	if len(st) != 2 || st[0].Relic != 0 || st[1].Relic != 1 ||
+		!approx(st[0].Value, -0.3*pts) || !approx(st[1].Value, -0.3*0.7*pts) {
+		t.Fatalf("照妖镜 steps %+v", st)
+	}
+}
+
+func TestColorCounter(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := foeSetup(t, m, suitBoard(m, t, "soldier", "r", "clerk", "r", "monk", "b"))
+	p.Relics = []RelicInst{relic(t, m, "color_counter", 0)}
+	m.P[1].Board = suitBoard(m, t, "farmer", "r", "smith", "r", "taoist", "b")
+	st := stepsBy(m.Score(p), "克色")
+	if len(st) != 1 || st[0].Phase != 5 || st[0].Kind != StepAddMult || st[0].Value != 8 || st[0].Origin != OriginOwn {
+		t.Fatalf("克色 steps %+v", st)
+	}
+	m.P[1].Board = suitBoard(m, t, "farmer", "r", "taoist", "b")
+	if st := stepsBy(m.Score(p), "克色"); len(st) != 0 {
+		t.Fatalf("tied foe colors must not fire: %+v", st)
+	}
+}
+
+func TestUsurpCountsFoeSuitRelics(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := foeSetup(t, m, suitBoard(m, t, "soldier", "r"), "cinnabar", "shrine", "vanguard")
+	p.Relics = []RelicInst{relic(t, m, "usurp", 0)}
+	st := stepsBy(m.Score(p), "反客为主")
+	if len(st) != 1 || st[0].Phase != 5 || st[0].Kind != StepAddMult || st[0].Value != 10 {
+		t.Fatalf("反客为主 steps %+v", st)
+	}
+}
+
+func TestPreviewUsesOpponentLastBoard(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := foeSetup(t, m, suitBoard(m, t, "soldier", "r", "clerk", "r"))
+	p.Relics = []RelicInst{relic(t, m, "color_counter", 0)}
+	o := m.P[1]
+	o.LastBoard = suitBoard(m, t, "farmer", "r", "smith", "r")
+	o.Board = suitBoard(m, t, "taoist", "b", "monk", "b", "artist", "b")
+	if st := stepsBy(m.Preview(p), "克色"); len(st) != 1 || st[0].Value != 8 {
+		t.Fatalf("preview 克色 steps %+v, want +8 from the foe's last board", st)
+	}
+	if st := stepsBy(m.Score(p), "克色"); len(st) != 0 {
+		t.Fatalf("settlement 克色 steps %+v, want none against the locked all-black board", st)
+	}
+	// bots arrange against the same view as the preview
+	if st := stepsBy(m.ScoreWith(p, p.Board, p.Bench, p.Relics), "克色"); len(st) != 1 {
+		t.Fatalf("ScoreWith 克色 steps %+v", st)
 	}
 }

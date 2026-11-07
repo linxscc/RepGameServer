@@ -49,3 +49,8 @@ relics:
   - { key: yin_yang,     name: 阴阳鱼,   category: suit,   rarity: rare,   desc: 红黑张数相等（各至少 2 张），气势 ×2,              params: { min_each: 2, factor: 2 } }
   - { key: four_symbols, name: 四象,     category: suit,   rarity: rare,   desc: 出阵中红神、黑神、红鬼、黑鬼齐全，+20 气势,        params: { mult: 20 } }
   - { key: vermilion,    name: 赤化,     category: suit,   rarity: common, desc: 合成出的卡总是红色,                              params: {} }
+  - { key: demon_mirror, name: 照妖镜,   category: counter, rarity: rare,  desc: 对手每张鬼卡在其逐卡阶段战力 ×0.7,               params: { factor: 0.7 } }
+  - { key: god_breaker,  name: 破神符,   category: counter, rarity: rare,  desc: 对手每张神卡在其逐卡阶段战力 ×0.7,               params: { factor: 0.7 } }
+  - { key: color_counter, name: 克色,    category: counter, rarity: common, desc: 对手出阵中较多的那种颜色，自己该颜色的出阵卡每张 +4 气势, params: { mult: 4 } }
+  - { key: behead,       name: 斩首,     category: counter, rarity: epic,  desc: 对手最左边那张卡在逐卡阶段战力归零,               params: {} }
+  - { key: usurp,        name: 反客为主, category: counter, rarity: common, desc: 对手每有一个花色法宝，+5 气势,                   params: { mult: 5 } }

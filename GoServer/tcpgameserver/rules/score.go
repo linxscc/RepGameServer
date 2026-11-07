@@ -10,12 +10,22 @@ const (
 	StepTimesMult                 // 乘倍率
 )
 
+// StepOrigin says whose effect produced a step.
+type StepOrigin int
+
+const (
+	OriginOwn      StepOrigin = 0 // 自己的卡 / 羁绊 / 法宝
+	OriginFoeRelic StepOrigin = 1 // 对手的法宝（Relic = 对手法宝栏位置）
+	OriginOmen     StepOrigin = 2 // 天象（Relic = -1，Source = 天象名）
+)
+
 // Step is one visible change during scoring, in order. The client replays these.
 type Step struct {
 	Phase   int    // 1..5，对应文档「计分」的步骤
 	Source  string // 卡名 / 羁绊名 / 法宝名
 	CardUID string // 逐卡步骤的卡；否则为空
-	Relic   int    // 法宝栏位置；否则 -1
+	Relic   int    // 法宝栏位置；否则 -1（Origin 为对手法宝时是对手的法宝栏位置）
+	Origin  StepOrigin
 	Kind    StepKind
 	Value   float64 // 本步的增量或乘数
 	Points  float64 // 本步之后的点数
@@ -40,6 +50,7 @@ type scorer struct {
 	r                     ScoreResult
 	cardTrig, cardTrigs   int // 当前逐卡结算是这张卡的第几次触发 / 共几次
 	relicTrig, relicTrigs int // 当前法宝是第几次触发 / 共几次
+	origin                StepOrigin
 }
 
 func (s *scorer) add(phase int, src, uid string, relic int, kind StepKind, v float64) {
@@ -63,7 +74,7 @@ func (s *scorer) add(phase int, src, uid string, relic int, kind StepKind, v flo
 	} else if s.cardTrigs > 1 {
 		trig, trigs = s.cardTrig, s.cardTrigs
 	}
-	s.r.Steps = append(s.r.Steps, Step{Phase: phase, Source: src, CardUID: uid, Relic: relic, Kind: kind, Value: v, Points: s.r.Points, Mult: s.r.Mult,
+	s.r.Steps = append(s.r.Steps, Step{Phase: phase, Source: src, CardUID: uid, Relic: relic, Origin: s.origin, Kind: kind, Value: v, Points: s.r.Points, Mult: s.r.Mult,
 		Trigger: trig, Triggers: trigs})
 }
 
@@ -76,11 +87,34 @@ func (s *scorer) relicLoop(n int, f func()) {
 	s.relicTrig, s.relicTrigs = 0, 0
 }
 
-// Score scores the player's current board/bench/relics.
-func (m *Match) Score(p *Player) ScoreResult { return m.ScoreWith(p, p.Board, p.Bench, p.Relics) }
+// Foe is the opponent side a score is computed against (counter relics).
+type Foe struct {
+	Board  []Card
+	Relics []RelicInst
+}
 
-// ScoreWith scores a hypothetical layout (used by previews and bots).
+// Score scores the player's current board/bench/relics at settlement, against the
+// opponent's current (locked) board and relics.
+func (m *Match) Score(p *Player) ScoreResult {
+	o := m.Opponent(p)
+	return m.ScoreVs(p, p.Board, p.Bench, p.Relics, Foe{o.Board, o.Relics}, nil)
+}
+
+// Preview scores the player's current layout for the prep-phase view. The opponent is
+// seen as their board at the last settlement plus their current relics, so the
+// board they are arranging right now never leaks.
+func (m *Match) Preview(p *Player) ScoreResult { return m.ScoreWith(p, p.Board, p.Bench, p.Relics) }
+
+// ScoreWith scores a hypothetical layout (used by previews and bots) against the
+// opponent's last settled board and current relics.
 func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) ScoreResult {
+	o := m.Opponent(p)
+	return m.ScoreVs(p, board, bench, relics, Foe{o.LastBoard, o.Relics}, nil)
+}
+
+// ScoreVs scores a layout against the given foe. extraOmens are omens to treat as
+// active in addition to the match's (used by Task 14; nil for now).
+func (m *Match) ScoreVs(p *Player, board, bench []Card, relics []RelicInst, foe Foe, extraOmens []int) ScoreResult {
 	s := &scorer{r: ScoreResult{Mult: 1}}
 	if len(board) == 0 {
 		s.r.Mult = 1
@@ -88,6 +122,7 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 	}
 	cfg := m.cfg
 	eff := m.effective(relics)
+	foeEff := m.effective(foe.Relics)
 	bc := m.bondCounts(board, relics)
 
 	// extra triggers on the leftmost relic slots
@@ -114,9 +149,9 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 	// 1. per card, left to right. Each settlement (including 家传绝学 repeats) runs, in order:
 	//   a. the card's own points
 	//   b. own per-card factor relics (kindFactor: 神龛)
-	//   c. [foe per-card counters — 照妖镜、破神符, foe relic order, once]   (Task 8)
+	//   c. foe per-card counters (kindFoeCard: 照妖镜、破神符), foe relic order, once
 	//   d. [active omen factors, in order of appearance]                    (Task 14)
-	//   e. [foe 斩首 when idx == 0]                                         (Task 8)
+	//   e. foe 斩首 when idx == 0
 	//   f. other per-card relics (kindPerCard), in relic-bar order
 	// cardPts is the card's current points; a factor step adds (f−1)×cardPts and then
 	// scales cardPts by f, so later steps (先锋旗) see the factored value.
@@ -144,7 +179,39 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 			})
 		}
 
-		// c–e: foe counters, omens and foe 斩首 slot in here (Tasks 8 / 14).
+		// c. foe per-card counters, in the foe's relic-bar order; once per settlement
+		// (the foe's retriggers do not apply). Copies (铜镜/拓本) act as usual.
+		s.origin = OriginFoeRelic
+		for _, r := range foeEff {
+			if r.empty || m.behaviour(r.Relic).kind != kindFoeCard {
+				continue
+			}
+			switch m.relicKey(r) {
+			case "demon_mirror":
+				if !m.IsGod(c) {
+					factor(relicName(r), r.slot, param(r, "factor"))
+				}
+			case "god_breaker":
+				if m.IsGod(c) {
+					factor(relicName(r), r.slot, param(r, "factor"))
+				}
+			}
+		}
+		s.origin = OriginOwn
+
+		// d. [active omen factors, in order of appearance]  (Task 14)
+
+		// e. foe 斩首 on the leftmost card
+		if idx == 0 {
+			s.origin = OriginFoeRelic
+			for _, r := range foeEff {
+				if !r.empty && m.relicKey(r) == "behead" {
+					s.add(1, relicName(r), c.UID, r.slot, StepPoints, -cardPts)
+					cardPts = 0
+				}
+			}
+			s.origin = OriginOwn
+		}
 
 		// f. other per-card relics
 		for _, r := range eff {
@@ -267,6 +334,19 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 		}
 	}
 	blacks := len(board) - reds
+	foeReds := 0
+	for _, c := range foe.Board {
+		if c.Color == Red {
+			foeReds++
+		}
+	}
+	foeBlacks := len(foe.Board) - foeReds
+	foeSuitRelics := 0 // 对手法宝栏里的花色法宝（不含铜镜/拓本复制品）
+	for _, r := range foe.Relics {
+		if cfg.CategoryOf(r.Relic) == CatSuit {
+			foeSuitRelics++
+		}
+	}
 	for _, ls := range m.legendsOnWithLine(board) {
 		name := cfg.Lines[ls.line].Card
 		pp := ls.skill.Params
@@ -354,6 +434,15 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 				if suits[SuitRedGod] > 0 && suits[SuitBlackGod] > 0 && suits[SuitRedGhost] > 0 && suits[SuitBlackGhost] > 0 {
 					s.add(5, name, "", r.slot, StepAddMult, param(r, "mult"))
 				}
+			case "color_counter":
+				switch {
+				case foeReds > foeBlacks:
+					s.add(5, name, "", r.slot, StepAddMult, param(r, "mult")*float64(reds))
+				case foeBlacks > foeReds:
+					s.add(5, name, "", r.slot, StepAddMult, param(r, "mult")*float64(blacks))
+				}
+			case "usurp":
+				s.add(5, name, "", r.slot, StepAddMult, param(r, "mult")*float64(foeSuitRelics))
 			}
 		})
 	}

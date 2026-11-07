@@ -59,3 +59,28 @@ func TestViewsCarryRelicCategory(t *testing.T) {
 		}
 	}
 }
+
+func TestScoreStepOriginInView(t *testing.T) {
+	cfg := config.Game().Chess
+	m := rules.NewMatch(cfg, rand.New(rand.NewSource(1)), [2]string{"a", "b"})
+	p, o := m.P[0], m.P[1]
+	soldier, _ := cfg.LineIndex("soldier")
+	clerk, _ := cfg.LineIndex("clerk")
+	dm, _ := cfg.RelicIndex("demon_mirror")
+	p.Board = []rules.Card{{UID: "s", Line: soldier, Star: 1, Color: rules.Red, Red: 1}, {UID: "c", Line: clerk, Star: 1, Color: rules.Red, Red: 1}}
+	o.Relics = []rules.RelicInst{{Relic: dm, Choice: -1}}
+	var found bool
+	for _, s := range scoreBreakdown(m.Score(p)).GetSteps() {
+		if s.GetSource() == "照妖镜" {
+			found = true
+			if s.GetOrigin() != pb.StepOrigin_STEP_ORIGIN_FOE_RELIC || s.GetRelicSlot() != 0 || s.GetCardUid() != "s" {
+				t.Fatalf("step %+v", s)
+			}
+		} else if s.GetOrigin() != pb.StepOrigin_STEP_ORIGIN_OWN {
+			t.Fatalf("own step with origin %v: %+v", s.GetOrigin(), s)
+		}
+	}
+	if !found {
+		t.Fatal("no 照妖镜 step")
+	}
+}

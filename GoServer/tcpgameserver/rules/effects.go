@@ -7,9 +7,9 @@ package rules
 // bondModifiers are the generic per-tier values a bond may set.
 // scoring = evaluated on the board being scored; ops = on the last settled board.
 var bondModifiers = map[string]struct{ ops bool }{
-	"points_per_card":     {false}, // 每张出阵卡 +点
-	"add_mult":            {false}, // +倍率
-	"times_mult":          {false}, // ×倍率
+	"points_per_card": {false}, // 每张出阵卡 +点
+	"add_mult":        {false}, // +倍率
+	"times_mult":      {false}, // ×倍率
 }
 
 // legendParams: 3★ skill key → required params.
@@ -41,6 +41,7 @@ const (
 	kindCopy                     // 复制
 	kindCount                    // 计数
 	kindFactor                   // 逐卡倍率：本卡当前战力 ×factor（逐卡管线中先于其余逐卡法宝）
+	kindFoeCard                  // 特攻：在对手的逐卡结算里生效（每张卡每次结算 1 次，不受重复触发影响）
 )
 
 type relicBehaviour struct {
@@ -52,45 +53,50 @@ type relicBehaviour struct {
 }
 
 var relicBehaviours = map[string]relicBehaviour{
-	"furnace":      {kind: kindWhole, params: []string{"per_merge"}, growth: true},
-	"heirloom":     {kind: kindPerCard, params: []string{"mult"}},
-	"master_seal":  {kind: kindWhole, params: []string{"factor"}, times: true},
-	"graduation":   {kind: kindOps, params: []string{"gold"}},
-	"fellowship":   {kind: kindWhole, params: []string{"mult"}},
-	"sect_token":   {kind: kindCount, params: []string{"count", "mult"}, choice: true},
-	"eclectic":     {kind: kindWhole, params: []string{"min_lines", "factor"}, times: true},
-	"secret_art":   {kind: kindPerCard, params: []string{"repeats"}, choice: true},
-	"lone_wolf":    {kind: kindWhole, params: []string{"max_cards", "factor"}, times: true},
-	"lean":         {kind: kindWhole, params: []string{"mult"}},
-	"vanguard":     {kind: kindPerCard, params: []string{"factor"}},
-	"multitude":    {kind: kindWhole, params: []string{"mult"}},
-	"new_wave":     {kind: kindPerCard, params: []string{"points", "mult"}},
-	"rearguard":    {kind: kindPerCard, params: []string{"mult"}},
-	"hidden":       {kind: kindBench, params: []string{"mult"}},
-	"storehouse":   {kind: kindBench, params: []string{"points"}},
-	"treasure":     {kind: kindOps, params: []string{"cap"}},
-	"piggy":        {kind: kindWhole, params: []string{"per_gold", "mult"}},
-	"thrifty":      {kind: kindOps, params: []string{"gold"}},
-	"accountant":   {kind: kindWhole, params: []string{"per_sell"}, growth: true},
-	"grudge":       {kind: kindWhole, params: []string{"per_loss", "cap"}, growth: true},
-	"momentum":     {kind: kindWhole, params: []string{"mult"}},
-	"last_stand":   {kind: kindWhole, params: []string{"hp_below", "factor"}, times: true},
-	"tailwind":     {kind: kindWhole, params: []string{"per_level"}, times: true},
-	"literary_pen": {kind: kindWhole, params: []string{"factor"}, times: true},
-	"market_pass":  {kind: kindOps, params: []string{"free"}},
-	"academy":      {kind: kindOps, params: []string{"xp"}},
-	"expansion":    {kind: kindOps, params: []string{"slots"}},
-	"tempering":    {kind: kindOps, params: []string{"points"}},
-	"cinnabar":     {kind: kindPerCard, params: []string{"mult"}},
-	"pine_ink":     {kind: kindPerCard, params: []string{"points"}},
-	"shrine":       {kind: kindFactor, params: []string{"factor"}},
-	"night_parade": {kind: kindWhole, params: []string{"min_cards", "factor"}, times: true},
-	"one_color":    {kind: kindWhole, params: []string{"min_cards", "factor"}, times: true},
-	"yin_yang":     {kind: kindWhole, params: []string{"min_each", "factor"}, times: true},
-	"four_symbols": {kind: kindWhole, params: []string{"mult"}},
-	"vermilion":    {kind: kindOps},
-	"mirror":       {kind: kindCopy},
-	"rubbing":      {kind: kindCopy},
+	"furnace":       {kind: kindWhole, params: []string{"per_merge"}, growth: true},
+	"heirloom":      {kind: kindPerCard, params: []string{"mult"}},
+	"master_seal":   {kind: kindWhole, params: []string{"factor"}, times: true},
+	"graduation":    {kind: kindOps, params: []string{"gold"}},
+	"fellowship":    {kind: kindWhole, params: []string{"mult"}},
+	"sect_token":    {kind: kindCount, params: []string{"count", "mult"}, choice: true},
+	"eclectic":      {kind: kindWhole, params: []string{"min_lines", "factor"}, times: true},
+	"secret_art":    {kind: kindPerCard, params: []string{"repeats"}, choice: true},
+	"lone_wolf":     {kind: kindWhole, params: []string{"max_cards", "factor"}, times: true},
+	"lean":          {kind: kindWhole, params: []string{"mult"}},
+	"vanguard":      {kind: kindPerCard, params: []string{"factor"}},
+	"multitude":     {kind: kindWhole, params: []string{"mult"}},
+	"new_wave":      {kind: kindPerCard, params: []string{"points", "mult"}},
+	"rearguard":     {kind: kindPerCard, params: []string{"mult"}},
+	"hidden":        {kind: kindBench, params: []string{"mult"}},
+	"storehouse":    {kind: kindBench, params: []string{"points"}},
+	"treasure":      {kind: kindOps, params: []string{"cap"}},
+	"piggy":         {kind: kindWhole, params: []string{"per_gold", "mult"}},
+	"thrifty":       {kind: kindOps, params: []string{"gold"}},
+	"accountant":    {kind: kindWhole, params: []string{"per_sell"}, growth: true},
+	"grudge":        {kind: kindWhole, params: []string{"per_loss", "cap"}, growth: true},
+	"momentum":      {kind: kindWhole, params: []string{"mult"}},
+	"last_stand":    {kind: kindWhole, params: []string{"hp_below", "factor"}, times: true},
+	"tailwind":      {kind: kindWhole, params: []string{"per_level"}, times: true},
+	"literary_pen":  {kind: kindWhole, params: []string{"factor"}, times: true},
+	"market_pass":   {kind: kindOps, params: []string{"free"}},
+	"academy":       {kind: kindOps, params: []string{"xp"}},
+	"expansion":     {kind: kindOps, params: []string{"slots"}},
+	"tempering":     {kind: kindOps, params: []string{"points"}},
+	"cinnabar":      {kind: kindPerCard, params: []string{"mult"}},
+	"pine_ink":      {kind: kindPerCard, params: []string{"points"}},
+	"shrine":        {kind: kindFactor, params: []string{"factor"}},
+	"night_parade":  {kind: kindWhole, params: []string{"min_cards", "factor"}, times: true},
+	"one_color":     {kind: kindWhole, params: []string{"min_cards", "factor"}, times: true},
+	"yin_yang":      {kind: kindWhole, params: []string{"min_each", "factor"}, times: true},
+	"four_symbols":  {kind: kindWhole, params: []string{"mult"}},
+	"vermilion":     {kind: kindOps},
+	"demon_mirror":  {kind: kindFoeCard, params: []string{"factor"}},
+	"god_breaker":   {kind: kindFoeCard, params: []string{"factor"}},
+	"behead":        {kind: kindFoeCard},
+	"color_counter": {kind: kindWhole, params: []string{"mult"}},
+	"usurp":         {kind: kindWhole, params: []string{"mult"}},
+	"mirror":        {kind: kindCopy},
+	"rubbing":       {kind: kindCopy},
 }
 
 var relicParams = func() map[string][]string {

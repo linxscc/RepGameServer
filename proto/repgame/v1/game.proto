@@ -341,8 +341,14 @@ enum ScoreStepKind {
   SCORE_STEP_KIND_TIMES_MULT = 3;
 }
 
+enum StepOrigin {
+  STEP_ORIGIN_OWN = 0;        // 自己的卡 / 羁绊 / 法宝
+  STEP_ORIGIN_FOE_RELIC = 1;  // 对手的法宝
+  STEP_ORIGIN_OMEN = 2;       // 天象（relic_slot = -1，source = 天象名）
+}
+
 message ScoreStep {
-  int32 phase = 1;          // 1 逐卡 2 备战席 3 羁绊 4 3★ 技能 5 法宝
+  int32 phase = 1;          // 1 逐卡 2 备战席 3 羁绊 4 3★ 技能 5 法宝；origin 为对手法宝时 relic_slot 是对手法宝栏位置
   string source = 2;        // 卡名 / 羁绊名 / 法宝名
   string card_uid = 3;
   int32 relic_slot = 4;     // -1 表示不是法宝
@@ -352,6 +358,7 @@ message ScoreStep {
   double mult = 8;
   int32 trigger = 9;        // 本步是第几次触发（从 1 开始）
   int32 triggers = 10;      // 共触发几次；>1 时客户端显示"第 n/N 次触发"
+  StepOrigin origin = 11;   // 步骤来源：自己 / 对手法宝 / 天象
 }
 
 message ScoreBreakdown {
