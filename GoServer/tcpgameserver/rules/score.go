@@ -111,11 +111,42 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 	relicName := func(r effRelic) string { return cfg.Relics[r.Relic].Name }
 	param := func(r effRelic, k string) float64 { return cfg.Relics[r.Relic].Params[k] }
 
-	// 1. per card, left to right
+	// 1. per card, left to right. Each settlement (including 家传绝学 repeats) runs, in order:
+	//   a. the card's own points
+	//   b. own per-card factor relics (kindFactor: 神龛)
+	//   c. [foe per-card counters — 照妖镜、破神符, foe relic order, once]   (Task 8)
+	//   d. [active omen factors, in order of appearance]                    (Task 14)
+	//   e. [foe 斩首 when idx == 0]                                         (Task 8)
+	//   f. other per-card relics (kindPerCard), in relic-bar order
+	// cardPts is the card's current points; a factor step adds (f−1)×cardPts and then
+	// scales cardPts by f, so later steps (先锋旗) see the factored value.
 	last := len(board) - 1
 	scoreCard := func(idx int, c Card) {
-		own := float64(m.Points(c))
-		s.add(1, m.CardName(c), c.UID, -1, StepPoints, own)
+		cardPts := float64(m.Points(c))
+		s.add(1, m.CardName(c), c.UID, -1, StepPoints, cardPts)
+		factor := func(src string, relic int, f float64) {
+			s.add(1, src, c.UID, relic, StepPoints, (f-1)*cardPts)
+			cardPts *= f
+		}
+
+		// b. own per-card factor relics
+		for _, r := range eff {
+			if r.empty || m.behaviour(r.Relic).kind != kindFactor {
+				continue
+			}
+			s.relicLoop(reps(r), func() {
+				switch m.relicKey(r) {
+				case "shrine":
+					if m.IsGod(c) {
+						factor(relicName(r), r.slot, param(r, "factor"))
+					}
+				}
+			})
+		}
+
+		// c–e: foe counters, omens and foe 斩首 slot in here (Tasks 8 / 14).
+
+		// f. other per-card relics
 		for _, r := range eff {
 			if r.empty || m.behaviour(r.Relic).kind != kindPerCard {
 				continue
@@ -137,7 +168,15 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 					}
 				case "vanguard":
 					if idx == 0 {
-						s.add(1, relicName(r), c.UID, r.slot, StepPoints, (param(r, "factor")-1)*own)
+						s.add(1, relicName(r), c.UID, r.slot, StepPoints, (param(r, "factor")-1)*cardPts)
+					}
+				case "cinnabar":
+					if c.Color == Red {
+						s.add(1, relicName(r), c.UID, r.slot, StepAddMult, param(r, "mult"))
+					}
+				case "pine_ink":
+					if c.Color == Black {
+						s.add(1, relicName(r), c.UID, r.slot, StepPoints, param(r, "points"))
 					}
 				}
 			})
@@ -212,12 +251,22 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 	// 4. 3★ skills, left to right
 	distinct := map[int]bool{}
 	nMax := 0
+	var suits [4]int // 按 Suit 计数
+	ghosts, reds := 0, 0
 	for _, c := range board {
 		distinct[c.Line] = true
 		if c.Star == cfg.Rules.Merge.MaxStar {
 			nMax++
 		}
+		suits[m.SuitOf(c)]++
+		if !m.IsGod(c) {
+			ghosts++
+		}
+		if c.Color == Red {
+			reds++
+		}
 	}
+	blacks := len(board) - reds
 	for _, ls := range m.legendsOnWithLine(board) {
 		name := cfg.Lines[ls.line].Card
 		pp := ls.skill.Params
@@ -288,6 +337,22 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 			case "literary_pen":
 				if bc.Trade[cfg.tradeIdx["letter"]].Tier >= 0 {
 					s.add(5, name, "", r.slot, StepTimesMult, param(r, "factor"))
+				}
+			case "night_parade":
+				if ghosts >= int(param(r, "min_cards")) {
+					s.add(5, name, "", r.slot, StepTimesMult, param(r, "factor"))
+				}
+			case "one_color":
+				if len(board) >= int(param(r, "min_cards")) && (reds == 0 || blacks == 0) {
+					s.add(5, name, "", r.slot, StepTimesMult, param(r, "factor"))
+				}
+			case "yin_yang":
+				if reds == blacks && reds >= int(param(r, "min_each")) {
+					s.add(5, name, "", r.slot, StepTimesMult, param(r, "factor"))
+				}
+			case "four_symbols":
+				if suits[SuitRedGod] > 0 && suits[SuitBlackGod] > 0 && suits[SuitRedGhost] > 0 && suits[SuitBlackGhost] > 0 {
+					s.add(5, name, "", r.slot, StepAddMult, param(r, "mult"))
 				}
 			}
 		})

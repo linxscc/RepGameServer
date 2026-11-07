@@ -298,6 +298,7 @@ func (m *Match) checkMerges(p *Player) []Card {
 // merge combines GroupSize cards of (line, star). With Merge.SameColor only cards of color col
 // take part; otherwise col is ignored. The result takes the majority color of the cards used
 // (ties, possible only with an even group size, go to Red) and the sum of their Red counts.
+// With 赤化 (vermilion) the result is always Red; its Red count is still the sum.
 func (m *Match) merge(p *Player, line, star int, col Color) Card {
 	need := m.cfg.Rules.Merge.GroupSize
 	sameColor := m.cfg.Rules.Merge.SameColor
@@ -337,6 +338,9 @@ func (m *Match) merge(p *Player, line, star int, col Color) Card {
 	}
 	nc := Card{UID: m.newUID(), Line: line, Star: star + 1, Bonus: bonus, Red: red, Color: majorityColor(redCards, need)}
 
+	if m.hasEff(m.effective(p.Relics), "vermilion") {
+		nc.Color = Red // 赤化：颜色变红，Red 计数不变（卡池按 Red 归还）
+	}
 	nc.Bonus += int(m.sumEffParam(m.effective(p.Relics), "tempering", "points"))
 	for i := range p.Relics {
 		key := m.cfg.Relics[p.Relics[i].Relic].Key

@@ -40,6 +40,7 @@ const (
 	kindOps                      // 运营
 	kindCopy                     // 复制
 	kindCount                    // 计数
+	kindFactor                   // 逐卡倍率：本卡当前战力 ×factor（逐卡管线中先于其余逐卡法宝）
 )
 
 type relicBehaviour struct {
@@ -80,6 +81,14 @@ var relicBehaviours = map[string]relicBehaviour{
 	"academy":      {kind: kindOps, params: []string{"xp"}},
 	"expansion":    {kind: kindOps, params: []string{"slots"}},
 	"tempering":    {kind: kindOps, params: []string{"points"}},
+	"cinnabar":     {kind: kindPerCard, params: []string{"mult"}},
+	"pine_ink":     {kind: kindPerCard, params: []string{"points"}},
+	"shrine":       {kind: kindFactor, params: []string{"factor"}},
+	"night_parade": {kind: kindWhole, params: []string{"min_cards", "factor"}, times: true},
+	"one_color":    {kind: kindWhole, params: []string{"min_cards", "factor"}, times: true},
+	"yin_yang":     {kind: kindWhole, params: []string{"min_each", "factor"}, times: true},
+	"four_symbols": {kind: kindWhole, params: []string{"mult"}},
+	"vermilion":    {kind: kindOps},
 	"mirror":       {kind: kindCopy},
 	"rubbing":      {kind: kindCopy},
 }

@@ -6,7 +6,7 @@
 # rarity  见 chess_rules.yaml 的 rarities
 # category 类别：economy 经济 / growth 成长 / suit 花色 / counter 特攻 / tactic 战术
 # params  数值，每个 key 需要的参数名是固定的，缺了或多了都会启动失败
-# 通用规则：×气势类（宗师印、杂家、独行侠、背水一战、乘风、文曲笔）不会被额外触发；
+# 通用规则：×气势类（宗师印、杂家、独行侠、背水一战、乘风、文曲笔、百鬼夜行、一色、阴阳鱼）不会被额外触发；
 #          复制类不能复制另一个复制类；成长类的复制品不成长。
 # ============================================================
 relics:
@@ -41,3 +41,11 @@ relics:
   - { key: academy,      name: 书院荐,   category: economy, rarity: common, desc: 每回合 +2 经验（第 2 回合起）,                     params: { xp: 2 } }
   - { key: expansion,    name: 扩建令,   category: economy, rarity: epic,   desc: 出阵格 +1,                                      params: { slots: 1 } }
   - { key: tempering,    name: 百炼,     category: growth, rarity: rare,   desc: 合成出的卡永久 +3 战力,                           params: { points: 3 } }
+  - { key: cinnabar,     name: 朱砂,     category: suit,   rarity: common, desc: 每张红色出阵卡结算时 +3 气势,                     params: { mult: 3 } }
+  - { key: pine_ink,     name: 松烟墨,   category: suit,   rarity: common, desc: 每张黑色出阵卡结算时 +15 战力,                    params: { points: 15 } }
+  - { key: shrine,       name: 神龛,     category: suit,   rarity: rare,   desc: 神卡在逐卡阶段战力 ×2,                            params: { factor: 2 } }
+  - { key: night_parade, name: 百鬼夜行, category: suit,   rarity: rare,   desc: 出阵中鬼卡至少 4 张时，气势 ×2,                    params: { min_cards: 4, factor: 2 } }
+  - { key: one_color,    name: 一色,     category: suit,   rarity: epic,   desc: 出阵卡全部同色（至少 3 张），气势 ×3,              params: { min_cards: 3, factor: 3 } }
+  - { key: yin_yang,     name: 阴阳鱼,   category: suit,   rarity: rare,   desc: 红黑张数相等（各至少 2 张），气势 ×2,              params: { min_each: 2, factor: 2 } }
+  - { key: four_symbols, name: 四象,     category: suit,   rarity: rare,   desc: 出阵中红神、黑神、红鬼、黑鬼齐全，+20 气势,        params: { mult: 20 } }
+  - { key: vermilion,    name: 赤化,     category: suit,   rarity: common, desc: 合成出的卡总是红色,                              params: {} }

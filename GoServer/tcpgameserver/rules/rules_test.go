@@ -922,3 +922,192 @@ func TestArrangeRelicOrderExpandingSlotsAccepted(t *testing.T) {
 		t.Fatalf("board %d slots %d", len(p.Board), m.Slots(p))
 	}
 }
+
+// ---------- suit relics ----------
+
+func TestCinnabarPerRedCard(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	board := []Card{coloredCard(m, t, "soldier", 1, Red), coloredCard(m, t, "clerk", 1, Red), coloredCard(m, t, "monk", 1, Black)}
+	st := stepsBy(m.ScoreWith(p, board, nil, []RelicInst{relic(t, m, "cinnabar", 0)}), "朱砂")
+	if len(st) != 2 {
+		t.Fatalf("朱砂 steps %+v, want 2", st)
+	}
+	for i, s := range st {
+		if s.Phase != 1 || s.Kind != StepAddMult || s.Value != 3 || s.CardUID != board[i].UID {
+			t.Fatalf("step %+v", s)
+		}
+	}
+}
+
+func TestPineInkPerBlackCard(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	board := []Card{coloredCard(m, t, "soldier", 1, Black), coloredCard(m, t, "clerk", 1, Red)}
+	st := stepsBy(m.ScoreWith(p, board, nil, []RelicInst{relic(t, m, "pine_ink", 0)}), "松烟墨")
+	if len(st) != 1 || st[0].Phase != 1 || st[0].Kind != StepPoints || st[0].Value != 15 || st[0].CardUID != board[0].UID {
+		t.Fatalf("松烟墨 steps %+v", st)
+	}
+}
+
+func TestShrineDoublesGodCards(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	clerk, soldier := coloredCard(m, t, "clerk", 1, Red), coloredCard(m, t, "soldier", 1, Red)
+	res := m.ScoreWith(p, []Card{clerk, soldier}, nil, []RelicInst{relic(t, m, "shrine", 0)})
+	st := stepsBy(res, "神龛")
+	if len(st) != 1 || st[0].Phase != 1 || st[0].Kind != StepPoints || st[0].Value != float64(m.Points(clerk)) || st[0].CardUID != clerk.UID {
+		t.Fatalf("神龛 steps %+v", st)
+	}
+	if want := float64(2*m.Points(clerk) + m.Points(soldier)); res.Points != want {
+		t.Fatalf("points %v want %v", res.Points, want)
+	}
+}
+
+func TestVanguardUsesFactoredPoints(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	clerk := coloredCard(m, t, "clerk", 1, Red)
+	// 先锋旗在神龛左边也一样：神龛属于更早的逐卡倍率段
+	res := m.ScoreWith(p, []Card{clerk}, nil, []RelicInst{relic(t, m, "vanguard", 0), relic(t, m, "shrine", 0)})
+	st := stepsBy(res, "先锋旗")
+	if want := float64(2 * (2 * m.Points(clerk))); len(st) != 1 || st[0].Value != want {
+		t.Fatalf("先锋旗 steps %+v, want value %v", st, want)
+	}
+	if s := stepsBy(res, "神龛"); len(s) != 1 || res.Steps[1].Source != "神龛" {
+		t.Fatalf("shrine must come right after the card's own step: %+v", res.Steps)
+	}
+}
+
+func suitBoard(m *Match, t *testing.T, specs ...string) []Card {
+	var out []Card
+	for i := 0; i < len(specs); i += 2 {
+		c := Red
+		if specs[i+1] == "b" {
+			c = Black
+		}
+		out = append(out, coloredCard(m, t, specs[i], 1, c))
+	}
+	return out
+}
+
+func TestNightParade(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	rel := []RelicInst{relic(t, m, "night_parade", 0)}
+	b := suitBoard(m, t, "carpenter", "r", "farmer", "b", "scholar", "r", "artist", "b", "clerk", "r")
+	st := stepsBy(m.ScoreWith(p, b, nil, rel), "百鬼夜行")
+	if len(st) != 1 || st[0].Phase != 5 || st[0].Kind != StepTimesMult || st[0].Value != 2 {
+		t.Fatalf("4 ghosts: %+v", st)
+	}
+	if st := stepsBy(m.ScoreWith(p, b[1:], nil, rel), "百鬼夜行"); len(st) != 0 {
+		t.Fatalf("3 ghosts: %+v", st)
+	}
+}
+
+func TestOneColor(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	rel := []RelicInst{relic(t, m, "one_color", 0)}
+	b := suitBoard(m, t, "carpenter", "r", "clerk", "r", "monk", "r")
+	st := stepsBy(m.ScoreWith(p, b, nil, rel), "一色")
+	if len(st) != 1 || st[0].Kind != StepTimesMult || st[0].Value != 3 {
+		t.Fatalf("3 red: %+v", st)
+	}
+	if st := stepsBy(m.ScoreWith(p, b[:2], nil, rel), "一色"); len(st) != 0 {
+		t.Fatalf("2 red: %+v", st)
+	}
+	b[2].Color = Black
+	if st := stepsBy(m.ScoreWith(p, b, nil, rel), "一色"); len(st) != 0 {
+		t.Fatalf("2 red 1 black: %+v", st)
+	}
+	bb := suitBoard(m, t, "carpenter", "b", "clerk", "b", "monk", "b")
+	if st := stepsBy(m.ScoreWith(p, bb, nil, rel), "一色"); len(st) != 1 {
+		t.Fatalf("3 black: %+v", st)
+	}
+}
+
+func TestYinYang(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	rel := []RelicInst{relic(t, m, "yin_yang", 0)}
+	cases := []struct {
+		b    []Card
+		want int
+	}{
+		{suitBoard(m, t, "carpenter", "r", "clerk", "r", "monk", "b", "farmer", "b"), 1},
+		{suitBoard(m, t, "carpenter", "r", "clerk", "b"), 0},
+		{suitBoard(m, t, "carpenter", "r", "clerk", "r", "monk", "r", "farmer", "b"), 0},
+	}
+	for i, c := range cases {
+		st := stepsBy(m.ScoreWith(p, c.b, nil, rel), "阴阳鱼")
+		if len(st) != c.want || (c.want == 1 && (st[0].Kind != StepTimesMult || st[0].Value != 2)) {
+			t.Fatalf("case %d: %+v", i, st)
+		}
+	}
+}
+
+func TestFourSymbols(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	rel := []RelicInst{relic(t, m, "four_symbols", 0)}
+	b := suitBoard(m, t, "clerk", "r", "monk", "b", "carpenter", "r", "farmer", "b")
+	st := stepsBy(m.ScoreWith(p, b, nil, rel), "四象")
+	if len(st) != 1 || st[0].Phase != 5 || st[0].Kind != StepAddMult || st[0].Value != 20 {
+		t.Fatalf("all four: %+v", st)
+	}
+	b[3].Color = Red // 黑鬼没了
+	if st := stepsBy(m.ScoreWith(p, b, nil, rel), "四象"); len(st) != 0 {
+		t.Fatalf("missing black ghost: %+v", st)
+	}
+}
+
+func TestVermilionMergeIsRed(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Relics = []RelicInst{relic(t, m, "vermilion", 0)}
+	forceShopColored(t, m, p, []string{"soldier", "soldier", "soldier"}, []Color{Black, Black, Black})
+	for i := 0; i < 3; i++ {
+		if _, err := m.BuyCard(p, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got *Card
+	for _, cs := range [][]Card{p.Board, p.Bench} {
+		for i := range cs {
+			if cs[i].Star == 2 {
+				got = &cs[i]
+			}
+		}
+	}
+	if got == nil {
+		t.Fatalf("no 2★: board=%+v bench=%+v", p.Board, p.Bench)
+	}
+	if got.Color != Red || got.Red != 0 {
+		t.Fatalf("merged %+v, want Color Red with Red 0", *got)
+	}
+	if err := m.SellCard(p, got.UID); err != nil {
+		t.Fatal(err)
+	}
+	if !m.CheckPool() {
+		t.Fatal("pool not conserved after selling the vermilion card")
+	}
+}
+
+func TestSecretArtRepeatsFactors(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	clerk := coloredCard(m, t, "clerk", 1, Red)
+	art := relic(t, m, "secret_art", 0)
+	art.Choice = m.cfg.TradeOf(clerk.Line)
+	if m.cfg.Trades[art.Choice].Key != "court" {
+		t.Fatalf("clerk trade %q", m.cfg.Trades[art.Choice].Key)
+	}
+	st := stepsBy(m.ScoreWith(p, []Card{clerk}, nil, []RelicInst{art, relic(t, m, "shrine", 0)}), "神龛")
+	if len(st) != 2 || st[0].Trigger != 1 || st[0].Triggers != 2 || st[1].Trigger != 2 || st[1].Triggers != 2 {
+		t.Fatalf("神龛 steps %+v", st)
+	}
+	if st[0].Value != float64(m.Points(clerk)) || st[1].Value != float64(m.Points(clerk)) {
+		t.Fatalf("each retrigger doubles fresh card points: %+v", st)
+	}
+}

@@ -163,6 +163,28 @@ func (m *Match) SellPrice(c Card) int {
 
 func (m *Match) CardName(c Card) string { return m.cfg.Lines[c.Line].Card }
 
+// Suit is one of the four card suits: Kind*2 + Color (god=0, ghost=1).
+type Suit int
+
+const (
+	SuitRedGod     Suit = 0
+	SuitBlackGod   Suit = 1
+	SuitRedGhost   Suit = 2
+	SuitBlackGhost Suit = 3
+)
+
+// IsGod reports whether the card's line is a god (神) line.
+func (m *Match) IsGod(c Card) bool { return m.cfg.Lines[c.Line].Kind == KindGod }
+
+// SuitOf returns the card's suit.
+func (m *Match) SuitOf(c Card) Suit {
+	k := 1
+	if m.IsGod(c) {
+		k = 0
+	}
+	return Suit(k*2 + int(c.Color))
+}
+
 // ---------- family helpers ----------
 
 func (m *Match) familyParam(p *Player, key, param string) (float64, bool) {
@@ -250,6 +272,16 @@ func (m *Match) sumEffParam(eff []effRelic, key, param string) float64 {
 		}
 	}
 	return t
+}
+
+// hasEff reports whether any effective (non-empty) relic has the given key.
+func (m *Match) hasEff(eff []effRelic, key string) bool {
+	for _, r := range eff {
+		if !r.empty && m.relicKey(r) == key {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------- bonds ----------
