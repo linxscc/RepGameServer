@@ -11,18 +11,20 @@ import (
 
 // Archetype describes what a bot wants. Keys refer to chess_*.yaml.
 type Archetype struct {
-	Name      string
-	Lines     []string           // preferred line keys; empty = build whatever it already owns
-	Wide      bool               // wants many distinct lines
-	Relics    map[string]float64 // relic key → desirability; nil = take anything, rarer first
-	Families  []string           // family keys, best first
-	Trade     string             // trade key for relics that need a choice
-	Loop      bool               // buy-merge-sell loop for growth relics
-	SaveTo    int                // interest reserve while healthy
-	LevelPlan []int              // LevelPlan[lv] = round from which to be at least lv (0 = never)
-	Adaptive  bool               // re-picks its lines every round: what it owns, what is left in the pool, what the opponent is not taking
-	Deny      bool               // hate-buys a cheap copy the opponent needs for a 3★
-	Color     string             // "" = ignore card color; "red" / "black" = prefer that color
+	Name        string
+	Lines       []string           // preferred line keys; empty = build whatever it already owns
+	Wide        bool               // wants many distinct lines
+	Relics      map[string]float64 // relic key → desirability; nil = take anything, rarer first
+	Families    []string           // family keys, best first
+	Trade       string             // trade key for relics that need a choice
+	Loop        bool               // buy-merge-sell loop for growth relics
+	SaveTo      int                // interest reserve while healthy
+	LevelPlan   []int              // LevelPlan[lv] = round from which to be at least lv (0 = never)
+	Adaptive    bool               // re-picks its lines every round: what it owns, what is left in the pool, what the opponent is not taking
+	Deny        bool               // hate-buys a cheap copy the opponent needs for a 3★
+	Color       string             // "" = ignore card color; "red" / "black" = prefer that color
+	Kind        string             // "" / "god" / "ghost": prefer lines of that kind
+	IgnoreSuits bool               // baseline: no suit synergy; suit/counter relics are worth a fixed 0.1
 }
 
 // Archetypes are the playstyles a bot can pick, mirroring the simulator.
@@ -95,6 +97,7 @@ func NewRandom(m *rules.Match, rng *rand.Rand) *Bot {
 			normal = append(normal, a)
 		}
 	}
+	normal = append(normal, SuitArchetypes()...)
 	return New(m, normal[rng.Intn(len(normal))], rng)
 }
 
@@ -118,7 +121,7 @@ func (b *Bot) PickFamily(m *rules.Match, p *rules.Player) {
 func (b *Bot) PickVault(m *rules.Match, p *rules.Player) {
 	best, bv := -1, -1.0
 	for i, id := range p.VaultOffer {
-		if v := b.relicValue(m, id); v > bv {
+		if v := b.relicValue(m, p, id); v > bv {
 			best, bv = i, v
 		}
 	}
@@ -257,7 +260,7 @@ func (b *Bot) denyPass(m *rules.Match, p *rules.Player) {
 // completions are handled by the caller): never when the preferred color of the same line is
 // on offer, and otherwise only while the roster is so thin the board would be left hollow.
 func (b *Bot) offPrefOK(m *rules.Match, p *rules.Player, line int) bool {
-	pc, _ := b.prefColor()
+	pc, _ := b.prefColor(m, p)
 	for j, l2 := range p.Shop {
 		if l2 == line && j < len(p.ShopColor) && p.ShopColor[j] == pc {
 			return false
@@ -280,17 +283,6 @@ func ColorPeak(m *rules.Match, p *rules.Player) int {
 	return n[1]
 }
 
-// prefColor is the preferred color; ok is false when the bot ignores color.
-func (b *Bot) prefColor() (rules.Color, bool) {
-	switch b.Arch.Color {
-	case "red":
-		return rules.Red, true
-	case "black":
-		return rules.Black, true
-	}
-	return 0, false
-}
-
 func pow(b, e int) int {
 	r := 1
 	for i := 0; i < e; i++ {
@@ -308,21 +300,32 @@ func (b *Bot) reserve(p *rules.Player) int {
 	return b.Arch.SaveTo
 }
 
-func (b *Bot) relicValue(m *rules.Match, id int) float64 {
-	rarity := float64(m.Config().RarityOf(id))
+func (b *Bot) relicValue(m *rules.Match, p *rules.Player, id int) float64 {
+	cfg := m.Config()
+	if b.Arch.IgnoreSuits {
+		if cat := cfg.CategoryOf(id); cat == rules.CatSuit || cat == rules.CatCounter {
+			return 0.1
+		}
+	}
+	rarity := float64(cfg.RarityOf(id))
+	var v float64
 	if b.relics == nil {
-		return 1 + 0.5*rarity
+		v = 1 + 0.5*rarity
+	} else if bv, ok := b.relics[id]; ok {
+		v = bv
+	} else {
+		v = 0.3 + 0.3*rarity
 	}
-	if v, ok := b.relics[id]; ok {
-		return v
+	if !b.Arch.IgnoreSuits {
+		v += 4 * synergy(m, p, id)
 	}
-	return 0.3 + 0.3*rarity
+	return v
 }
 
 func (b *Bot) worstRelic(m *rules.Match, p *rules.Player) (int, float64) {
 	idx, worst := -1, 1e9
 	for i, r := range p.Relics {
-		v := b.relicValue(m, r.Relic) + r.Value/4
+		v := b.relicValue(m, p, r.Relic) + r.Value/4
 		if v < worst {
 			idx, worst = i, v
 		}
@@ -385,13 +388,14 @@ func (b *Bot) buyPass(m *rules.Match, p *rules.Player) {
 		cost := cfg.Lines[l].Cost
 		pair := m.CountCopies(p, l, 1) >= 1 || m.CountCopies(p, l, 2) >= 1
 		completes := m.CountCopies(p, l, 1) >= cfg.Rules.Merge.GroupSize-1
-		want := b.wants(p, m, l) || (b.Arch.Wide && !ownsLine(p, l)) || (b.Arch.Loop && cost == 1 && pair) ||
+		pk, hasKind := b.prefKind(m, p)
+		want := b.wants(p, m, l) || (hasKind && cfg.Lines[l].Kind == pk) || (b.Arch.Wide && !ownsLine(p, l)) || (b.Arch.Loop && cost == 1 && pair) ||
 			(m.Round <= 3 && cost == 1) || (completes && cost <= 2) ||
 			len(p.Board)+len(p.Bench) < m.Slots(p)+1
 		if !want {
 			continue
 		}
-		if pc, ok := b.prefColor(); ok && !completes && i < len(p.ShopColor) && p.ShopColor[i] != pc && !b.offPrefOK(m, p, l) {
+		if pc, ok := b.prefColor(m, p); ok && !completes && i < len(p.ShopColor) && p.ShopColor[i] != pc && !b.offPrefOK(m, p, l) {
 			continue
 		}
 		limit := res
@@ -413,7 +417,7 @@ func (b *Bot) relicPass(m *rules.Match, p *rules.Player) {
 	if id < 0 {
 		return
 	}
-	v := b.relicValue(m, id)
+	v := b.relicValue(m, p, id)
 	if v < 1 || p.Gold-m.Config().RelicPrice(id) < b.reserve(p)/2 {
 		return
 	}
@@ -463,7 +467,7 @@ func (b *Bot) arrange(m *rules.Match, p *rules.Player) {
 		}
 		return board, bench
 	}
-	pc, colored := b.prefColor()
+	pc, colored := b.prefColor(m, p)
 	eval := func(idx []int, relics []rules.RelicInst) float64 {
 		board, bench := split(idx)
 		s := m.ScoreWith(p, board, bench, relics).Score
