@@ -2,6 +2,7 @@ package rules
 
 import (
 	"math/rand"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -835,13 +836,18 @@ func TestVaultFallsBackWhenCategoriesRunOut(t *testing.T) {
 	}
 }
 
-func TestNobleVaultFourDistinct(t *testing.T) {
+func TestNobleVaultOffersDistinctCategories(t *testing.T) {
+	cfg := loadTestConfig(t)
 	cats := map[string]bool{}
-	for i := range loadTestConfig(t).Relics {
-		cats[loadTestConfig(t).CategoryOf(i)] = true
+	for i := range cfg.Relics {
+		cats[cfg.CategoryOf(i)] = true
 	}
+	noble := mustFamily(t, cfg, "noble")
 	for seed := int64(1); seed <= 100; seed++ {
 		m := newPrepMatch(t, seed)
+		for _, p := range m.P {
+			p.Family = noble
+		}
 		m.openVault()
 		for _, p := range m.P {
 			if len(p.VaultOffer) != 4 {
@@ -858,5 +864,61 @@ func TestNobleVaultFourDistinct(t *testing.T) {
 				t.Fatalf("seed %d: %d distinct categories, want %d", seed, len(seen), want)
 			}
 		}
+	}
+}
+
+// arrangeSlotsSetup gives a player [expansion, mirror] (mirror last = no copy, +1 slot) or
+// [mirror, expansion] (mirror copies expansion, +2 slots) and enough cards for slots+1.
+func arrangeSlotsSetup(t *testing.T, mirrorFirst bool) (*Match, *Player, []RelicInst) {
+	t.Helper()
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	ex := RelicInst{Relic: mustRelic(t, m.cfg, "expansion"), Choice: -1}
+	mi := RelicInst{Relic: mustRelic(t, m.cfg, "mirror"), Choice: -1}
+	if mirrorFirst {
+		p.Relics = []RelicInst{mi, ex}
+	} else {
+		p.Relics = []RelicInst{ex, mi}
+	}
+	for i := 0; i < m.Slots(p)+1; i++ {
+		p.Bench = append(p.Bench, card(m, t, "soldier", 1))
+	}
+	return m, p, append([]RelicInst{}, p.Relics...)
+}
+
+func TestArrangeRelicOrderShrinkingSlotsRejected(t *testing.T) {
+	m, p, relics := arrangeSlotsSetup(t, true) // [mirror, expansion]
+	n := m.Slots(p)
+	var uids []string
+	for _, c := range p.Bench[:n] {
+		uids = append(uids, c.UID)
+	}
+	if err := m.Arrange(p, uids, nil); err != nil {
+		t.Fatal(err)
+	}
+	board0, bench0 := append([]Card{}, p.Board...), append([]Card{}, p.Bench...)
+	if err := m.Arrange(p, uids, []int{1, 0}); err != ErrBadLayout { // mirror moved last: slots shrink
+		t.Fatalf("err = %v, want ErrBadLayout", err)
+	}
+	if !reflect.DeepEqual(p.Relics, relics) || !reflect.DeepEqual(p.Board, board0) || !reflect.DeepEqual(p.Bench, bench0) {
+		t.Fatal("state mutated by rejected Arrange")
+	}
+}
+
+func TestArrangeRelicOrderExpandingSlotsAccepted(t *testing.T) {
+	m, p, _ := arrangeSlotsSetup(t, false) // [expansion, mirror]
+	n := m.Slots(p)
+	var uids []string
+	for _, c := range p.Bench[:n+1] {
+		uids = append(uids, c.UID)
+	}
+	if err := m.Arrange(p, uids, nil); err != ErrBadLayout {
+		t.Fatalf("without reorder err = %v, want ErrBadLayout", err)
+	}
+	if err := m.Arrange(p, uids, []int{1, 0}); err != nil { // mirror first: slots grow
+		t.Fatal(err)
+	}
+	if len(p.Board) != n+1 || m.Slots(p) != n+1 {
+		t.Fatalf("board %d slots %d", len(p.Board), m.Slots(p))
 	}
 }

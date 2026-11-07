@@ -504,9 +504,6 @@ func (m *Match) Arrange(p *Player, boardUIDs []string, relicOrder []int) error {
 	if err := m.requirePrep(p); err != nil {
 		return err
 	}
-	if len(boardUIDs) > m.Slots(p) {
-		return ErrBadLayout
-	}
 	all := append(append([]Card{}, p.Board...), p.Bench...)
 	byUID := map[string]int{}
 	for i, c := range all {
@@ -531,26 +528,28 @@ func (m *Match) Arrange(p *Player, boardUIDs []string, relicOrder []int) error {
 	if len(bench) > m.cfg.Rules.Board.BenchSize {
 		return ErrBadLayout
 	}
+	newRelics := p.Relics
 	if relicOrder != nil {
 		if len(relicOrder) != len(p.Relics) {
 			return ErrBadLayout
 		}
 		seen := make([]bool, len(p.Relics))
-		nr := make([]RelicInst, 0, len(p.Relics))
+		newRelics = make([]RelicInst, 0, len(p.Relics))
 		for _, i := range relicOrder {
 			if i < 0 || i >= len(p.Relics) || seen[i] {
 				return ErrBadLayout
 			}
 			seen[i] = true
-			nr = append(nr, p.Relics[i])
+			newRelics = append(newRelics, p.Relics[i])
 		}
-		// Relic order changes which relics a mirror/rubbing copies, so slots may differ.
-		old := p.Relics
-		p.Relics = nr
-		if len(board) > m.Slots(p) {
-			p.Relics = old
-			return ErrBadLayout
-		}
+	}
+	// Relic order changes which relics a mirror/rubbing copies, so the slot limit is
+	// checked under the NEW order; nothing is mutated unless the layout is valid.
+	old := p.Relics
+	p.Relics = newRelics
+	if len(board) > m.Slots(p) {
+		p.Relics = old
+		return ErrBadLayout
 	}
 	p.Board, p.Bench = board, bench
 	return nil
