@@ -99,13 +99,28 @@ func (m *Match) returnShop(p *Player) {
 
 // randomRelic picks a relic the player does not own, by rarity odds, skipping excluded ones.
 func (m *Match) randomRelic(p *Player, odds []int, exclude map[int]bool) int {
+	return m.randomRelicFiltered(p, odds, exclude, nil)
+}
+
+// randomRelicCat prefers relics whose category is not in usedCat; if none qualify it falls
+// back to randomRelic.
+func (m *Match) randomRelicCat(p *Player, odds []int, exclude map[int]bool, usedCat map[string]bool) int {
+	if len(usedCat) > 0 {
+		if id := m.randomRelicFiltered(p, odds, exclude, usedCat); id >= 0 {
+			return id
+		}
+	}
+	return m.randomRelic(p, odds, exclude)
+}
+
+func (m *Match) randomRelicFiltered(p *Player, odds []int, exclude map[int]bool, usedCat map[string]bool) int {
 	byR := make([][]int, len(m.cfg.Rules.Rarities))
 	owned := map[int]bool{}
 	for _, r := range p.Relics {
 		owned[r.Relic] = true
 	}
 	for i := range m.cfg.Relics {
-		if owned[i] || exclude[i] {
+		if owned[i] || exclude[i] || usedCat[m.cfg.CategoryOf(i)] {
 			continue
 		}
 		r := m.cfg.RarityOf(i)
@@ -529,7 +544,13 @@ func (m *Match) Arrange(p *Player, boardUIDs []string, relicOrder []int) error {
 			seen[i] = true
 			nr = append(nr, p.Relics[i])
 		}
+		// Relic order changes which relics a mirror/rubbing copies, so slots may differ.
+		old := p.Relics
 		p.Relics = nr
+		if len(board) > m.Slots(p) {
+			p.Relics = old
+			return ErrBadLayout
+		}
 	}
 	p.Board, p.Bench = board, bench
 	return nil

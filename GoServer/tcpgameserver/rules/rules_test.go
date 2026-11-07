@@ -786,3 +786,77 @@ func TestTemperingMergedBonus(t *testing.T) {
 		}
 	}
 }
+
+func distinctCats(t *testing.T, m *Match, offer []int) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, id := range offer {
+		c := m.cfg.CategoryOf(id)
+		if seen[c] {
+			t.Fatalf("duplicate category %q in %v", c, offer)
+		}
+		seen[c] = true
+	}
+}
+
+func TestVaultOffersDistinctCategories(t *testing.T) {
+	for seed := int64(1); seed <= 200; seed++ {
+		m := newPrepMatch(t, seed)
+		for _, p := range m.P {
+			p.Family = mustFamily(t, m.cfg, "noble")
+		}
+		m.openVault()
+		for _, p := range m.P {
+			if len(p.VaultOffer) < 3 {
+				t.Fatalf("seed %d: offer %v", seed, p.VaultOffer)
+			}
+			distinctCats(t, m, p.VaultOffer[:3])
+		}
+	}
+}
+
+func TestVaultFallsBackWhenCategoriesRunOut(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Relics = nil
+	for i := range m.cfg.Relics {
+		if m.cfg.CategoryOf(i) != "tactic" {
+			p.Relics = append(p.Relics, RelicInst{Relic: i, Choice: -1})
+		}
+	}
+	m.openVault()
+	if len(p.VaultOffer) < 3 {
+		t.Fatalf("offer %v", p.VaultOffer)
+	}
+	for _, id := range p.VaultOffer {
+		if m.cfg.CategoryOf(id) != "tactic" {
+			t.Fatalf("non-tactic %d in offer", id)
+		}
+	}
+}
+
+func TestNobleVaultFourDistinct(t *testing.T) {
+	cats := map[string]bool{}
+	for i := range loadTestConfig(t).Relics {
+		cats[loadTestConfig(t).CategoryOf(i)] = true
+	}
+	for seed := int64(1); seed <= 100; seed++ {
+		m := newPrepMatch(t, seed)
+		m.openVault()
+		for _, p := range m.P {
+			if len(p.VaultOffer) != 4 {
+				t.Fatalf("seed %d: offer %v", seed, p.VaultOffer)
+			}
+			// Only 3 relic categories exist in the data so far: the first 3 must differ,
+			// the 4th may repeat; with 4+ categories all four would differ.
+			distinctCats(t, m, p.VaultOffer[:min(3, len(cats))])
+			seen := map[string]bool{}
+			for _, id := range p.VaultOffer {
+				seen[m.cfg.CategoryOf(id)] = true
+			}
+			if want := min(4, len(cats)); len(seen) != want {
+				t.Fatalf("seed %d: %d distinct categories, want %d", seed, len(seen), want)
+			}
+		}
+	}
+}

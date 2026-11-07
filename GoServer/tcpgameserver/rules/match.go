@@ -329,13 +329,15 @@ func (m *Match) openVault() {
 			n += int(v)
 		}
 		ex := map[int]bool{}
+		usedCat := map[string]bool{}
 		p.VaultOffer = nil
 		for len(p.VaultOffer) < n {
-			id := m.randomRelic(p, m.cfg.VaultOddsFor(m.Round), ex)
+			id := m.randomRelicCat(p, m.cfg.VaultOddsFor(m.Round), ex, usedCat)
 			if id < 0 {
 				break
 			}
 			ex[id] = true
+			usedCat[m.cfg.CategoryOf(id)] = true
 			p.VaultOffer = append(p.VaultOffer, id)
 		}
 		p.Ready = len(p.VaultOffer) == 0
