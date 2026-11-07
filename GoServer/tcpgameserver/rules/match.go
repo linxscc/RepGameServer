@@ -7,7 +7,7 @@ import (
 
 // NewMatch creates a match in the family-pick phase. rng makes it deterministic.
 func NewMatch(cfg *Config, rng *rand.Rand, ids [2]string) *Match {
-	m := &Match{cfg: cfg, rng: rng, Phase: PhaseFamily, Winner: -1, Pool: make([]int, len(cfg.Lines)), PoolRed: make([]int, len(cfg.Lines))}
+	m := &Match{cfg: cfg, rng: rng, Phase: PhaseFamily, Winner: -1, Pool: make([]int, len(cfg.Lines)), PoolRed: make([]int, len(cfg.Lines)), LastRoll: OmenRoll{Omen: -1}}
 	for i, l := range cfg.Lines {
 		m.Pool[i] = l.Pool
 		m.PoolRed[i] = l.Pool / 2
@@ -143,9 +143,78 @@ func containsInt(xs []int, v int) bool {
 	return false
 }
 
-// startRound pays income, grants xp, refreshes shops and enters the prep phase.
+// startRound advances the round and enters the omen phase on omen rounds, else the prep phase.
 func (m *Match) startRound() {
 	m.Round++
+	for _, p := range m.P {
+		p.OmenChoice = OmenUndecided
+		p.Ready = false
+		p.VaultOffer = nil
+	}
+	if m.cfg.IsOmenRound(m.Round) {
+		m.Phase = PhaseOmen
+		return
+	}
+	m.beginPrep()
+}
+
+// ChooseOmen records a player's secret roll (true) or skip (false) decision.
+func (m *Match) ChooseOmen(p *Player, roll bool) error {
+	if m.Phase != PhaseOmen || p == nil {
+		return ErrWrongPhase
+	}
+	if p.OmenChoice != OmenUndecided {
+		return ErrAlreadyChosen
+	}
+	p.OmenChoice = OmenSkips
+	if roll {
+		p.OmenChoice = OmenRolls
+	}
+	p.Ready = true
+	return nil
+}
+
+// ResolveOmen rolls the dice (undecided counts as skip; if both skip, the system rolls
+// for both), adds the omen and starts the prep phase.
+func (m *Match) ResolveOmen() error {
+	if m.Phase != PhaseOmen {
+		return ErrWrongPhase
+	}
+	sides := m.cfg.Rules.Omen.DieSides
+	var dice [2]int
+	for i, p := range m.P {
+		if p.OmenChoice == OmenRolls {
+			dice[i] = m.rng.Intn(sides) + 1
+		}
+	}
+	forced := dice[0] == 0 && dice[1] == 0
+	if forced {
+		for i := range dice {
+			dice[i] = m.rng.Intn(sides) + 1
+		}
+	}
+	m.resolveOmenDice(dice, forced)
+	return nil
+}
+
+// resolveOmenDice turns dice into an omen: a point whose omen is already active moves up
+// by one (wrapping from MaxOmenPoint to 1) until it is not, at most MaxOmenPoint times.
+func (m *Match) resolveOmenDice(dice [2]int, forced bool) {
+	point := dice[0] + dice[1]
+	shifted := false
+	maxPt := m.cfg.MaxOmenPoint()
+	for n := 0; n < maxPt && m.omenActiveIdx(m.cfg.OmenByPoint(point)); n++ {
+		point = point%maxPt + 1
+		shifted = true
+	}
+	omen := m.cfg.OmenByPoint(point)
+	m.Omens = append(m.Omens, ActiveOmen{Omen: omen, From: m.Round, Until: m.Round + m.cfg.Rules.Omen.Duration - 1})
+	m.LastRoll = OmenRoll{Round: m.Round, Dice: dice, Forced: forced, Shifted: shifted, Point: point, Omen: omen}
+	m.beginPrep()
+}
+
+// beginPrep pays income, grants xp, refreshes shops and enters the prep phase.
+func (m *Match) beginPrep() {
 	m.Phase = PhasePrep
 	e := m.cfg.Rules.Economy
 	for _, p := range m.P {
@@ -153,7 +222,6 @@ func (m *Match) startRound() {
 		p.Refreshed = false
 		p.FreeRefreshes = 0
 		p.Ready = false
-		p.VaultOffer = nil
 
 		income := m.Interest(p) + e.BaseIncome
 		if v, ok := m.familyParam(p, "miser", "income_delta"); ok {

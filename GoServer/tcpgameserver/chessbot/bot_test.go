@@ -38,6 +38,8 @@ func TestBotsFinishMatches(t *testing.T) {
 				if _, err := m.Settle(); err != nil {
 					t.Fatal(err)
 				}
+			case rules.PhaseOmen:
+				_ = m.ResolveOmen()
 			case rules.PhaseVault:
 				for i, p := range m.P {
 					bots[i].PickVault(m, p)
@@ -98,6 +100,8 @@ func TestColorBotFieldsMostlyItsColor(t *testing.T) {
 						peaks[i] = ColorPeak(m, p)
 					}
 				}
+			case rules.PhaseOmen:
+				_ = m.ResolveOmen()
 			case rules.PhaseVault:
 				for i, p := range m.P {
 					bots[i].PickVault(m, p)

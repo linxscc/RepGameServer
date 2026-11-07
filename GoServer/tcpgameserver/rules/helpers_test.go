@@ -180,3 +180,32 @@ func stepsBy(r ScoreResult, src string) []Step {
 	}
 	return out
 }
+
+// advance leaves the current phase: Prep → Settle, Vault → CloseVault, Omen → ResolveOmen.
+func advance(t *testing.T, m *Match) {
+	t.Helper()
+	var err error
+	switch m.Phase {
+	case PhasePrep:
+		_, err = m.Settle()
+	case PhaseVault:
+		err = m.CloseVault()
+	case PhaseOmen:
+		err = m.ResolveOmen()
+	default:
+		t.Fatalf("advance: cannot leave phase %d", m.Phase)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// forceOmen makes the omen active from the current round for the configured duration.
+func forceOmen(t *testing.T, m *Match, key string) {
+	t.Helper()
+	i, ok := m.cfg.OmenIndex(key)
+	if !ok {
+		t.Fatalf("no omen %q", key)
+	}
+	m.Omens = append(m.Omens, ActiveOmen{Omen: i, From: m.Round, Until: m.Round + m.cfg.Rules.Omen.Duration - 1})
+}

@@ -26,7 +26,30 @@ const (
 	PhasePrep                // 准备阶段
 	PhaseVault               // 宝库三选一
 	PhaseOver                // 对局结束
+	PhaseOmen                // 天象掷骰（天象回合开始时，准备阶段之前）
 )
+
+// OmenChoice is a player's secret roll/skip decision in the omen phase.
+type OmenChoice int
+
+const (
+	OmenUndecided OmenChoice = 0
+	OmenRolls     OmenChoice = 1
+	OmenSkips     OmenChoice = 2
+)
+
+// ActiveOmen is one omen that appeared; it is in effect for rounds From..Until.
+type ActiveOmen struct {
+	Omen, From, Until int // Omen indexes Config.Omens
+}
+
+// OmenRoll records the last omen dice.
+type OmenRoll struct {
+	Round           int
+	Dice            [2]int // per seat; 0 = did not roll
+	Forced, Shifted bool   // Forced: both skipped so the system rolled; Shifted: duplicate moved the point
+	Point, Omen     int    // final point; Omen indexes Config.Omens (-1 = none yet)
+}
 
 // Color is a card's suit color.
 type Color int
@@ -81,6 +104,7 @@ type Player struct {
 
 	FamilyOffer []int // family indexes offered at start
 	VaultOffer  []int // relic indexes offered in the vault
+	OmenChoice  OmenChoice
 
 	triggers map[string]int
 	three    []bool // line → owns a max-star card
@@ -100,11 +124,44 @@ type Match struct {
 	FirstDealt int
 	// Surrendered is set when the match ended because a player gave up.
 	Surrendered bool
+	// Omens is every omen that appeared, in order (history is kept).
+	Omens []ActiveOmen
+	// LastRoll is the most recent omen roll (Omen == -1 before the first).
+	LastRoll OmenRoll
 
 	uidSeq int
 }
 
 func (m *Match) Config() *Config { return m.cfg }
+
+// ActiveOmens returns the omens in effect this round, in order of appearance.
+func (m *Match) ActiveOmens() []ActiveOmen {
+	var out []ActiveOmen
+	for _, o := range m.Omens {
+		if o.From <= m.Round && m.Round <= o.Until {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// OmenActive reports whether the omen with this key is in effect this round.
+func (m *Match) OmenActive(key string) bool {
+	i, ok := m.cfg.OmenIndex(key)
+	if !ok {
+		return false
+	}
+	return m.omenActiveIdx(i)
+}
+
+func (m *Match) omenActiveIdx(i int) bool {
+	for _, o := range m.ActiveOmens() {
+		if o.Omen == i {
+			return true
+		}
+	}
+	return false
+}
 
 func (m *Match) newUID() string {
 	m.uidSeq++

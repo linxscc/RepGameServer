@@ -180,7 +180,7 @@ func (cr *chessRoom) advance(room *types.RoomInfo) {
 			log.Printf("room %s: begin match: %v", cr.roomID, err)
 			return
 		}
-		cr.enterPrep()
+		cr.enterRound()
 	case pb.MatchPhase_MATCH_PHASE_PREP:
 		res, err := m.Settle()
 		if err != nil {
@@ -205,15 +205,24 @@ func (cr *chessRoom) advance(room *types.RoomInfo) {
 		case rules.PhaseVault:
 			cr.enterVault()
 		default:
-			cr.enterPrep()
+			cr.enterRound()
 		}
 	case pb.MatchPhase_MATCH_PHASE_VAULT:
 		if err := m.CloseVault(); err != nil {
 			log.Printf("room %s: close vault: %v", cr.roomID, err)
 			return
 		}
-		cr.enterPrep()
+		cr.enterRound()
 	}
+}
+
+// enterRound starts the round the engine just opened.
+// TEMPORARY: the omen phase is resolved at once (no rolls) until the omen phase is wired up.
+func (cr *chessRoom) enterRound() {
+	if cr.match.Phase == rules.PhaseOmen {
+		_ = cr.match.ResolveOmen()
+	}
+	cr.enterPrep()
 }
 
 func (cr *chessRoom) enterPrep() {

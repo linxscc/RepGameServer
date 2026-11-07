@@ -211,21 +211,17 @@ func TestShopLockLimit(t *testing.T) {
 	m := newPrepMatch(t, 3)
 	p := m.P[0]
 	first := append([]int{}, p.Shop...)
-	advance := func() {
-		if _, err := m.Settle(); err != nil {
-			t.Fatal(err)
-		}
-		if m.Phase == PhaseVault {
-			if err := m.CloseVault(); err != nil {
-				t.Fatal(err)
-			}
+	next := func() {
+		advance(t, m)
+		for m.Phase != PhasePrep {
+			advance(t, m)
 		}
 	}
 	for r := 0; r < m.cfg.Rules.Board.MaxLockRounds; r++ {
 		if err := m.SetLock(p, true); err != nil {
 			t.Fatal(err)
 		}
-		advance()
+		next()
 		for i := range first {
 			if p.Shop[i] != first[i] {
 				t.Fatalf("locked shop changed after lock %d", r+1)
@@ -233,7 +229,7 @@ func TestShopLockLimit(t *testing.T) {
 		}
 	}
 	_ = m.SetLock(p, true)
-	advance()
+	next()
 	if p.LockStreak != 0 {
 		t.Fatal("lock beyond the limit must force a refresh")
 	}
@@ -315,6 +311,18 @@ func TestRandomPlayKeepsInvariants(t *testing.T) {
 				}
 				if err := m.CloseVault(); err != nil {
 					t.Fatal(err)
+				}
+			case PhaseOmen:
+				for _, p := range m.P {
+					if k := rng.Intn(3); k > 0 {
+						_ = m.ChooseOmen(p, k == 1)
+					}
+				}
+				if err := m.ResolveOmen(); err != nil {
+					t.Fatal(err)
+				}
+				if m.LastRoll.Point < 1 || m.LastRoll.Point > cfg.MaxOmenPoint() || m.LastRoll.Omen < 0 {
+					t.Fatalf("game %d: bad omen roll %+v", game, m.LastRoll)
 				}
 			}
 			check("round")
@@ -561,13 +569,9 @@ func TestLockedShopKeepsColors(t *testing.T) {
 	if err := m.SetLock(p, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Settle(); err != nil {
-		t.Fatal(err)
-	}
-	if m.Phase == PhaseVault {
-		if err := m.CloseVault(); err != nil {
-			t.Fatal(err)
-		}
+	advance(t, m)
+	for m.Phase != PhasePrep {
+		advance(t, m)
 	}
 	for i := range firstShop {
 		if p.Shop[i] != firstShop[i] || p.ShopColor[i] != firstColor[i] {
@@ -1141,5 +1145,205 @@ func TestOmenTableRejectsDuplicatePoint(t *testing.T) {
 	_, err := tt.build()
 	if err == nil || !strings.Contains(err.Error(), "chess_omens: point 1 used twice") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// ---------- omens ----------
+
+// toPrep advances until the given round's prep phase (HP is raised so nobody dies on the way).
+func toPrep(t *testing.T, m *Match, round int) {
+	t.Helper()
+	for _, p := range m.P {
+		p.HP = 10000
+	}
+	for !(m.Round == round && m.Phase == PhasePrep) {
+		if m.Round > round {
+			t.Fatalf("passed round %d (now %d, phase %d)", round, m.Round, m.Phase)
+		}
+		advance(t, m)
+	}
+}
+
+func TestOmenRoundEntersOmenPhase(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	toPrep(t, m, 5)
+	if m.Phase != PhasePrep {
+		t.Fatalf("round 5 phase = %d, want prep", m.Phase)
+	}
+	for _, p := range m.P {
+		p.Relics = nil
+	}
+	gold := [2]int{m.P[0].Gold, m.P[1].Gold}
+	advance(t, m)
+	if m.Round != 6 || m.Phase != PhaseOmen {
+		t.Fatalf("round %d phase %d, want round 6 omen", m.Round, m.Phase)
+	}
+	for i, p := range m.P {
+		if p.Gold != gold[i] {
+			t.Fatalf("seat %d gold %d -> %d on entering omen; income must wait for ResolveOmen", i, gold[i], p.Gold)
+		}
+	}
+	if err := m.ResolveOmen(); err != nil {
+		t.Fatal(err)
+	}
+	if m.P[0].Gold <= gold[0] {
+		t.Fatal("income not paid after ResolveOmen")
+	}
+}
+
+func TestChooseOmenRules(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	if err := m.ChooseOmen(m.P[0], true); err != ErrWrongPhase {
+		t.Fatalf("prep ChooseOmen err = %v, want ErrWrongPhase", err)
+	}
+	toPrep(t, m, 5)
+	advance(t, m)
+	p := m.P[0]
+	if p.Ready || p.OmenChoice != OmenUndecided {
+		t.Fatal("omen phase must start undecided and unready")
+	}
+	if err := m.ChooseOmen(p, false); err != nil {
+		t.Fatal(err)
+	}
+	if !p.Ready || p.OmenChoice != OmenSkips {
+		t.Fatalf("after choose: ready=%v choice=%d", p.Ready, p.OmenChoice)
+	}
+	if err := m.ChooseOmen(p, true); err != ErrAlreadyChosen {
+		t.Fatalf("second ChooseOmen err = %v, want ErrAlreadyChosen", err)
+	}
+	if err := m.ResolveOmen(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ResolveOmen(); err != ErrWrongPhase {
+		t.Fatalf("ResolveOmen in prep err = %v, want ErrWrongPhase", err)
+	}
+}
+
+func TestResolveOmenDiceSum(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	toPrep(t, m, 5)
+	advance(t, m)
+	if err := m.ChooseOmen(m.P[0], true); err != nil {
+		t.Fatal(err)
+	}
+	// seat 1 never chooses: counts as a skip
+	if err := m.ResolveOmen(); err != nil {
+		t.Fatal(err)
+	}
+	r := m.LastRoll
+	if r.Dice[0] < 1 || r.Dice[0] > 6 || r.Dice[1] != 0 {
+		t.Fatalf("dice = %v, want [1..6, 0]", r.Dice)
+	}
+	if r.Forced || r.Round != 6 || m.Phase != PhasePrep {
+		t.Fatalf("roll %+v phase %d", r, m.Phase)
+	}
+	if !r.Shifted && r.Point != r.Dice[0] {
+		t.Fatalf("point %d != dice sum %d", r.Point, r.Dice[0])
+	}
+	if r.Omen != m.cfg.OmenByPoint(r.Point) || r.Omen < 0 {
+		t.Fatalf("omen %d does not match point %d", r.Omen, r.Point)
+	}
+}
+
+func TestBothSkipForcesRoll(t *testing.T) {
+	m := newPrepMatch(t, 2)
+	toPrep(t, m, 5)
+	advance(t, m)
+	for _, p := range m.P {
+		if err := m.ChooseOmen(p, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.ResolveOmen(); err != nil {
+		t.Fatal(err)
+	}
+	r := m.LastRoll
+	if !r.Forced || r.Dice[0] < 1 || r.Dice[0] > 6 || r.Dice[1] < 1 || r.Dice[1] > 6 {
+		t.Fatalf("roll %+v, want forced with two dice", r)
+	}
+	if !r.Shifted && r.Point != r.Dice[0]+r.Dice[1] {
+		t.Fatalf("point %d != %d", r.Point, r.Dice[0]+r.Dice[1])
+	}
+}
+
+func TestOmenLastsSixRounds(t *testing.T) {
+	m := newPrepMatch(t, 3)
+	if m.LastRoll.Omen != -1 {
+		t.Fatalf("initial LastRoll.Omen = %d, want -1", m.LastRoll.Omen)
+	}
+	has6 := func() bool {
+		for _, o := range m.ActiveOmens() {
+			if o.From == 6 {
+				return true
+			}
+		}
+		return false
+	}
+	toPrep(t, m, 6)
+	if len(m.Omens) != 1 || m.Omens[0].From != 6 || m.Omens[0].Until != 11 {
+		t.Fatalf("omens = %+v", m.Omens)
+	}
+	key := m.cfg.Omens[m.Omens[0].Omen].Key
+	for r := 6; r <= 11; r++ {
+		toPrep(t, m, r)
+		if !has6() || !m.OmenActive(key) {
+			t.Fatalf("round %d: omen from round 6 not active", r)
+		}
+	}
+	if n := len(m.ActiveOmens()); n != 2 {
+		t.Fatalf("round 11 active omens = %d, want 2", n)
+	}
+	if a := m.ActiveOmens(); a[0].From != 6 || a[1].From != 11 {
+		t.Fatalf("active omens out of order: %+v", a)
+	}
+	toPrep(t, m, 12)
+	if has6() {
+		t.Fatal("round 12: omen from round 6 still active")
+	}
+	if len(m.Omens) != 2 {
+		t.Fatal("omen history must be kept")
+	}
+}
+
+func TestOmenDuplicateShiftsAndWraps(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	forceOmen(t, m, "upheaval")
+	forceOmen(t, m, "quake")
+	m.resolveOmenDice([2]int{6, 6}, false)
+	r := m.LastRoll
+	eclipse, _ := m.cfg.OmenIndex("solar_eclipse")
+	if r.Point != 2 || r.Omen != eclipse || !r.Shifted {
+		t.Fatalf("roll %+v, want point 2 solar_eclipse shifted", r)
+	}
+	if last := m.Omens[len(m.Omens)-1]; last.Omen != eclipse || last.From != m.Round {
+		t.Fatalf("appended omen %+v", last)
+	}
+
+	// every omen active: the shift must stop and stay in range
+	m2 := newPrepMatch(t, 1)
+	for _, o := range m2.cfg.Omens {
+		forceOmen(t, m2, o.Key)
+	}
+	m2.resolveOmenDice([2]int{3, 4}, false)
+	if p := m2.LastRoll.Point; p < 1 || p > m2.cfg.MaxOmenPoint() || m2.LastRoll.Omen < 0 {
+		t.Fatalf("all-active roll %+v out of range", m2.LastRoll)
+	}
+}
+
+func TestCloseVaultCanEnterOmen(t *testing.T) {
+	m := newPrepMatch(t, 4)
+	if !m.cfg.IsVaultRound(10) || !m.cfg.IsOmenRound(11) {
+		t.Fatal("default config must have vault round 10 and omen round 11")
+	}
+	toPrep(t, m, 10)
+	advance(t, m)
+	if m.Phase != PhaseVault {
+		t.Fatalf("after round 10 settle phase = %d, want vault", m.Phase)
+	}
+	if err := m.CloseVault(); err != nil {
+		t.Fatal(err)
+	}
+	if m.Phase != PhaseOmen || m.Round != 11 {
+		t.Fatalf("phase %d round %d, want omen round 11", m.Phase, m.Round)
 	}
 }
