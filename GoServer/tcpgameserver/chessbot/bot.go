@@ -163,7 +163,7 @@ func (b *Bot) Prep(m *rules.Match, p *rules.Player) {
 	}
 	for rolls := 0; rolls < 12; rolls++ {
 		free := m.FreeRefreshesLeft(p) > 0
-		if !free && (m.Round < 4 || p.Gold-m.Config().Rules.Economy.RefreshCost < b.reserve(p)+2) {
+		if !free && (m.Round < 4 || p.Gold-m.RefreshCost(p) < b.reserve(p)+2) {
 			break
 		}
 		if m.Refresh(p) != nil {
@@ -249,7 +249,7 @@ func (b *Bot) denyPass(m *rules.Match, p *rules.Player) {
 		if l < 0 || !threat[l] || m.Pool[l] > need {
 			continue
 		}
-		if p.Gold-cfg.Lines[l].Cost < b.reserve(p) || len(p.Bench) >= cfg.Rules.Board.BenchSize {
+		if p.Gold-cfg.Lines[l].Cost < b.reserve(p) || len(p.Bench) >= m.BenchSize(p) {
 			continue
 		}
 		_, _ = m.BuyCard(p, i)
@@ -360,7 +360,7 @@ func (b *Bot) cardWorth(m *rules.Match, p *rules.Player, c rules.Card) float64 {
 }
 
 func (b *Bot) makeRoom(m *rules.Match, p *rules.Player, forLine int) bool {
-	if len(p.Bench) < m.Config().Rules.Board.BenchSize {
+	if len(p.Bench) < m.BenchSize(p) {
 		return true
 	}
 	uid, worst := "", 1e9
@@ -451,7 +451,7 @@ func (b *Bot) loopSell(m *rules.Match, p *rules.Player) {
 func (b *Bot) arrange(m *rules.Match, p *rules.Player) {
 	all := append(append([]rules.Card{}, p.Board...), p.Bench...)
 	slots := m.Slots(p)
-	benchSize := m.Config().Rules.Board.BenchSize
+	benchSize := m.BenchSize(p)
 	split := func(idx []int) ([]rules.Card, []rules.Card) {
 		used := make([]bool, len(all))
 		board := make([]rules.Card, 0, len(idx))

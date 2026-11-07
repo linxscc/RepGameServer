@@ -39,6 +39,12 @@ func TestBotsFinishMatches(t *testing.T) {
 					t.Fatal(err)
 				}
 			case rules.PhaseOmen:
+				for i, p := range m.P {
+					bots[i].ChooseOmen(m, p)
+				}
+				for oi, op := range m.P {
+					bots[oi].ChooseOmen(m, op)
+				}
 				_ = m.ResolveOmen()
 			case rules.PhaseVault:
 				for i, p := range m.P {
@@ -102,6 +108,12 @@ func TestColorBotFieldsMostlyItsColor(t *testing.T) {
 					}
 				}
 			case rules.PhaseOmen:
+				for i, p := range m.P {
+					bots[i].ChooseOmen(m, p)
+				}
+				for oi, op := range m.P {
+					bots[oi].ChooseOmen(m, op)
+				}
 				_ = m.ResolveOmen()
 			case rules.PhaseVault:
 				for i, p := range m.P {
@@ -262,6 +274,12 @@ func TestSuitArchetypesFinishMatches(t *testing.T) {
 						t.Fatal(err)
 					}
 				case rules.PhaseOmen:
+					for i, p := range m.P {
+						bots[i].ChooseOmen(m, p)
+					}
+					for oi, op := range m.P {
+						bots[oi].ChooseOmen(m, op)
+					}
 					_ = m.ResolveOmen()
 				case rules.PhaseVault:
 					for k, p := range m.P {
@@ -276,5 +294,95 @@ func TestSuitArchetypesFinishMatches(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestOmenPickTruthTable(t *testing.T) {
+	cases := []struct {
+		myOne, myTwo, oppOne, oppTwo float64
+		want                         bool
+	}{
+		{0.3, 0.1, 0.2, 0.1, true},
+		{0.1, 0.3, 0.2, 0.1, false},
+		{0.3, 0.1, 0.1, 0.2, false},
+		{0.1, 0.3, 0.1, 0.2, true},
+		{0.2, 0.2, 0.1, 0.2, false},
+	}
+	for i, c := range cases {
+		if got := omenPick(c.myOne, c.myTwo, c.oppOne, c.oppTwo); got != c.want {
+			t.Fatalf("case %d got %v", i, got)
+		}
+	}
+}
+
+// A board of five red 1-star cards fears red_moon (point 4): 1/6 in 1d6, 3/36 in 2d6.
+func TestRedBoardFearsSmallSums(t *testing.T) {
+	tables, err := config.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := rules.NewMatch(tables.Chess, rand.New(rand.NewSource(1)), [2]string{"a", "b"})
+	p := m.P[0]
+	p.Board = nil
+	for i := 0; i < 5; i++ {
+		p.Board = append(p.Board, rules.Card{UID: string(rune('a' + i)), Line: 0, Star: 1, Color: rules.Red, Red: 1})
+	}
+	p.Bench = nil
+	one, two := omenLosses(m, p, p.Board)
+	if !(one > two) {
+		t.Fatalf("one=%v two=%v, want one > two", one, two)
+	}
+}
+
+func TestBotsFinishMatchesWithOmens(t *testing.T) {
+	tables, err := config.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sawThree := false
+	for game := 0; game < 10; game++ {
+		rng := rand.New(rand.NewSource(int64(game)))
+		m := rules.NewMatch(tables.Chess, rand.New(rand.NewSource(int64(game)+100)), [2]string{"a", "b"})
+		bots := [2]*Bot{NewRandom(m, rng), NewRandom(m, rng)}
+		for i, p := range m.P {
+			bots[i].PickFamily(m, p)
+		}
+		if err := m.Begin(); err != nil {
+			t.Fatal(err)
+		}
+		for m.Phase != rules.PhaseOver {
+			switch m.Phase {
+			case rules.PhasePrep:
+				for i, p := range m.P {
+					bots[i].Prep(m, p)
+				}
+				if _, err := m.Settle(); err != nil {
+					t.Fatal(err)
+				}
+			case rules.PhaseOmen:
+				for i, p := range m.P {
+					bots[i].ChooseOmen(m, p)
+				}
+				if err := m.ResolveOmen(); err != nil {
+					t.Fatal(err)
+				}
+			case rules.PhaseVault:
+				for i, p := range m.P {
+					bots[i].PickVault(m, p)
+				}
+				if err := m.CloseVault(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if !m.CheckPool() {
+				t.Fatalf("game %d round %d: pool not conserved", game, m.Round)
+			}
+		}
+		if len(m.Omens) >= 3 {
+			sawThree = true
+		}
+	}
+	if !sawThree {
+		t.Fatal("no match reached 3 omens")
 	}
 }

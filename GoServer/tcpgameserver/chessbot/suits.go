@@ -218,3 +218,68 @@ func (b *Bot) prefKind(m *rules.Match, p *rules.Player) (string, bool) {
 	}
 	return "", false
 }
+
+// omenFlatLoss is the rough expected loss of omens that do not change the score.
+var omenFlatLoss = map[string]float64{
+	"quake": 0.04, "famine": 0.10, "market_closed": 0.05, "heavy_tax": 0.03,
+	"shortage": 0.05, "narrow_path": 0.12,
+}
+
+var omenScoring = map[string]bool{
+	"solar_eclipse": true, "ghost_rout": true, "red_moon": true,
+	"ink_rain": true, "upheaval": true, "discord": true,
+}
+
+// omenLosses returns the expected loss of p's layout if the next omen's point follows
+// 1d6 (one) or 2d6 (two); shifting past active omens is ignored.
+func omenLosses(m *rules.Match, p *rules.Player, board []rules.Card) (one, two float64) {
+	cfg := m.Config()
+	opp := m.Opponent(p)
+	foe := rules.Foe{Board: opp.LastBoard, Relics: opp.Relics}
+	s := m.ScoreVs(p, board, p.Bench, p.Relics, foe, nil).Score
+	sides := cfg.Rules.Omen.DieSides
+	loss := func(point int) float64 {
+		oi := cfg.OmenByPoint(point)
+		if oi < 0 {
+			return 0
+		}
+		key := cfg.Omens[oi].Key
+		if omenScoring[key] {
+			if s == 0 {
+				return 0
+			}
+			s2 := m.ScoreVs(p, board, p.Bench, p.Relics, foe, []int{oi}).Score
+			return 1 - s2/s
+		}
+		l := omenFlatLoss[key]
+		if key == "heavy_tax" {
+			l += 0.02 * float64(m.Interest(p))
+		}
+		return l
+	}
+	for d := 1; d <= sides; d++ {
+		one += loss(d) / float64(sides)
+		for e := 1; e <= sides; e++ {
+			two += loss(d+e) / float64(sides*sides)
+		}
+	}
+	return
+}
+
+// omenPick reports whether to roll. The opponent is predicted to roll when 2d6 hurts them
+// less than 1d6. If they roll, I get 2d6 by rolling and 1d6 by skipping; if they skip, I get
+// 1d6 by rolling and the system's 2d6 by skipping. Ties skip.
+func omenPick(myOne, myTwo, oppOne, oppTwo float64) bool {
+	if oppTwo < oppOne {
+		return myTwo < myOne
+	}
+	return myOne < myTwo
+}
+
+// ChooseOmen decides roll or skip for this bot's seat by expected loss.
+func (b *Bot) ChooseOmen(m *rules.Match, p *rules.Player) {
+	myOne, myTwo := omenLosses(m, p, p.Board)
+	opp := m.Opponent(p)
+	oppOne, oppTwo := omenLosses(m, opp, opp.LastBoard)
+	_ = m.ChooseOmen(p, omenPick(myOne, myTwo, oppOne, oppTwo))
+}

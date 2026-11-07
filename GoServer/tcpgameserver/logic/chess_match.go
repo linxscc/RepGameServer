@@ -238,8 +238,7 @@ func (cr *chessRoom) enterOmen() {
 	cr.schedule(phaseSeconds(cr.match.Config().Rules.Timers.OmenSeconds))
 	for seat, b := range cr.bots {
 		if b != nil {
-			// TODO(Task 16): ask the bot (chessbot omen decision); until then bots always skip.
-			_ = cr.match.ChooseOmen(cr.match.P[seat], false)
+			b.ChooseOmen(cr.match, cr.match.P[seat])
 		}
 	}
 	cr.broadcast()
