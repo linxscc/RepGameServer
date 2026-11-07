@@ -115,7 +115,10 @@ func TestChainMergeKeepsBoardPosition(t *testing.T) {
 	p.Bench = []Card{card(m, t, "soldier", 2), card(m, t, "soldier", 1), card(m, t, "soldier", 1)}
 	soldier := mustLine(t, m.cfg, "soldier")
 	scholar := mustLine(t, m.cfg, "scholar")
+	// 8 张拷贝里黑色只有 6 张（12 张红黑各半），所以让一张 2★ 含 2 张红色拷贝
+	p.Board[1].Color, p.Board[1].Red = Red, 2
 	m.Pool[soldier] -= 8
+	m.PoolRed[soldier] -= 2
 	m.Pool[scholar]--
 	forceShop(t, m, p, "soldier")
 	made, err := m.BuyCard(p, 0)
@@ -425,7 +428,7 @@ func TestLinesHaveKindAndEvenPool(t *testing.T) {
 		if l.Pool%2 != 0 {
 			t.Fatalf("%s pool %d not even", l.Key, l.Pool)
 		}
-		want := map[int]int{1: 26, 2: 22, 3: 18}[l.Cost]
+		want := map[int]int{1: 16, 2: 14, 3: 12}[l.Cost]
 		if l.Pool != want {
 			t.Fatalf("%s pool %d want %d", l.Key, l.Pool, want)
 		}
