@@ -82,10 +82,11 @@ type RulesTable struct {
 		ShopRelic     bool `yaml:"shop_relic"` // 商店是否出售法宝（关闭时法宝只能从宝库获得）
 	} `yaml:"board"`
 	Merge struct {
-		GroupSize      int `yaml:"group_size"`
-		MaxStar        int `yaml:"max_star"`
-		TriggerCap     int `yaml:"trigger_cap"` // “每次 X 时”奖励每回合每来源上限
-		StarMultiplier int `yaml:"star_multiplier"`
+		GroupSize      int  `yaml:"group_size"`
+		MaxStar        int  `yaml:"max_star"`
+		TriggerCap     int  `yaml:"trigger_cap"` // “每次 X 时”奖励每回合每来源上限
+		StarMultiplier int  `yaml:"star_multiplier"`
+		SameColor      bool `yaml:"same_color"` // true 时只有同色才能合成
 	} `yaml:"merge"`
 	Battle struct {
 		Stages         []StageDamage `yaml:"stages"`
@@ -118,12 +119,18 @@ type Skill struct {
 	Params map[string]float64 `yaml:"params"`
 }
 
+const (
+	KindGod   = "god"
+	KindGhost = "ghost"
+)
+
 type LineDef struct {
 	Key    string `yaml:"key"`
 	Name   string `yaml:"name"`
 	Card   string `yaml:"card"` // 卡名（各星级相同），与客户端卡面同名
 	Cost   int    `yaml:"cost"`
 	Points int    `yaml:"points"` // 1★ 点数
+	Kind   string `yaml:"kind"`   // god / ghost
 	Pool   int    `yaml:"pool"`
 	Trade  string `yaml:"trade"`
 	Origin string `yaml:"origin"`
@@ -306,6 +313,8 @@ func (c *Config) validate() error {
 		check(l.Card != "", "chess_lines %s needs a card name", l.Key)
 		check(l.Cost >= 1 && l.Cost <= maxCost, "chess_lines %s cost invalid", l.Key)
 		check(l.Points > 0 && l.Pool > 0, "chess_lines %s points/pool must be > 0", l.Key)
+		check(l.Kind == KindGod || l.Kind == KindGhost, "chess_lines %s kind must be god or ghost, got %q", l.Key, l.Kind)
+		check(l.Pool%2 == 0, "chess_lines %s pool must be even", l.Key)
 		_, okT := c.tradeIdx[l.Trade]
 		_, okO := c.originIdx[l.Origin]
 		check(okT, "chess_lines %s: unknown trade %q", l.Key, l.Trade)

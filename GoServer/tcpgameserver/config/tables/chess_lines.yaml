@@ -5,7 +5,8 @@
 # card    卡名（各星级相同），必须与客户端卡面同名
 # cost    商店价格（也是费用档）
 # points  1★ 点数；每升一星 × merge.star_multiplier
-# pool    每个房间共享卡池中的 1★ 数量
+# kind    神鬼：god（神）/ ghost（鬼），决定花色分组
+# pool    每个房间共享卡池中的 1★ 数量（正偶数）
 # trade   行当羁绊（chess_bonds.yaml 的 trades）
 # origin  出身羁绊（chess_bonds.yaml 的 origins）
 # legend  3★ 技能：key 见 rules/effects.go 的 legendParams，params 为数值
@@ -15,8 +16,9 @@ lines:
     name: 木灵
     card: 木魅
     cost: 1
+    kind: ghost
     points: 2
-    pool: 13
+    pool: 26
     trade: craft
     origin: rural
     legend: { key: mult_per_high_star, desc: 出阵中每张 2★ 及以上的卡 +1 气势, params: { mult: 1 } }
@@ -24,8 +26,9 @@ lines:
     name: 炉火
     card: 炉精
     cost: 1
+    kind: god
     points: 2
-    pool: 13
+    pool: 26
     trade: craft
     origin: market
     legend: { key: grow_on_merge, desc: 每次合成永久 +6 战力（每回合最多 3 次）, params: { points: 6 } }
@@ -33,8 +36,9 @@ lines:
     name: 社稷
     card: 稻草精
     cost: 1
+    kind: ghost
     points: 2
-    pool: 13
+    pool: 26
     trade: craft
     origin: rural
     legend: { key: own_origin_count, desc: 山野羁绊计数 +1, params: { count: 1 } }
@@ -42,8 +46,9 @@ lines:
     name: 玄门
     card: 黄巾力士
     cost: 1
+    kind: god
     points: 2
-    pool: 13
+    pool: 26
     trade: monk
     origin: hall
     legend: { key: retrigger_left, desc: 最左边 1 个法宝额外触发 1 次, params: { count: 1 } }
@@ -51,8 +56,9 @@ lines:
     name: 佛门
     card: 木鱼沙弥
     cost: 1
+    kind: god
     points: 2
-    pool: 13
+    pool: 26
     trade: monk
     origin: rural
     legend: { key: mult_per_relic, desc: 每持有一个法宝 +1 气势, params: { mult: 1 } }
@@ -60,8 +66,9 @@ lines:
     name: 文昌
     card: 书蠹
     cost: 1
+    kind: ghost
     points: 2
-    pool: 13
+    pool: 26
     trade: letter
     origin: hall
     legend: { key: mult_per_level, desc: +气势，数值等于等级 × 2, params: { mult: 2 } }
@@ -69,8 +76,9 @@ lines:
     name: 杏林
     card: 参娃
     cost: 2
+    kind: god
     points: 3
-    pool: 11
+    pool: 22
     trade: monk
     origin: market
     legend: { key: damage_taken, desc: 受到的伤害 ×0.7（向上取整）, params: { factor: 0.7 } }
@@ -78,8 +86,9 @@ lines:
     name: 丹青
     card: 墨灵
     cost: 2
+    kind: ghost
     points: 3
-    pool: 11
+    pool: 22
     trade: letter
     origin: market
     legend: { key: mult_per_bond, desc: 每个生效中的羁绊 +2 气势, params: { mult: 2 } }
@@ -87,8 +96,9 @@ lines:
     name: 造化
     card: 泥偶
     cost: 2
+    kind: ghost
     points: 3
-    pool: 11
+    pool: 22
     trade: letter
     origin: hall
     legend: { key: mult_per_line, desc: 出阵中每个不同的系 +1 气势, params: { mult: 1 } }
@@ -96,8 +106,9 @@ lines:
     name: 财神
     card: 金蟾
     cost: 2
+    kind: god
     points: 3
-    pool: 11
+    pool: 22
     trade: court
     origin: market
     legend: { key: interest, desc: 利息改为每 10 金 +2，上限 +10, params: { rate: 2, cap: 10 } }
@@ -105,8 +116,9 @@ lines:
     name: 战魂
     card: 阴兵
     cost: 3
+    kind: ghost
     points: 5
-    pool: 9
+    pool: 18
     trade: court
     origin: rural
     legend: { key: times_mult, desc: 气势 ×2, params: { factor: 2 } }
@@ -114,8 +126,9 @@ lines:
     name: 阴司
     card: 鬼差
     cost: 3
+    kind: god
     points: 5
-    pool: 9
+    pool: 18
     trade: court
     origin: hall
     legend: { key: extra_slots, desc: 出阵格 +1（下回合起生效）, params: { slots: 1 } }

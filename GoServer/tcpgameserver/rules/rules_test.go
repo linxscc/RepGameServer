@@ -414,3 +414,29 @@ func TestScoreStepsCarryTriggerCounts(t *testing.T) {
 		}
 	}
 }
+
+func TestLinesHaveKindAndEvenPool(t *testing.T) {
+	cfg := loadTestConfig(t)
+	gods := map[int]int{}
+	for _, l := range cfg.Lines {
+		if l.Kind != KindGod && l.Kind != KindGhost {
+			t.Fatalf("%s kind %q", l.Key, l.Kind)
+		}
+		if l.Pool%2 != 0 {
+			t.Fatalf("%s pool %d not even", l.Key, l.Pool)
+		}
+		want := map[int]int{1: 26, 2: 22, 3: 18}[l.Cost]
+		if l.Pool != want {
+			t.Fatalf("%s pool %d want %d", l.Key, l.Pool, want)
+		}
+		if l.Kind == KindGod {
+			gods[l.Cost]++
+		}
+	}
+	if gods[1] != 3 || gods[2] != 2 || gods[3] != 1 {
+		t.Fatalf("gods per cost %v", gods)
+	}
+	if cfg.Rules.Merge.SameColor {
+		t.Fatal("same_color must default to false")
+	}
+}

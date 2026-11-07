@@ -51,6 +51,7 @@ merge:
   max_star: 3          # 最高星级
   trigger_cap: 3       # “每次合成/卖出时”的奖励，每回合每个来源最多触发几次
   star_multiplier: 3   # 每升一星点数乘几
+  same_color: false    # true 时只有同色才能合成（模拟对照用）
 
 battle:
   # 阶段伤害：回合数 ≤ until_round 时取 damage；最后一档之后每回合再 +late_damage_step
