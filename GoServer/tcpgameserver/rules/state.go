@@ -400,7 +400,7 @@ func (m *Match) Bonds(p *Player) BondCounts { return m.bondCounts(p.Board, p.Rel
 // ---------- slots, interest ----------
 
 func (m *Match) Slots(p *Player) int {
-	n := m.cfg.Level(p.Level).Slots + int(m.modifier(m.OpsBonds(p), "extra_slots"))
+	n := m.cfg.Level(p.Level).Slots + int(m.sumEffParam(m.effective(p.Relics), "expansion", "slots"))
 	if v, ok := m.legendSum(p.LastBoard, "extra_slots", "slots"); ok {
 		n += int(v)
 	}
@@ -442,7 +442,7 @@ func (m *Match) Interest(p *Player) int {
 }
 
 func (m *Match) freeRefreshTotal(p *Player) int {
-	return int(m.modifier(m.OpsBonds(p), "free_refresh"))
+	return int(m.sumEffParam(m.effective(p.Relics), "market_pass", "free"))
 }
 
 func (m *Match) FreeRefreshesLeft(p *Player) int {

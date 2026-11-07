@@ -10,12 +10,6 @@ var bondModifiers = map[string]struct{ ops bool }{
 	"points_per_card":     {false}, // 每张出阵卡 +点
 	"add_mult":            {false}, // +倍率
 	"times_mult":          {false}, // ×倍率
-	"retrigger_left":      {false}, // 最左边 N 个法宝各额外触发 1 次
-	"gold_per_merge":      {true},  // 每次合成 +金
-	"merged_bonus_points": {true},  // 合成出的卡永久 +点
-	"free_refresh":        {true},  // 每回合免费刷新次数
-	"xp_per_round":        {true},  // 每回合 +经验
-	"extra_slots":         {true},  // 出阵格 +N
 }
 
 // legendParams: 3★ skill key → required params.
@@ -82,6 +76,10 @@ var relicBehaviours = map[string]relicBehaviour{
 	"last_stand":   {kind: kindWhole, params: []string{"hp_below", "factor"}, times: true},
 	"tailwind":     {kind: kindWhole, params: []string{"per_level"}, times: true},
 	"literary_pen": {kind: kindWhole, params: []string{"factor"}, times: true},
+	"market_pass":  {kind: kindOps, params: []string{"free"}},
+	"academy":      {kind: kindOps, params: []string{"xp"}},
+	"expansion":    {kind: kindOps, params: []string{"slots"}},
+	"tempering":    {kind: kindOps, params: []string{"points"}},
 	"mirror":       {kind: kindCopy},
 	"rubbing":      {kind: kindCopy},
 }

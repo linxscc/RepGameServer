@@ -95,7 +95,7 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 	for i := range times {
 		times[i] = 1
 	}
-	extra := int(m.modifier(bc, "retrigger_left"))
+	extra := 0
 	if v, ok := m.legendSum(board, "retrigger_left", "count"); ok {
 		extra += int(v)
 	}

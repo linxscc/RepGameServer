@@ -54,15 +54,20 @@ func TestRetriggerSkipsTimesRelics(t *testing.T) {
 	m := newPrepMatch(t, 1)
 	p := m.P[0]
 	p.Level = 4
-	board := []Card{card(m, t, "taoist", 1), card(m, t, "monk", 1), card(m, t, "doctor", 1)} // 方外 3
-	if got := m.ScoreWith(p, board, nil, []RelicInst{relic(t, m, "tailwind", 0)}).Score; got != 33 {
-		t.Fatalf("乘风 = %v, want 33", got)
+	// 天师 3★（taoist）：最左边法宝额外触发 1 次；×气势类法宝只触发一次
+	board := []Card{card(m, t, "taoist", 3), card(m, t, "monk", 1)}
+	r := m.ScoreWith(p, board, nil, []RelicInst{relic(t, m, "tailwind", 0)})
+	if n := len(stepsBy(r, "乘风")); n != 1 {
+		t.Fatalf("乘风 steps = %d, want 1", n)
 	}
-	if got := m.ScoreWith(p, board, nil, []RelicInst{relic(t, m, "furnace", 4)}).Score; got != 77 {
-		t.Fatalf("熔炉 = %v, want 77", got)
+	r = m.ScoreWith(p, board, nil, []RelicInst{relic(t, m, "furnace", 4)})
+	if n := len(stepsBy(r, "熔炉")); n != 2 {
+		t.Fatalf("熔炉 steps = %d, want 2", n)
 	}
-	if got := m.ScoreWith(p, board[:2], nil, []RelicInst{relic(t, m, "furnace", 4)}).Score; got != 32 {
-		t.Fatalf("方外 2 = %v, want 32", got)
+	board[0] = card(m, t, "taoist", 1)
+	r = m.ScoreWith(p, board, nil, []RelicInst{relic(t, m, "furnace", 4)})
+	if n := len(stepsBy(r, "熔炉")); n != 1 {
+		t.Fatalf("no retrigger: 熔炉 steps = %d, want 1", n)
 	}
 }
 
@@ -161,26 +166,6 @@ func TestFullBenchBuyOnlyWhenMerging(t *testing.T) {
 	}
 	if err := m.CanBuyCard(p, 1); err != nil {
 		t.Fatalf("merging buy should be allowed: %v", err)
-	}
-}
-
-func TestOpsBondsUseLastBoard(t *testing.T) {
-	m := newPrepMatch(t, 1)
-	p := m.P[0]
-	p.Board = []Card{card(m, t, "smith", 1), card(m, t, "doctor", 1)} // 市井 2
-	if m.FreeRefreshesLeft(p) != 0 {
-		t.Fatal("ops bonds must use the last settled board")
-	}
-	p.LastBoard = p.Board
-	if m.FreeRefreshesLeft(p) != 1 {
-		t.Fatal("expected a free refresh")
-	}
-	gold := p.Gold
-	if err := m.Refresh(p); err != nil || p.Gold != gold {
-		t.Fatalf("free refresh should cost nothing: %v, gold %d→%d", err, gold, p.Gold)
-	}
-	if err := m.Refresh(p); err != nil || p.Gold != gold-m.cfg.Rules.Economy.RefreshCost {
-		t.Fatalf("second refresh should cost gold: %v", err)
 	}
 }
 
@@ -639,5 +624,165 @@ func TestUnknownRelicCategoryRejected(t *testing.T) {
 	_, err := tt.build()
 	if err == nil || !strings.Contains(err.Error(), `unknown category "magic"`) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBondModifiersNumericOnly(t *testing.T) {
+	for _, k := range []string{"gold_per_merge", "retrigger_left", "free_refresh", "xp_per_round", "extra_slots", "merged_bonus_points"} {
+		tt := loadTestTables(t)
+		tt.B.Trades = append([]BondDef{}, tt.B.Trades...)
+		craft := tt.B.Trades[0]
+		craft.Tiers = append([]Tier{}, craft.Tiers...)
+		craft.Tiers[0].Values = map[string]float64{k: 1}
+		tt.B.Trades[0] = craft
+		_, err := tt.build()
+		if err == nil || !strings.Contains(err.Error(), `unknown modifier "`+k+`"`) {
+			t.Fatalf("%s: err = %v", k, err)
+		}
+	}
+}
+
+func TestNewBondValues(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Level = 4
+	r := m.ScoreWith(p, []Card{card(m, t, "carpenter", 1), card(m, t, "smith", 1)}, nil, nil)
+	found := false
+	for _, s := range stepsBy(r, "天工") {
+		if s.Kind == StepAddMult && s.Value == 4 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("天工 2: %+v", stepsBy(r, "天工"))
+	}
+	r = m.ScoreWith(p, []Card{card(m, t, "taoist", 1), card(m, t, "monk", 1)}, nil, nil)
+	found = false
+	for _, s := range stepsBy(r, "方外") {
+		if s.Kind == StepPoints && s.Value == 3*2 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("方外 2: %+v", stepsBy(r, "方外"))
+	}
+}
+
+func TestMarketPassFreeRefresh(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Gold = 10
+	if m.FreeRefreshesLeft(p) != 0 {
+		t.Fatal("no free refresh without the relic")
+	}
+	p.Relics = []RelicInst{relic(t, m, "market_pass", 0)}
+	if m.FreeRefreshesLeft(p) != 1 {
+		t.Fatalf("left = %d, want 1", m.FreeRefreshesLeft(p))
+	}
+	if err := m.Refresh(p); err != nil || p.Gold != 10 {
+		t.Fatalf("free refresh: %v gold %d", err, p.Gold)
+	}
+	if m.FreeRefreshesLeft(p) != 0 {
+		t.Fatal("want 0 left")
+	}
+	if err := m.Refresh(p); err != nil || p.Gold != 10-m.cfg.Rules.Economy.RefreshCost {
+		t.Fatalf("second refresh: %v gold %d", err, p.Gold)
+	}
+}
+
+func totalXP(m *Match, p *Player) int {
+	n := p.XP
+	for lv := 1; lv < p.Level; lv++ {
+		n += m.cfg.Level(lv).XPToNext
+	}
+	return n
+}
+
+func TestAcademyXP(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	m.Round = m.cfg.Rules.Economy.AutoXPFromRound - 1
+	m.P[0].Relics = []RelicInst{relic(t, m, "academy", 0)}
+	before := [2]int{totalXP(m, m.P[0]), totalXP(m, m.P[1])}
+	m.startRound()
+	auto := m.cfg.Rules.Economy.AutoXP
+	if d := totalXP(m, m.P[0]) - before[0]; d != auto+2 {
+		t.Fatalf("academy xp gain = %d, want %d", d, auto+2)
+	}
+	if d := totalXP(m, m.P[1]) - before[1]; d != auto {
+		t.Fatalf("plain xp gain = %d, want %d", d, auto)
+	}
+}
+
+func TestExpansionSlot(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Level = 1
+	if m.Slots(p) != 3 {
+		t.Fatalf("slots = %d, want 3", m.Slots(p))
+	}
+	p.Relics = []RelicInst{relic(t, m, "expansion", 0)}
+	if m.Slots(p) != 4 {
+		t.Fatalf("slots = %d, want 4", m.Slots(p))
+	}
+}
+
+func TestSellExpansionFitsBoard(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Level = 1
+	p.Relics = []RelicInst{relic(t, m, "expansion", 0)}
+	for _, k := range []string{"carpenter", "smith", "farmer", "taoist"} {
+		p.Board = append(p.Board, card(m, t, k, 1))
+		m.Pool[mustLine(t, m.cfg, k)]--
+	}
+	last := p.Board[3].UID
+	if len(p.Board) != m.Slots(p) {
+		t.Fatalf("board %d slots %d", len(p.Board), m.Slots(p))
+	}
+	if err := m.SellRelic(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Board) != 3 || len(p.Bench) != 1 || p.Bench[len(p.Bench)-1].UID != last {
+		t.Fatalf("board=%d bench=%+v", len(p.Board), p.Bench)
+	}
+	if !m.CheckPool() {
+		t.Fatal("pool not conserved")
+	}
+}
+
+func TestTemperingMergedBonus(t *testing.T) {
+	for _, has := range []bool{true, false} {
+		m := newPrepMatch(t, 1)
+		p := m.P[0]
+		if has {
+			p.Relics = []RelicInst{relic(t, m, "tempering", 0)}
+		}
+		forceShop(t, m, p, "soldier", "soldier", "soldier")
+		for i := 0; i < 3; i++ {
+			if _, err := m.BuyCard(p, i); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var got *Card
+		for i := range p.Bench {
+			if p.Bench[i].Star == 2 {
+				got = &p.Bench[i]
+			}
+		}
+		for i := range p.Board {
+			if p.Board[i].Star == 2 {
+				got = &p.Board[i]
+			}
+		}
+		if got == nil {
+			t.Fatalf("no 2★: board=%+v bench=%+v", p.Board, p.Bench)
+		}
+		want := 0
+		if has {
+			want = 3
+		}
+		if got.Bonus != want {
+			t.Fatalf("tempering=%v bonus = %d, want %d", has, got.Bonus, want)
+		}
 	}
 }

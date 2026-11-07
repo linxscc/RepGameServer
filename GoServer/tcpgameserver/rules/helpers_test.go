@@ -168,3 +168,14 @@ func card(m *Match, t *testing.T, key string, star int) Card {
 func relic(t *testing.T, m *Match, key string, value float64) RelicInst {
 	return RelicInst{Relic: mustRelic(t, m.cfg, key), Value: value, Choice: -1}
 }
+
+// stepsBy returns the score steps whose source is src.
+func stepsBy(r ScoreResult, src string) []Step {
+	var out []Step
+	for _, s := range r.Steps {
+		if s.Source == src {
+			out = append(out, s)
+		}
+	}
+	return out
+}

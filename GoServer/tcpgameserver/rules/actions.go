@@ -322,12 +322,7 @@ func (m *Match) merge(p *Player, line, star int, col Color) Card {
 	}
 	nc := Card{UID: m.newUID(), Line: line, Star: star + 1, Bonus: bonus, Red: red, Color: majorityColor(redCards, need)}
 
-	// ops rewards judged on the last settled board
-	ops := m.OpsBonds(p)
-	if g := m.modifier(ops, "gold_per_merge"); g > 0 && m.trigger(p, "bond_merge") {
-		p.Gold += int(g)
-		nc.Bonus += int(m.modifier(ops, "merged_bonus_points"))
-	}
+	nc.Bonus += int(m.sumEffParam(m.effective(p.Relics), "tempering", "points"))
 	for i := range p.Relics {
 		key := m.cfg.Relics[p.Relics[i].Relic].Key
 		if key == "furnace" && m.trigger(p, "furnace") {
@@ -482,6 +477,7 @@ func (m *Match) SellRelic(p *Player, i int) error {
 	p.Relics = append(p.Relics[:i:i], p.Relics[i+1:]...)
 	p.Gold += m.cfg.RelicPrice(r.Relic) / 2
 	m.growAccountant(p)
+	m.fitBoard(p)
 	return nil
 }
 

@@ -37,3 +37,7 @@ relics:
   - { key: literary_pen, name: 文曲笔,   category: tactic, rarity: epic,   desc: 文墨羁绊生效时，气势 ×2,                            params: { factor: 2 } }
   - { key: mirror,       name: 铜镜,     category: tactic, rarity: epic,   desc: 复制右边相邻法宝的效果（右边没有法宝时无效）,         params: {} }
   - { key: rubbing,      name: 拓本,     category: tactic, rarity: rare,   desc: 复制最左边法宝的效果（自己在最左时无效）,             params: {} }
+  - { key: market_pass,  name: 市集牌,   category: economy, rarity: common, desc: 每回合第 1 次刷新免费,                           params: { free: 1 } }
+  - { key: academy,      name: 书院荐,   category: economy, rarity: common, desc: 每回合 +2 经验（第 2 回合起）,                     params: { xp: 2 } }
+  - { key: expansion,    name: 扩建令,   category: economy, rarity: epic,   desc: 出阵格 +1,                                      params: { slots: 1 } }
+  - { key: tempering,    name: 百炼,     category: growth, rarity: rare,   desc: 合成出的卡永久 +3 战力,                           params: { points: 3 } }

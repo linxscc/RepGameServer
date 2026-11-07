@@ -124,3 +124,17 @@ func TestColorBotFieldsMostlyItsColor(t *testing.T) {
 		t.Fatalf("red bot avg ColorPeak %.2f not >= plain %.2f + 1", ra, pa)
 	}
 }
+
+func TestArchetypeRelicKeysExist(t *testing.T) {
+	tables, err := config.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range Archetypes() {
+		for k := range a.Relics {
+			if _, ok := tables.Chess.RelicIndex(k); !ok {
+				t.Errorf("archetype %s: unknown relic %q", a.Name, k)
+			}
+		}
+	}
+}

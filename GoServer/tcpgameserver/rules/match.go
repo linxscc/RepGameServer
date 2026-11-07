@@ -173,7 +173,7 @@ func (m *Match) startRound() {
 		p.Gold += income
 
 		if m.Round >= e.AutoXPFromRound {
-			m.addXP(p, e.AutoXP+int(m.modifier(m.OpsBonds(p), "xp_per_round")))
+			m.addXP(p, e.AutoXP+int(m.sumEffParam(m.effective(p.Relics), "academy", "xp")))
 		}
 
 		if p.Locked && p.LockStreak < m.cfg.Rules.Board.MaxLockRounds && p.Shop != nil {

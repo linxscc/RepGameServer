@@ -1,27 +1,19 @@
 # ============================================================
 # 羁绊表：按出阵中「不同的系」计数，达到 at 即生效，只取最高一档
 # ------------------------------------------------------------
-# 每档的 desc 是给玩家看的说明；values 是通用修正项，可自由组合，新增羁绊不用改代码：
-#   计分类（按本回合出阵判断）
+# 每档的 desc 是给玩家看的说明；values 是通用修正项（均按本回合出阵判断），可自由组合：
 #     points_per_card      每张出阵卡 +点
 #     add_mult             +气势
 #     times_mult           ×气势
-#     retrigger_left       最左边的法宝额外触发次数（×气势类法宝不受影响）
-#   运营类（按上一回合结算时的出阵判断）
-#     gold_per_merge       每次合成 +金（每回合最多 merge.trigger_cap 次）
-#     merged_bonus_points  合成出的卡永久 +点（与上一项同时触发）
-#     free_refresh         每回合免费刷新次数
-#     xp_per_round         每回合 +经验
-#     extra_slots          出阵格 +N
 # 另有通用奖励：每个生效档位 +battle.bond_tier_mult 气势（见 chess_rules.yaml）
 # ============================================================
 trades:
   - key: craft
     name: 天工
-    desc: 合成
+    desc: 加气势
     tiers:
-      - { at: 2, desc: 每次合成 +1 金, values: { gold_per_merge: 1 } }
-      - { at: 3, desc: 每次合成 +1 金，合成出的卡永久 +3 战力, values: { gold_per_merge: 1, merged_bonus_points: 3 } }
+      - { at: 2, desc: +4 气势, values: { add_mult: 4 } }
+      - { at: 3, desc: +10 气势, values: { add_mult: 10 } }
   - key: letter
     name: 文墨
     desc: 加气势
@@ -30,10 +22,10 @@ trades:
       - { at: 3, desc: +6 气势, values: { add_mult: 6 } }
   - key: monk
     name: 方外
-    desc: 法宝重复触发
+    desc: 加战力
     tiers:
-      - { at: 2, desc: +2 气势, values: { add_mult: 2 } }
-      - { at: 3, desc: 最左边 1 个法宝额外触发 1 次, values: { retrigger_left: 1 } }
+      - { at: 2, desc: 每张出阵卡 +3 战力, values: { points_per_card: 3 } }
+      - { at: 3, desc: 每张出阵卡 +8 战力, values: { points_per_card: 8 } }
   - key: court
     name: 敕令
     desc: 乘气势
@@ -50,13 +42,13 @@ origins:
       - { at: 4, desc: 每张出阵卡 +6 战力, values: { points_per_card: 6 } }
   - key: market
     name: 市井
-    desc: 免费刷新
+    desc: 加气势
     tiers:
-      - { at: 2, desc: 每回合第 1 次刷新免费（按上回合出阵）, values: { free_refresh: 1 } }
-      - { at: 4, desc: 每回合前 3 次刷新免费（按上回合出阵）, values: { free_refresh: 3 } }
+      - { at: 2, desc: +3 气势, values: { add_mult: 3 } }
+      - { at: 4, desc: +9 气势, values: { add_mult: 9 } }
   - key: hall
     name: 庙堂
-    desc: 经验
+    desc: 乘气势
     tiers:
-      - { at: 2, desc: 每回合 +2 经验（按上回合出阵）, values: { xp_per_round: 2 } }
-      - { at: 4, desc: 每回合 +2 经验，出阵格 +1（按上回合出阵）, values: { xp_per_round: 2, extra_slots: 1 } }
+      - { at: 2, desc: 气势 ×1.2, values: { times_mult: 1.2 } }
+      - { at: 4, desc: 气势 ×1.6, values: { times_mult: 1.6 } }
