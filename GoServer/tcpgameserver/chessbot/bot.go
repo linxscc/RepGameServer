@@ -22,6 +22,7 @@ type Archetype struct {
 	LevelPlan []int              // LevelPlan[lv] = round from which to be at least lv (0 = never)
 	Adaptive  bool               // re-picks its lines every round: what it owns, what is left in the pool, what the opponent is not taking
 	Deny      bool               // hate-buys a cheap copy the opponent needs for a 3★
+	Color     string             // "" = ignore card color; "red" / "black" = prefer that color
 }
 
 // Archetypes are the playstyles a bot can pick, mirroring the simulator.
@@ -252,6 +253,44 @@ func (b *Bot) denyPass(m *rules.Match, p *rules.Player) {
 	}
 }
 
+// offPrefOK says whether a card of the non-preferred color may still be bought (merge
+// completions are handled by the caller): never when the preferred color of the same line is
+// on offer, and otherwise only while the roster is so thin the board would be left hollow.
+func (b *Bot) offPrefOK(m *rules.Match, p *rules.Player, line int) bool {
+	pc, _ := b.prefColor()
+	for j, l2 := range p.Shop {
+		if l2 == line && j < len(p.ShopColor) && p.ShopColor[j] == pc {
+			return false
+		}
+	}
+	return len(p.Board)+len(p.Bench) < m.Slots(p)-1 // only to avoid a hollow board
+}
+
+// ColorPeak is the largest number of fielded cards sharing one color.
+func ColorPeak(m *rules.Match, p *rules.Player) int {
+	var n [2]int
+	for _, c := range p.Board {
+		if c.Color == rules.Red || c.Color == rules.Black {
+			n[c.Color]++
+		}
+	}
+	if n[0] > n[1] {
+		return n[0]
+	}
+	return n[1]
+}
+
+// prefColor is the preferred color; ok is false when the bot ignores color.
+func (b *Bot) prefColor() (rules.Color, bool) {
+	switch b.Arch.Color {
+	case "red":
+		return rules.Red, true
+	case "black":
+		return rules.Black, true
+	}
+	return 0, false
+}
+
 func pow(b, e int) int {
 	r := 1
 	for i := 0; i < e; i++ {
@@ -352,6 +391,9 @@ func (b *Bot) buyPass(m *rules.Match, p *rules.Player) {
 		if !want {
 			continue
 		}
+		if pc, ok := b.prefColor(); ok && !completes && i < len(p.ShopColor) && p.ShopColor[i] != pc && !b.offPrefOK(m, p, l) {
+			continue
+		}
 		limit := res
 		if completes {
 			limit = res - 6
@@ -421,9 +463,18 @@ func (b *Bot) arrange(m *rules.Match, p *rules.Player) {
 		}
 		return board, bench
 	}
+	pc, colored := b.prefColor()
 	eval := func(idx []int, relics []rules.RelicInst) float64 {
 		board, bench := split(idx)
-		return m.ScoreWith(p, board, bench, relics).Score
+		s := m.ScoreWith(p, board, bench, relics).Score
+		if colored { // tie-break only: among equal scores, field the preferred color
+			for _, c := range board {
+				if c.Color == pc {
+					s += 1e-6
+				}
+			}
+		}
+		return s
 	}
 	order := identity(len(p.Relics))
 	relics := p.Relics
