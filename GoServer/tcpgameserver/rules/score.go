@@ -20,6 +20,10 @@ type Step struct {
 	Value   float64 // 本步的增量或乘数
 	Points  float64 // 本步之后的点数
 	Mult    float64 // 本步之后的倍率
+	// 触发次数：本步是第 Trigger 次触发，共 Triggers 次（不重复触发时都为 1）。
+	// 法宝自身重复触发时记法宝的次数，否则记所在卡的次数。
+	Trigger  int
+	Triggers int
 }
 
 // ScoreResult is the full scoring of a board.
@@ -33,7 +37,9 @@ type ScoreResult struct {
 func round2(x float64) float64 { return math.Round(x*100) / 100 }
 
 type scorer struct {
-	r ScoreResult
+	r                     ScoreResult
+	cardTrig, cardTrigs   int // 当前逐卡结算是这张卡的第几次触发 / 共几次
+	relicTrig, relicTrigs int // 当前法宝是第几次触发 / 共几次
 }
 
 func (s *scorer) add(phase int, src, uid string, relic int, kind StepKind, v float64) {
@@ -51,7 +57,23 @@ func (s *scorer) add(phase int, src, uid string, relic int, kind StepKind, v flo
 		}
 		s.r.Mult = round2(s.r.Mult * v)
 	}
-	s.r.Steps = append(s.r.Steps, Step{Phase: phase, Source: src, CardUID: uid, Relic: relic, Kind: kind, Value: v, Points: s.r.Points, Mult: s.r.Mult})
+	trig, trigs := 1, 1
+	if s.relicTrigs > 1 {
+		trig, trigs = s.relicTrig, s.relicTrigs
+	} else if s.cardTrigs > 1 {
+		trig, trigs = s.cardTrig, s.cardTrigs
+	}
+	s.r.Steps = append(s.r.Steps, Step{Phase: phase, Source: src, CardUID: uid, Relic: relic, Kind: kind, Value: v, Points: s.r.Points, Mult: s.r.Mult,
+		Trigger: trig, Triggers: trigs})
+}
+
+// relicLoop runs one relic's effect n times, tagging the steps with the trigger count.
+func (s *scorer) relicLoop(n int, f func()) {
+	for t := 0; t < n; t++ {
+		s.relicTrig, s.relicTrigs = t+1, n
+		f()
+	}
+	s.relicTrig, s.relicTrigs = 0, 0
 }
 
 // Score scores the player's current board/bench/relics.
@@ -98,7 +120,7 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 			if r.empty || m.behaviour(r.Relic).kind != kindPerCard {
 				continue
 			}
-			for t := 0; t < reps(r); t++ {
+			s.relicLoop(reps(r), func() {
 				switch m.relicKey(r) {
 				case "heirloom":
 					if c.Star == 2 {
@@ -118,18 +140,21 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 						s.add(1, relicName(r), c.UID, r.slot, StepPoints, (param(r, "factor")-1)*own)
 					}
 				}
-			}
+			})
 		}
 	}
 	for idx, c := range board {
-		scoreCard(idx, c)
+		n := 1 // 本卡触发次数：1 + 家传绝学等重复结算
 		for _, r := range eff {
 			if !r.empty && m.relicKey(r) == "secret_art" && r.Choice == cfg.TradeOf(c.Line) {
-				for t := 0; t < reps(r)*int(param(r, "repeats")); t++ {
-					scoreCard(idx, c)
-				}
+				n += reps(r) * int(param(r, "repeats"))
 			}
 		}
+		for t := 0; t < n; t++ {
+			s.cardTrig, s.cardTrigs = t+1, n
+			scoreCard(idx, c)
+		}
+		s.cardTrig, s.cardTrigs = 0, 0
 	}
 
 	// 2. bench relics
@@ -137,7 +162,7 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 		if r.empty || m.behaviour(r.Relic).kind != kindBench {
 			continue
 		}
-		for t := 0; t < reps(r); t++ {
+		s.relicLoop(reps(r), func() {
 			switch m.relicKey(r) {
 			case "hidden":
 				n := 0
@@ -150,7 +175,7 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 			case "storehouse":
 				s.add(2, relicName(r), "", r.slot, StepPoints, param(r, "points")*float64(len(bench)))
 			}
-		}
+		})
 	}
 
 	// 3. bonds: points → generic tier bonus + add_mult (+ sect token) → times_mult
@@ -227,7 +252,7 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 		if r.empty || m.behaviour(r.Relic).kind != kindWhole {
 			continue
 		}
-		for t := 0; t < reps(r); t++ {
+		s.relicLoop(reps(r), func() {
 			name := relicName(r)
 			switch m.relicKey(r) {
 			case "furnace", "accountant", "grudge":
@@ -265,7 +290,7 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 					s.add(5, name, "", r.slot, StepTimesMult, param(r, "factor"))
 				}
 			}
-		}
+		})
 	}
 
 	s.r.Score = math.Floor(s.r.Points * s.r.Mult)

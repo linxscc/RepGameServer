@@ -366,3 +366,51 @@ func randomAction(m *Match, p *Player, rng *rand.Rand) {
 		_ = m.SetLock(p, rng.Intn(2) == 0)
 	}
 }
+
+func TestScoreStepsCarryTriggerCounts(t *testing.T) {
+	m := newPrepMatch(t, 7)
+	p := m.P[0]
+	cfg := m.cfg
+
+	// 家传绝学选方外：方外卡（黄巾力士）逐卡结算 2 次，步骤记 1/2、2/2
+	art := relic(t, m, "secret_art", 0)
+	art.Choice = cfg.TradeOf(mustLine(t, cfg, "taoist"))
+	c := card(m, t, "taoist", 1)
+	res := m.ScoreWith(p, []Card{c}, nil, []RelicInst{art})
+	var seen []int
+	for _, s := range res.Steps {
+		if s.CardUID == c.UID && s.Relic < 0 {
+			if s.Triggers != 2 {
+				t.Fatalf("card step triggers %d want 2", s.Triggers)
+			}
+			seen = append(seen, s.Trigger)
+		}
+	}
+	if len(seen) != 2 || seen[0] != 1 || seen[1] != 2 {
+		t.Fatalf("card triggers %v", seen)
+	}
+
+	// 3★ 黄巾力士（天师）：最左边的法宝人多势众额外触发 1 次 → 步骤记 1/2、2/2
+	three := card(m, t, "taoist", 3)
+	res = m.ScoreWith(p, []Card{three}, nil, []RelicInst{relic(t, m, "multitude", 0)})
+	seen = nil
+	for _, s := range res.Steps {
+		if s.Relic == 0 {
+			if s.Triggers != 2 {
+				t.Fatalf("relic step triggers %d want 2", s.Triggers)
+			}
+			seen = append(seen, s.Trigger)
+		}
+	}
+	if len(seen) != 2 || seen[0] != 1 || seen[1] != 2 {
+		t.Fatalf("relic triggers %v", seen)
+	}
+
+	// 没有重复触发时都是 1/1
+	res = m.ScoreWith(p, []Card{card(m, t, "smith", 1)}, nil, nil)
+	for _, s := range res.Steps {
+		if s.Trigger != 1 || s.Triggers != 1 {
+			t.Fatalf("plain step %+v", s)
+		}
+	}
+}

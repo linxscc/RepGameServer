@@ -106,6 +106,7 @@ func scoreBreakdown(r rules.ScoreResult) *pb.ScoreBreakdown {
 		out.Steps = append(out.Steps, &pb.ScoreStep{
 			Phase: int32(s.Phase), Source: s.Source, CardUid: s.CardUID, RelicSlot: int32(s.Relic),
 			Kind: kind, Value: s.Value, Points: s.Points, Mult: s.Mult,
+			Trigger: int32(s.Trigger), Triggers: int32(s.Triggers),
 		})
 	}
 	return out

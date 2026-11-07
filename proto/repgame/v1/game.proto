@@ -333,6 +333,8 @@ message ScoreStep {
   double value = 6;
   double points = 7;        // 本步之后
   double mult = 8;
+  int32 trigger = 9;        // 本步是第几次触发（从 1 开始）
+  int32 triggers = 10;      // 共触发几次；>1 时客户端显示"第 n/N 次触发"
 }
 
 message ScoreBreakdown {
