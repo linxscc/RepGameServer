@@ -229,6 +229,18 @@ message BondInfo {
   repeated string line_keys = 5;
 }
 
+enum CardColor {
+  CARD_COLOR_UNSPECIFIED = 0;
+  CARD_COLOR_RED = 1;
+  CARD_COLOR_BLACK = 2;
+}
+
+enum CardKind {
+  CARD_KIND_UNSPECIFIED = 0;
+  CARD_KIND_GOD = 1;
+  CARD_KIND_GHOST = 2;
+}
+
 message LineInfo {
   string key = 1;
   string name = 2;
@@ -238,6 +250,7 @@ message LineInfo {
   string trade_key = 6;
   string origin_key = 7;
   string legend_desc = 8;
+  CardKind kind = 9;
 }
 
 message RelicInfo {
@@ -296,6 +309,7 @@ message ChessCard {
   int32 points = 5;   // 当前点数（含永久加成）
   int32 bonus = 6;    // 永久加成部分
   int32 sell_price = 7;
+  CardColor color = 8;
 }
 
 message RelicSlot {
@@ -309,6 +323,7 @@ message ShopSlot {
   string line_key = 1;   // 为空表示该格已买走或空
   int32 cost = 2;
   int32 owned = 3;       // 已拥有的同系同星（1★）张数，便于提示合成
+  CardColor color = 4;   // 空格为 UNSPECIFIED
 }
 
 message BondCount {

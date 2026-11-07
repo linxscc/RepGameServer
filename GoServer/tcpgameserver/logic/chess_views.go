@@ -22,8 +22,12 @@ func matchConfigMessage(roomID string, m *rules.Match) *pb.ServerMessage {
 		BondTierMult: r.Battle.BondTierMult,
 	}
 	for _, l := range cfg.Lines {
+		kind := pb.CardKind_CARD_KIND_GOD
+		if l.Kind == rules.KindGhost {
+			kind = pb.CardKind_CARD_KIND_GHOST
+		}
 		msg.Lines = append(msg.Lines, &pb.LineInfo{
-			Key: l.Key, Name: l.Name, StarNames: []string{l.Card}, Cost: int32(l.Cost), Points: int32(l.Points),
+			Kind: kind, Key: l.Key, Name: l.Name, StarNames: []string{l.Card}, Cost: int32(l.Cost), Points: int32(l.Points),
 			TradeKey: l.Trade, OriginKey: l.Origin, LegendDesc: l.Legend.Desc,
 		})
 	}
@@ -60,12 +64,20 @@ func matchConfigMessage(roomID string, m *rules.Match) *pb.ServerMessage {
 	return &pb.ServerMessage{Body: &pb.ServerMessage_MatchConfig{MatchConfig: msg}}
 }
 
+func pbColor(c rules.Color) pb.CardColor {
+	if c == rules.Red {
+		return pb.CardColor_CARD_COLOR_RED
+	}
+	return pb.CardColor_CARD_COLOR_BLACK
+}
+
 func chessCards(m *rules.Match, cards []rules.Card) []*pb.ChessCard {
 	out := make([]*pb.ChessCard, 0, len(cards))
 	for _, c := range cards {
 		out = append(out, &pb.ChessCard{
 			Uid: c.UID, LineKey: m.Config().Lines[c.Line].Key, Star: int32(c.Star), Name: m.CardName(c),
 			Points: int32(m.Points(c)), Bonus: int32(c.Bonus), SellPrice: int32(m.SellPrice(c)),
+			Color: pbColor(c.Color),
 		})
 	}
 	return out
@@ -122,12 +134,12 @@ func selfView(m *rules.Match, p *rules.Player) *pb.SelfView {
 		Family: int32(p.Family), WinStreak: int32(p.WinStreak), LossStreak: int32(p.LossStreak), Ready: p.Ready,
 		Preview: scoreBreakdown(m.Score(p)),
 	}
-	for _, l := range p.Shop {
+	for i, l := range p.Shop {
 		if l < 0 {
 			v.Shop = append(v.Shop, &pb.ShopSlot{})
 			continue
 		}
-		v.Shop = append(v.Shop, &pb.ShopSlot{LineKey: cfg.Lines[l].Key, Cost: int32(cfg.Lines[l].Cost), Owned: int32(m.CountCopies(p, l, 1))})
+		v.Shop = append(v.Shop, &pb.ShopSlot{LineKey: cfg.Lines[l].Key, Cost: int32(cfg.Lines[l].Cost), Owned: int32(m.CountCopies(p, l, 1)), Color: pbColor(p.ShopColor[i])})
 	}
 	if p.ShopRelic >= 0 {
 		v.ShopRelicKey = cfg.Relics[p.ShopRelic].Key
