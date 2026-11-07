@@ -239,7 +239,7 @@ func omenLosses(m *rules.Match, p *rules.Player, board []rules.Card) (one, two f
 	s := m.ScoreVs(p, board, p.Bench, p.Relics, foe, nil).Score
 	sides := cfg.Rules.Omen.DieSides
 	loss := func(point int) float64 {
-		oi := cfg.OmenByPoint(point)
+		oi := m.OmenByPoint(point)
 		if oi < 0 {
 			return 0
 		}

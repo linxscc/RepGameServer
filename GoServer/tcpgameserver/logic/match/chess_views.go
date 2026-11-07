@@ -63,7 +63,7 @@ func matchConfigMessage(roomID string, m *rules.Match) *pb.ServerMessage {
 		msg.Families = append(msg.Families, &pb.FamilyInfo{Key: f.Key, Name: f.Name, Desc: f.Desc})
 	}
 	for _, o := range cfg.Omens {
-		msg.Omens = append(msg.Omens, &pb.OmenInfo{Key: o.Key, Name: o.Name, Aspect: o.Aspect, Desc: o.Desc, Point: int32(o.Point)})
+		msg.Omens = append(msg.Omens, &pb.OmenInfo{Key: o.Key, Name: o.Name, Aspect: o.Aspect, Desc: o.Desc}) // point deliberately omitted: the mapping is secret until revealed
 	}
 	return &pb.ServerMessage{Body: &pb.ServerMessage_MatchConfig{MatchConfig: msg}}
 }

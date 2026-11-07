@@ -8,6 +8,10 @@ import (
 // NewMatch creates a match in the family-pick phase. rng makes it deterministic.
 func NewMatch(cfg *Config, rng *rand.Rand, ids [2]string) *Match {
 	m := &Match{cfg: cfg, rng: rng, Phase: PhaseFamily, Winner: -1, Pool: make([]int, len(cfg.Lines)), PoolRed: make([]int, len(cfg.Lines)), LastRoll: OmenRoll{Omen: -1}}
+	m.omenAt = make([]int, len(cfg.Omens)+1)
+	for i, j := range rng.Perm(len(cfg.Omens)) {
+		m.omenAt[i+1] = j
+	}
 	for i, l := range cfg.Lines {
 		m.Pool[i] = l.Pool
 		m.PoolRed[i] = l.Pool / 2
@@ -197,17 +201,43 @@ func (m *Match) ResolveOmen() error {
 	return nil
 }
 
+// OmenByPoint returns the omen index this match assigns to a dice total, or -1.
+func (m *Match) OmenByPoint(point int) int {
+	if point < 1 || point >= len(m.omenAt) {
+		return -1
+	}
+	return m.omenAt[point]
+}
+
+// SetOmenMapping replaces the point->omen mapping (index = point, [0] ignored); it must be a
+// permutation of all omen indices. Intended for tests and simulations.
+func (m *Match) SetOmenMapping(at []int) error {
+	n := len(m.cfg.Omens)
+	if len(at) != n+1 {
+		return ErrBadChoice
+	}
+	seen := make([]bool, n)
+	for _, o := range at[1:] {
+		if o < 0 || o >= n || seen[o] {
+			return ErrBadChoice
+		}
+		seen[o] = true
+	}
+	m.omenAt = append([]int(nil), at...)
+	return nil
+}
+
 // resolveOmenDice turns dice into an omen: a point whose omen is already active moves up
 // by one (wrapping from MaxOmenPoint to 1) until it is not, at most MaxOmenPoint times.
 func (m *Match) resolveOmenDice(dice [2]int, forced bool) {
 	point := dice[0] + dice[1]
 	shifted := false
 	maxPt := m.cfg.MaxOmenPoint()
-	for n := 0; n < maxPt && m.omenActiveIdx(m.cfg.OmenByPoint(point)); n++ {
+	for n := 0; n < maxPt && m.omenActiveIdx(m.OmenByPoint(point)); n++ {
 		point = point%maxPt + 1
 		shifted = true
 	}
-	omen := m.cfg.OmenByPoint(point)
+	omen := m.OmenByPoint(point)
 	m.Omens = append(m.Omens, ActiveOmen{Omen: omen, From: m.Round, Until: m.Round + m.cfg.Rules.Omen.Duration - 1})
 	m.LastRoll = OmenRoll{Round: m.Round, Dice: dice, Forced: forced, Shifted: shifted, Point: point, Omen: omen}
 	m.beginPrep()

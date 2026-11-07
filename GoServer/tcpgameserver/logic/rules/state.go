@@ -112,10 +112,13 @@ type Player struct {
 
 // Match is a deterministic 1v1 game. It is not safe for concurrent use.
 type Match struct {
-	cfg     *Config
-	rng     *rand.Rand
-	Round   int
-	Phase   Phase
+	cfg   *Config
+	rng   *rand.Rand
+	Round int
+	Phase Phase
+	// omenAt maps a dice point (index 1..MaxOmenPoint; [0] unused) to an omen index. It is
+	// shuffled per match and never sent to clients before an omen is revealed.
+	omenAt  []int
 	Pool    []int // remaining copies per line (red + black)
 	PoolRed []int // remaining red copies per line; black = Pool[l] - PoolRed[l]
 	P       [2]*Player

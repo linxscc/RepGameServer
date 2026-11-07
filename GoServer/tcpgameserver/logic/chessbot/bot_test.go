@@ -322,6 +322,19 @@ func TestRedBoardFearsSmallSums(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := rules.NewMatch(tables.Chess, rand.New(rand.NewSource(1)), [2]string{"a", "b"})
+	// force red_moon onto point 4 (swap with whatever sits there)
+	redMoon, _ := tables.Chess.OmenIndex(rules.OmenRedMoon)
+	at := make([]int, len(tables.Chess.Omens)+1)
+	for pt := 1; pt < len(at); pt++ {
+		at[pt] = m.OmenByPoint(pt)
+		if at[pt] == redMoon {
+			at[pt] = m.OmenByPoint(4)
+		}
+	}
+	at[4] = redMoon
+	if err := m.SetOmenMapping(at); err != nil {
+		t.Fatal(err)
+	}
 	p := m.P[0]
 	p.Board = nil
 	for i := 0; i < 5; i++ {

@@ -1127,9 +1127,6 @@ func TestOmenTableComplete(t *testing.T) {
 			t.Fatalf("no omen at %d", pt)
 		}
 	}
-	if cfg.Omens[cfg.OmenByPoint(1)].Key != "quake" || cfg.Omens[cfg.OmenByPoint(12)].Key != "upheaval" {
-		t.Fatal("point table order")
-	}
 	for _, r := range []int{6, 11, 16, 21, 26} {
 		if !cfg.IsOmenRound(r) {
 			t.Fatalf("round %d", r)
@@ -1241,7 +1238,7 @@ func TestResolveOmenDiceSum(t *testing.T) {
 	if !r.Shifted && r.Point != r.Dice[0] {
 		t.Fatalf("point %d != dice sum %d", r.Point, r.Dice[0])
 	}
-	if r.Omen != m.cfg.OmenByPoint(r.Point) || r.Omen < 0 {
+	if r.Omen != m.OmenByPoint(r.Point) || r.Omen < 0 {
 		t.Fatalf("omen %d does not match point %d", r.Omen, r.Point)
 	}
 }
@@ -1306,8 +1303,72 @@ func TestOmenLastsSixRounds(t *testing.T) {
 	}
 }
 
+func identityOmenMapping(m *Match) []int {
+	at := make([]int, len(m.cfg.Omens)+1)
+	for pt := 1; pt < len(at); pt++ {
+		at[pt] = m.cfg.OmenByPoint(pt)
+	}
+	return at
+}
+
+func TestOmenMappingIsPermutationAndVaries(t *testing.T) {
+	cfg := loadTestConfig(t)
+	mk := func(seed int64) *Match {
+		return NewMatch(cfg, rand.New(rand.NewSource(seed)), [2]string{"a", "b"})
+	}
+	m := mk(1)
+	seen := map[int]bool{}
+	for pt := 1; pt <= cfg.MaxOmenPoint(); pt++ {
+		o := m.OmenByPoint(pt)
+		if o < 0 || o >= len(cfg.Omens) || seen[o] {
+			t.Fatalf("point %d -> %d not a permutation", pt, o)
+		}
+		seen[o] = true
+	}
+	if m.OmenByPoint(0) != -1 || m.OmenByPoint(cfg.MaxOmenPoint()+1) != -1 {
+		t.Fatal("out of range point must be -1")
+	}
+	same := true
+	for pt := 1; pt <= cfg.MaxOmenPoint(); pt++ {
+		if mk(1).OmenByPoint(pt) != mk(1).OmenByPoint(pt) {
+			t.Fatal("same seed must give same mapping")
+		}
+		if mk(2).OmenByPoint(pt) != m.OmenByPoint(pt) {
+			same = false
+		}
+	}
+	if same {
+		t.Fatal("seeds 1 and 2 gave the same mapping")
+	}
+}
+
+func TestResolveUsesMatchMapping(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	at := identityOmenMapping(m)
+	famine, _ := m.cfg.OmenIndex(OmenFamine)
+	for pt := 1; pt < len(at); pt++ {
+		if at[pt] == famine {
+			at[pt] = at[7] // swap so the mapping stays a permutation
+		}
+	}
+	at[7] = famine
+	if err := m.SetOmenMapping(at); err != nil {
+		t.Fatal(err)
+	}
+	m.resolveOmenDice([2]int{3, 4}, false)
+	if r := m.LastRoll; r.Point != 7 || r.Omen != famine || r.Shifted {
+		t.Fatalf("roll %+v, want point 7 famine", r)
+	}
+	if err := m.SetOmenMapping([]int{0, 0}); err == nil {
+		t.Fatal("bad mapping accepted")
+	}
+}
+
 func TestOmenDuplicateShiftsAndWraps(t *testing.T) {
 	m := newPrepMatch(t, 1)
+	if err := m.SetOmenMapping(identityOmenMapping(m)); err != nil {
+		t.Fatal(err)
+	}
 	forceOmen(t, m, "upheaval")
 	forceOmen(t, m, "quake")
 	m.resolveOmenDice([2]int{6, 6}, false)

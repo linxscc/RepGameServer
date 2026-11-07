@@ -112,11 +112,9 @@ func TestViewsCarryOmenFields(t *testing.T) {
 	if len(mc.GetOmens()) != 12 {
 		t.Fatalf("omens in config = %d", len(mc.GetOmens()))
 	}
-	seen := map[int32]bool{}
 	for _, o := range mc.GetOmens() {
-		if o.GetPoint() < 1 || o.GetPoint() > 12 || seen[o.GetPoint()] || o.GetKey() == "" || o.GetName() == "" || o.GetDesc() == "" {
-			t.Fatalf("bad omen info %v", o)
+		if o.GetPoint() != 0 || o.GetKey() == "" || o.GetName() == "" || o.GetDesc() == "" {
+			t.Fatalf("bad omen info %v (point must be hidden)", o)
 		}
-		seen[o.GetPoint()] = true
 	}
 }
