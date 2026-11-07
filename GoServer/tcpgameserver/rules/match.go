@@ -223,7 +223,7 @@ func (m *Match) beginPrep() {
 		p.FreeRefreshes = 0
 		p.Ready = false
 
-		income := m.Interest(p) + e.BaseIncome
+		income := m.Interest(p) + e.BaseIncome + int(m.omenSum("famine", "income", nil))
 		if v, ok := m.familyParam(p, "miser", "income_delta"); ok {
 			income += int(v)
 		}
@@ -237,6 +237,9 @@ func (m *Match) beginPrep() {
 		}
 		if v, ok := m.familyParam(p, "poor", "gold_per_loss"); ok && p.LostLast {
 			income += int(v)
+		}
+		if income < 0 {
+			income = 0
 		}
 		p.Gold += income
 
@@ -255,16 +258,18 @@ func (m *Match) beginPrep() {
 	}
 }
 
-// fitBoard moves cards that no longer fit onto the bench (or sells them if the bench is full).
+// fitBoard moves board cards beyond the slots onto the bench, then sells bench cards
+// from the right end until the bench fits (地动 shrinks it; sells refund the sell price).
 func (m *Match) fitBoard(p *Player) {
 	for len(p.Board) > m.Slots(p) {
 		c := p.Board[len(p.Board)-1]
 		p.Board = p.Board[:len(p.Board)-1]
-		if len(p.Bench) < m.cfg.Rules.Board.BenchSize {
-			p.Bench = append(p.Bench, c)
-		} else {
-			m.disposeCard(p, c)
-		}
+		p.Bench = append(p.Bench, c)
+	}
+	for len(p.Bench) > m.BenchSize(p) {
+		c := p.Bench[len(p.Bench)-1]
+		p.Bench = p.Bench[:len(p.Bench)-1]
+		m.disposeCard(p, c)
 	}
 }
 

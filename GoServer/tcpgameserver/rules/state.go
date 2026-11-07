@@ -154,6 +154,58 @@ func (m *Match) OmenActive(key string) bool {
 	return m.omenActiveIdx(i)
 }
 
+// omenSum adds a param over the active omens with this key plus any in extra
+// (omen indexes treated as active in addition, e.g. hypothetical scoring).
+func (m *Match) omenSum(key, param string, extra []int) float64 {
+	t := 0.0
+	for _, i := range m.omenList(extra) {
+		if o := m.cfg.Omens[i]; o.Key == key {
+			t += o.Params[param]
+		}
+	}
+	return t
+}
+
+// omenList is the active omens (in order of appearance) followed by extra.
+func (m *Match) omenList(extra []int) []int {
+	var out []int
+	for _, o := range m.ActiveOmens() {
+		out = append(out, o.Omen)
+	}
+	return append(out, extra...)
+}
+
+// BenchSize is the bench capacity this round (地动 shrinks it), at least 1.
+func (m *Match) BenchSize(p *Player) int {
+	n := m.cfg.Rules.Board.BenchSize + int(m.omenSum("quake", "bench", nil))
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// ShopSize is the number of shop card slots a roll deals this round (断货), at least 1.
+// A locked shop keeps its slots until the next roll.
+func (m *Match) ShopSize() int {
+	n := m.cfg.Rules.Board.ShopSize + int(m.omenSum("shortage", "shop", nil))
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// RefreshCost is what a paid shop refresh costs this round (闭市).
+func (m *Match) RefreshCost(p *Player) int {
+	n := m.cfg.Rules.Economy.RefreshCost + int(m.omenSum("market_closed", "refresh", nil))
+	if n < 0 {
+		n = 0
+	}
+	return n
+}
+
+// BondAtDelta is how much every bond tier's required count is raised this round (失和).
+func (m *Match) BondAtDelta() int { return int(m.omenSum("discord", "at", nil)) }
+
 func (m *Match) omenActiveIdx(i int) bool {
 	for _, o := range m.ActiveOmens() {
 		if o.Omen == i {
@@ -354,17 +406,18 @@ type BondCounts struct {
 	Origin []BondState
 }
 
-func activeTier(tiers []Tier, count int) int {
+func activeTier(tiers []Tier, count, delta int) int {
 	t := -1
 	for i, tr := range tiers {
-		if count >= tr.At {
+		if count >= tr.At+delta {
 			t = i
 		}
 	}
 	return t
 }
 
-func (m *Match) bondCounts(board []Card, relics []RelicInst) BondCounts {
+// bondCounts counts the board's bonds; delta raises every tier's required count (失和).
+func (m *Match) bondCounts(board []Card, relics []RelicInst, delta int) BondCounts {
 	cfg := m.cfg
 	bc := BondCounts{Trade: make([]BondState, len(cfg.Trades)), Origin: make([]BondState, len(cfg.Origins))}
 	seen := map[int]bool{}
@@ -387,10 +440,10 @@ func (m *Match) bondCounts(board []Card, relics []RelicInst) BondCounts {
 		}
 	}
 	for i := range bc.Trade {
-		bc.Trade[i].Tier = activeTier(cfg.Trades[i].Tiers, bc.Trade[i].Count)
+		bc.Trade[i].Tier = activeTier(cfg.Trades[i].Tiers, bc.Trade[i].Count, delta)
 	}
 	for i := range bc.Origin {
-		bc.Origin[i].Tier = activeTier(cfg.Origins[i].Tiers, bc.Origin[i].Count)
+		bc.Origin[i].Tier = activeTier(cfg.Origins[i].Tiers, bc.Origin[i].Count, delta)
 	}
 	return bc
 }
@@ -481,10 +534,12 @@ func (m *Match) timesModifiers(bc BondCounts) []struct {
 }
 
 // OpsBonds are the bond counts that drive economy effects: the last settled board.
-func (m *Match) OpsBonds(p *Player) BondCounts { return m.bondCounts(p.LastBoard, p.Relics) }
+func (m *Match) OpsBonds(p *Player) BondCounts {
+	return m.bondCounts(p.LastBoard, p.Relics, m.BondAtDelta())
+}
 
 // Bonds are the bond counts of the current board (what the next settlement scores).
-func (m *Match) Bonds(p *Player) BondCounts { return m.bondCounts(p.Board, p.Relics) }
+func (m *Match) Bonds(p *Player) BondCounts { return m.bondCounts(p.Board, p.Relics, m.BondAtDelta()) }
 
 // ---------- slots, interest ----------
 
@@ -496,6 +551,7 @@ func (m *Match) Slots(p *Player) int {
 	if v, ok := m.familyParam(p, "hermit", "board_slots"); ok {
 		n += int(v)
 	}
+	n += int(m.omenSum("narrow_path", "slots", nil))
 	if n < m.cfg.Rules.Board.MinSlots {
 		n = m.cfg.Rules.Board.MinSlots
 	}
@@ -511,7 +567,11 @@ func (m *Match) RelicSlots(p *Player) int {
 }
 
 // Interest is what the player's current gold would earn at the next round start.
+// 苛税 (heavy_tax) makes it 0.
 func (m *Match) Interest(p *Player) int {
+	if m.OmenActive("heavy_tax") {
+		return 0
+	}
 	e := m.cfg.Rules.Economy
 	rate, capV := 1.0, float64(e.InterestCap)
 	for _, s := range m.legendsOn(p.LastBoard) {

@@ -95,6 +95,7 @@ var relicBehaviours = map[string]relicBehaviour{
 	"behead":        {kind: kindFoeCard},
 	"color_counter": {kind: kindWhole, params: []string{"mult"}},
 	"usurp":         {kind: kindWhole, params: []string{"mult"}},
+	"defy_heaven":   {kind: kindWhole, params: []string{"factor"}, times: true},
 	"mirror":        {kind: kindCopy},
 	"rubbing":       {kind: kindCopy},
 }

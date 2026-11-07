@@ -18,8 +18,8 @@ func TestEmbeddedTablesLoadAndValidate(t *testing.T) {
 	if got := tables.Messages.Text(MsgUnsupportedRequest, "foo"); !strings.Contains(got, "foo") {
 		t.Fatalf("formatting failed: %q", got)
 	}
-	if tables.Chess == nil || len(tables.Chess.Lines) != 12 || len(tables.Chess.Relics) != 44 {
-		t.Fatal("chess tables should load: 12 lines, 44 relics")
+	if tables.Chess == nil || len(tables.Chess.Lines) != 12 || len(tables.Chess.Relics) != 45 {
+		t.Fatal("chess tables should load: 12 lines, 45 relics")
 	}
 }
 

@@ -149,7 +149,7 @@ func (m *Match) randomRelicFiltered(p *Player, odds []int, exclude map[int]bool,
 
 func (m *Match) rollShop(p *Player) {
 	m.returnShop(p)
-	p.Shop = make([]int, m.cfg.Rules.Board.ShopSize)
+	p.Shop = make([]int, m.ShopSize())
 	p.ShopColor = make([]Color, len(p.Shop))
 	for i := range p.Shop {
 		p.Shop[i], p.ShopColor[i] = m.drawShopCard(p)
@@ -175,7 +175,7 @@ func (m *Match) Refresh(p *Player) error {
 	if m.FreeRefreshesLeft(p) > 0 {
 		p.FreeRefreshes++
 	} else {
-		cost := m.cfg.Rules.Economy.RefreshCost
+		cost := m.RefreshCost(p)
 		if p.Gold < cost {
 			return ErrNotEnoughGold
 		}
@@ -234,7 +234,7 @@ func (m *Match) CanBuyCard(p *Player, i int) error {
 	if p.Gold < m.cfg.Lines[l].Cost {
 		return ErrNotEnoughGold
 	}
-	if len(p.Bench) < m.cfg.Rules.Board.BenchSize {
+	if len(p.Bench) < m.BenchSize(p) {
 		return nil
 	}
 	if m.copiesForMerge(p, l, 1, p.ShopColor[i]) >= m.cfg.Rules.Merge.GroupSize-1 {
@@ -529,7 +529,7 @@ func (m *Match) Arrange(p *Player, boardUIDs []string, relicOrder []int) error {
 			bench = append(bench, c)
 		}
 	}
-	if len(bench) > m.cfg.Rules.Board.BenchSize {
+	if len(bench) > m.BenchSize(p) {
 		return ErrBadLayout
 	}
 	newRelics := p.Relics

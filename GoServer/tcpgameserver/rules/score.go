@@ -112,8 +112,8 @@ func (m *Match) ScoreWith(p *Player, board, bench []Card, relics []RelicInst) Sc
 	return m.ScoreVs(p, board, bench, relics, Foe{o.LastBoard, o.Relics}, nil)
 }
 
-// ScoreVs scores a layout against the given foe. extraOmens are omens to treat as
-// active in addition to the match's (used by Task 14; nil for now).
+// ScoreVs scores a layout against the given foe. extraOmens are omen indexes to treat
+// as active in addition to the match's (hypothetical scoring); they are not stored.
 func (m *Match) ScoreVs(p *Player, board, bench []Card, relics []RelicInst, foe Foe, extraOmens []int) ScoreResult {
 	s := &scorer{r: ScoreResult{Mult: 1}}
 	if len(board) == 0 {
@@ -123,7 +123,21 @@ func (m *Match) ScoreVs(p *Player, board, bench []Card, relics []RelicInst, foe 
 	cfg := m.cfg
 	eff := m.effective(relics)
 	foeEff := m.effective(foe.Relics)
-	bc := m.bondCounts(board, relics)
+	// active omens in order of appearance, then extras; 失和 counts extras too
+	omens := m.omenList(extraOmens)
+	bc := m.bondCounts(board, relics, int(m.omenSum("discord", "at", extraOmens)))
+
+	// 天地异变: the suits with the most cards on this board (at least 2; ties all count)
+	var boardSuits [4]int
+	for _, c := range board {
+		boardSuits[m.SuitOf(c)]++
+	}
+	topSuit := 2
+	for _, n := range boardSuits {
+		if n > topSuit {
+			topSuit = n
+		}
+	}
 
 	// extra triggers on the leftmost relic slots
 	times := make([]int, len(eff))
@@ -150,7 +164,7 @@ func (m *Match) ScoreVs(p *Player, board, bench []Card, relics []RelicInst, foe 
 	//   a. the card's own points
 	//   b. own per-card factor relics (kindFactor: 神龛)
 	//   c. foe per-card counters (kindFoeCard: 照妖镜、破神符), foe relic order, once
-	//   d. [active omen factors, in order of appearance]                    (Task 14)
+	//   d. active omen factors (and extraOmens), in order of appearance
 	//   e. foe 斩首 when idx == 0
 	//   f. other per-card relics (kindPerCard), in relic-bar order
 	// cardPts is the card's current points; a factor step adds (f−1)×cardPts and then
@@ -199,7 +213,28 @@ func (m *Match) ScoreVs(p *Player, board, bench []Card, relics []RelicInst, foe 
 		}
 		s.origin = OriginOwn
 
-		// d. [active omen factors, in order of appearance]  (Task 14)
+		// d. active omen factors, in order of appearance; once per settlement
+		s.origin = OriginOmen
+		for _, oi := range omens {
+			o := cfg.Omens[oi]
+			hit := false
+			switch o.Key {
+			case "solar_eclipse":
+				hit = m.IsGod(c)
+			case "ghost_rout":
+				hit = !m.IsGod(c)
+			case "red_moon":
+				hit = c.Color == Red
+			case "ink_rain":
+				hit = c.Color == Black
+			case "upheaval":
+				hit = boardSuits[m.SuitOf(c)] >= topSuit
+			}
+			if hit {
+				factor(o.Name, -1, o.Params["factor"])
+			}
+		}
+		s.origin = OriginOwn
 
 		// e. foe 斩首 on the leftmost card
 		if idx == 0 {
@@ -443,6 +478,10 @@ func (m *Match) ScoreVs(p *Player, board, bench []Card, relics []RelicInst, foe 
 				}
 			case "usurp":
 				s.add(5, name, "", r.slot, StepAddMult, param(r, "mult")*float64(foeSuitRelics))
+			case "defy_heaven":
+				for range omens {
+					s.add(5, name, "", r.slot, StepTimesMult, param(r, "factor"))
+				}
 			}
 		})
 	}

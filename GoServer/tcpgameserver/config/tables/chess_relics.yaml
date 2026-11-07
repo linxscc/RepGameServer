@@ -54,3 +54,4 @@ relics:
   - { key: color_counter, name: 克色,    category: counter, rarity: common, desc: 对手出阵中较多的那种颜色，自己该颜色的出阵卡每张 +4 气势, params: { mult: 4 } }
   - { key: behead,       name: 斩首,     category: counter, rarity: epic,  desc: 对手最左边那张卡在逐卡阶段战力归零,               params: {} }
   - { key: usurp,        name: 反客为主, category: counter, rarity: common, desc: 对手每有一个花色法宝，+5 气势,                   params: { mult: 5 } }
+  - { key: defy_heaven,  name: 逆天,     category: tactic, rarity: epic,   desc: 每有一条生效中的天象，气势 ×1.5,                    params: { factor: 1.5 } }

@@ -179,7 +179,7 @@ func TestThreeStarSkills(t *testing.T) {
 	if d := m.damageTo(p, 9); d != 7 {
 		t.Fatalf("医圣 damage = %d, want 7", d)
 	}
-	bc := m.bondCounts([]Card{card(m, t, "farmer", 3), card(m, t, "monk", 1), card(m, t, "soldier", 1)}, nil)
+	bc := m.bondCounts([]Card{card(m, t, "farmer", 3), card(m, t, "monk", 1), card(m, t, "soldier", 1)}, nil, 0)
 	if bc.Origin[m.cfg.originIdx["rural"]].Count != 4 {
 		t.Fatalf("神农 rural count = %d, want 4", bc.Origin[m.cfg.originIdx["rural"]].Count)
 	}
@@ -1461,5 +1461,229 @@ func TestPreviewUsesOpponentLastBoard(t *testing.T) {
 	// bots arrange against the same view as the preview
 	if st := stepsBy(m.ScoreWith(p, p.Board, p.Bench, p.Relics), "克色"); len(st) != 1 {
 		t.Fatalf("ScoreWith 克色 steps %+v", st)
+	}
+}
+
+// ---------- omen effects (Task 14) ----------
+
+// ownCard builds a 1★ card of the given color and takes its copy out of the pool.
+func ownCard(m *Match, t *testing.T, key string, c Color) Card {
+	cd := coloredCard(m, t, key, 1, c)
+	takeFromPool(m, cd.Line, c)
+	return cd
+}
+
+func omenSteps(r ScoreResult, name string) []Step {
+	var out []Step
+	for _, s := range stepsBy(r, name) {
+		if s.Origin == OriginOmen {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
+
+func TestQuakeSellsBenchOverflow(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	keys := []string{"carpenter", "smith", "farmer", "taoist", "monk", "scholar", "doctor", "artist"}
+	for _, k := range keys {
+		p.Bench = append(p.Bench, ownCard(m, t, k, Red))
+	}
+	if len(p.Bench) != 8 || !m.CheckPool() {
+		t.Fatal("setup")
+	}
+	g := p.Gold
+	sold := []Card{p.Bench[6], p.Bench[7]}
+	kept := append([]Card{}, p.Bench[:6]...)
+	forceOmen(t, m, "quake")
+	if m.BenchSize(p) != 6 {
+		t.Fatalf("bench size %d, want 6", m.BenchSize(p))
+	}
+	m.fitBoard(p)
+	if len(p.Bench) != 6 {
+		t.Fatalf("bench %d, want 6", len(p.Bench))
+	}
+	if want := g + m.SellPrice(sold[0]) + m.SellPrice(sold[1]); p.Gold != want {
+		t.Fatalf("gold %d, want %d", p.Gold, want)
+	}
+	if !reflect.DeepEqual(p.Bench, kept) {
+		t.Fatalf("the two rightmost cards must be sold: bench %+v", p.Bench)
+	}
+	if !m.CheckPool() {
+		t.Fatal("pool not conserved")
+	}
+}
+
+func TestEclipseHalvesGods(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	forceOmen(t, m, "solar_eclipse")
+	clerk, soldier := coloredCard(m, t, "clerk", 1, Red), coloredCard(m, t, "soldier", 1, Red)
+	res := m.ScoreWith(p, []Card{clerk, soldier}, nil, nil)
+	st := stepsBy(res, "天狗食日")
+	if len(st) != 1 || st[0].Origin != OriginOmen || st[0].Relic != -1 || st[0].Kind != StepPoints || st[0].Phase != 1 ||
+		st[0].CardUID != clerk.UID || !near(st[0].Value, -0.6*float64(m.Points(clerk))) {
+		t.Fatalf("天狗食日 steps %+v", st)
+	}
+}
+
+func TestColorOmens(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	red, black := coloredCard(m, t, "clerk", 1, Red), coloredCard(m, t, "soldier", 1, Black)
+	forceOmen(t, m, "red_moon")
+	st := omenSteps(m.ScoreWith(p, []Card{red, black}, nil, nil), "赤月")
+	if len(st) != 1 || st[0].CardUID != red.UID || !near(st[0].Value, -0.4*float64(m.Points(red))) {
+		t.Fatalf("赤月 steps %+v", st)
+	}
+	m.Omens = nil
+	forceOmen(t, m, "ink_rain")
+	st = omenSteps(m.ScoreWith(p, []Card{red, black}, nil, nil), "墨雨")
+	if len(st) != 1 || st[0].CardUID != black.UID || !near(st[0].Value, -0.4*float64(m.Points(black))) {
+		t.Fatalf("墨雨 steps %+v", st)
+	}
+}
+
+func TestUpheavalHitsMajoritySuit(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	forceOmen(t, m, "upheaval")
+	board := suitBoard(m, t, "clerk", "r", "smith", "r", "soldier", "b")
+	st := omenSteps(m.ScoreWith(p, board, nil, nil), "天地异变")
+	if len(st) != 2 || st[0].CardUID != board[0].UID || st[1].CardUID != board[1].UID ||
+		!near(st[0].Value, -0.5*float64(m.Points(board[0]))) {
+		t.Fatalf("天地异变 steps %+v", st)
+	}
+	board = suitBoard(m, t, "clerk", "r", "soldier", "b")
+	if st := omenSteps(m.ScoreWith(p, board, nil, nil), "天地异变"); len(st) != 0 {
+		t.Fatalf("no suit has 2 cards: %+v", st)
+	}
+}
+
+func TestFamineAndHeavyTax(t *testing.T) {
+	var gain [2]int
+	for i := range gain {
+		m := newPrepMatch(t, 7)
+		p := m.P[0]
+		for _, q := range m.P {
+			q.Gold = 30
+		}
+		if i == 1 {
+			forceOmen(t, m, "famine")
+		}
+		advance(t, m)
+		if m.Phase != PhasePrep {
+			t.Fatalf("phase %d", m.Phase)
+		}
+		gain[i] = p.Gold - 30
+	}
+	if gain[0]-gain[1] != 2 {
+		t.Fatalf("famine gains %v, want a difference of 2", gain)
+	}
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Gold = 50
+	if m.Interest(p) == 0 {
+		t.Fatal("interest expected without heavy_tax")
+	}
+	forceOmen(t, m, "heavy_tax")
+	if m.Interest(p) != 0 {
+		t.Fatalf("heavy_tax interest %d", m.Interest(p))
+	}
+}
+
+func TestMarketClosedAndShortage(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Gold = 10
+	forceOmen(t, m, "market_closed")
+	if m.RefreshCost(p) != 3 {
+		t.Fatalf("refresh cost %d", m.RefreshCost(p))
+	}
+	if err := m.Refresh(p); err != nil || p.Gold != 7 {
+		t.Fatalf("refresh: %v gold %d", err, p.Gold)
+	}
+	m.Omens = nil
+	forceOmen(t, m, "shortage")
+	if err := m.Refresh(p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Shop) != 4 || m.ShopSize() != 4 {
+		t.Fatalf("shop %d size %d, want 4", len(p.Shop), m.ShopSize())
+	}
+	if !m.CheckPool() {
+		t.Fatal("pool not conserved")
+	}
+}
+
+func TestNarrowPathFitsBoard(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Level = 3
+	if m.Slots(p) != 5 {
+		t.Fatalf("slots %d, want 5", m.Slots(p))
+	}
+	for _, k := range []string{"carpenter", "smith", "farmer", "taoist", "monk"} {
+		p.Board = append(p.Board, ownCard(m, t, k, Red))
+	}
+	forceOmen(t, m, "narrow_path")
+	m.fitBoard(p)
+	if len(p.Board) != 4 || len(p.Bench) != 1 || m.Slots(p) != 4 {
+		t.Fatalf("board %d bench %d slots %d", len(p.Board), len(p.Bench), m.Slots(p))
+	}
+	if !m.CheckPool() {
+		t.Fatal("pool not conserved")
+	}
+}
+
+func TestDiscordRaisesThresholds(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	p.Board = []Card{card(m, t, "carpenter", 1), card(m, t, "smith", 1)}
+	craft := m.cfg.tradeIdx["craft"]
+	if tier := m.Bonds(p).Trade[craft].Tier; tier != 0 {
+		t.Fatalf("craft tier %d, want 0", tier)
+	}
+	forceOmen(t, m, "discord")
+	if tier := m.Bonds(p).Trade[craft].Tier; tier != -1 {
+		t.Fatalf("craft tier under discord %d, want -1", tier)
+	}
+	if m.BondAtDelta() != 1 {
+		t.Fatalf("delta %d", m.BondAtDelta())
+	}
+}
+
+func TestDefyHeaven(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	forceOmen(t, m, "famine")
+	forceOmen(t, m, "heavy_tax")
+	res := m.ScoreWith(p, []Card{card(m, t, "clerk", 1)}, nil, []RelicInst{relic(t, m, "defy_heaven", 0)})
+	st := stepsBy(res, "逆天")
+	if len(st) != 2 {
+		t.Fatalf("逆天 steps %+v", st)
+	}
+	for _, s := range st {
+		if s.Kind != StepTimesMult || s.Value != 1.5 || s.Phase != 5 || s.Origin != OriginOwn {
+			t.Fatalf("逆天 step %+v", s)
+		}
+	}
+}
+
+func TestExtraOmensDoNotPersist(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	rm, _ := m.cfg.OmenIndex("red_moon")
+	red := coloredCard(m, t, "clerk", 1, Red)
+	o := m.Opponent(p)
+	res := m.ScoreVs(p, []Card{red}, nil, nil, Foe{o.LastBoard, o.Relics}, []int{rm})
+	if st := omenSteps(res, "赤月"); len(st) != 1 {
+		t.Fatalf("赤月 steps from extraOmens %+v", st)
+	}
+	if n := len(m.ActiveOmens()); n != 0 {
+		t.Fatalf("active omens %d after ScoreVs", n)
 	}
 }
