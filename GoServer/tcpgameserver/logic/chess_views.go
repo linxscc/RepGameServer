@@ -62,6 +62,9 @@ func matchConfigMessage(roomID string, m *rules.Match) *pb.ServerMessage {
 	for _, f := range cfg.Families {
 		msg.Families = append(msg.Families, &pb.FamilyInfo{Key: f.Key, Name: f.Name, Desc: f.Desc})
 	}
+	for _, o := range cfg.Omens {
+		msg.Omens = append(msg.Omens, &pb.OmenInfo{Key: o.Key, Name: o.Name, Aspect: o.Aspect, Desc: o.Desc, Point: int32(o.Point)})
+	}
 	return &pb.ServerMessage{Body: &pb.ServerMessage_MatchConfig{MatchConfig: msg}}
 }
 
@@ -97,11 +100,12 @@ func relicSlots(m *rules.Match, relics []rules.RelicInst) []*pb.RelicSlot {
 
 func bondCounts(m *rules.Match, bc rules.BondCounts) (trades, origins []*pb.BondCount) {
 	cfg := m.Config()
+	delta := int32(m.BondAtDelta())
 	for i, s := range bc.Trade {
-		trades = append(trades, &pb.BondCount{Key: cfg.Trades[i].Key, Count: int32(s.Count), Tier: int32(s.Tier)})
+		trades = append(trades, &pb.BondCount{Key: cfg.Trades[i].Key, Count: int32(s.Count), Tier: int32(s.Tier), AtDelta: delta})
 	}
 	for i, s := range bc.Origin {
-		origins = append(origins, &pb.BondCount{Key: cfg.Origins[i].Key, Count: int32(s.Count), Tier: int32(s.Tier)})
+		origins = append(origins, &pb.BondCount{Key: cfg.Origins[i].Key, Count: int32(s.Count), Tier: int32(s.Tier), AtDelta: delta})
 	}
 	return
 }
@@ -143,7 +147,8 @@ func selfView(m *rules.Match, p *rules.Player) *pb.SelfView {
 		Board: chessCards(m, p.Board), Bench: chessCards(m, p.Bench), Relics: relicSlots(m, p.Relics),
 		ShopLocked: p.Locked, FreeRefreshes: int32(m.FreeRefreshesLeft(p)), Interest: int32(m.Interest(p)),
 		Family: int32(p.Family), WinStreak: int32(p.WinStreak), LossStreak: int32(p.LossStreak), Ready: p.Ready,
-		Preview: scoreBreakdown(m.Preview(p)),
+		Preview:   scoreBreakdown(m.Preview(p)),
+		BenchSize: int32(m.BenchSize(p)), RefreshCost: int32(m.RefreshCost(p)),
 	}
 	for i, l := range p.Shop {
 		if l < 0 {
@@ -194,6 +199,8 @@ func matchStateMessage(cr *chessRoom, seat int, replyTo uint32) *pb.ServerMessag
 			st.VaultOffer = append(st.VaultOffer, m.Config().Relics[id].Key)
 		}
 	}
+	st.Omens = activeOmenViews(m, round)
+	st.OmenRoll = omenRollView(cr, seat, round)
 	return &pb.ServerMessage{ReplyTo: replyTo, Body: &pb.ServerMessage_MatchState{MatchState: st}}
 }
 
@@ -234,4 +241,40 @@ func matchOverMessage(cr *chessRoom, seat int) *pb.ServerMessage {
 		RoomId: cr.roomID, Result: result, Rounds: int32(m.Round), Hp: int32(m.P[seat].HP), OpponentHp: int32(m.P[1-seat].HP),
 		Surrendered: m.Surrendered,
 	}}}
+}
+
+// activeOmenViews lists the omens in effect in the shown round (during SETTLE the engine
+// has already opened the next round, so this follows the shown round, not m.Round).
+func activeOmenViews(m *rules.Match, round int) []*pb.ActiveOmenView {
+	var out []*pb.ActiveOmenView
+	for _, o := range m.Omens {
+		if o.From <= round && round <= o.Until {
+			out = append(out, &pb.ActiveOmenView{Key: m.Config().Omens[o.Omen].Key, RoundsLeft: int32(o.Until - round + 1), FromRound: int32(o.From)})
+		}
+	}
+	return out
+}
+
+// omenRollView: during the OMEN phase only who has decided (never what, never dice);
+// once the shown round's omen is revealed, the full result. Nil when neither applies.
+func omenRollView(cr *chessRoom, seat, round int) *pb.OmenRollView {
+	m := cr.match
+	if cr.phase == pb.MatchPhase_MATCH_PHASE_OMEN {
+		return &pb.OmenRollView{
+			Round:          int32(m.Round),
+			SelfChosen:     m.P[seat].OmenChoice != rules.OmenUndecided,
+			OpponentChosen: m.P[1-seat].OmenChoice != rules.OmenUndecided,
+		}
+	}
+	r := m.LastRoll
+	if r.Round == 0 || r.Round != round || r.Omen < 0 {
+		return nil
+	}
+	self, opp := r.Dice[seat], r.Dice[1-seat]
+	return &pb.OmenRollView{
+		Round: int32(r.Round), SelfDie: int32(self), OpponentDie: int32(opp), Forced: r.Forced,
+		Total: int32(self + opp), OmenKey: m.Config().Omens[r.Omen].Key, Shifted: r.Shifted, Point: int32(r.Point),
+		// after the reveal, "chosen" means the seat chose to roll (a forced roll was nobody's choice)
+		SelfChosen: !r.Forced && self > 0, OpponentChosen: !r.Forced && opp > 0,
+	}
 }

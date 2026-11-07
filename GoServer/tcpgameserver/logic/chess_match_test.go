@@ -309,3 +309,138 @@ func TestSettleDoneEndsPauseEarly(t *testing.T) {
 		t.Fatal("late ack must not change the phase")
 	}
 }
+
+func rollOmen(roll bool) *pb.GameAction {
+	return &pb.GameAction{Action: &pb.GameAction_RollOmen{RollOmen: &pb.RollOmen{Roll: roll}}}
+}
+
+// reachOmen plays a human-vs-bot match into the round-6 omen phase. With noBot the bot
+// seat is emptied first, so it never acts (it still never blocks a phase).
+func reachOmen(t *testing.T, room *types.RoomInfo, human, clientID string, noBot bool) *chessRoom {
+	t.Helper()
+	act(human, clientID, 1, pickFamily(0))
+	_ = withRoom(room.RoomID, func(*types.RoomInfo) error {
+		cr := getChessRoom(room.RoomID)
+		if noBot {
+			cr.bots[1] = nil
+		}
+		cr.match.Round = 5 // the next round is the first omen round
+		for _, p := range cr.match.P {
+			p.HP = 100000
+		}
+		return nil
+	})
+	seq := uint32(10)
+	for i := 0; i < 20; i++ {
+		cr := getChessRoom(room.RoomID)
+		switch cr.phase {
+		case pb.MatchPhase_MATCH_PHASE_OMEN:
+			return cr
+		case pb.MatchPhase_MATCH_PHASE_PREP:
+			seq++
+			act(human, clientID, seq, ready())
+		default:
+			forceAdvance(t, room.RoomID)
+		}
+	}
+	t.Fatal("never reached the omen phase")
+	return nil
+}
+
+func TestOmenPhaseFlow(t *testing.T) {
+	room, fc := newChessTestRoom(t, "omar", "c-omar")
+	reachOmen(t, room, "omar", "c-omar", false)
+	st := fc.last(t)
+	if st.GetPhase() != pb.MatchPhase_MATCH_PHASE_OMEN || st.GetRound() != 6 || st.GetPhaseDeadlineMs() == 0 {
+		t.Fatalf("expected round 6 omen, got %v round %d", st.GetPhase(), st.GetRound())
+	}
+	if !st.GetOpponent().GetReady() || !st.GetOmenRoll().GetOpponentChosen() {
+		t.Fatalf("bot must decide at once: %v", st.GetOmenRoll())
+	}
+	act("omar", "c-omar", 50, rollOmen(true))
+	fc.waitFor(t, "reply 50", func(m *pb.ServerMessage) bool { return m.GetReplyTo() == 50 })
+	st = fc.last(t)
+	if st.GetPhase() != pb.MatchPhase_MATCH_PHASE_PREP || st.GetRound() != 6 {
+		t.Fatalf("expected round 6 prep, got %v round %d", st.GetPhase(), st.GetRound())
+	}
+	r := st.GetOmenRoll()
+	if r.GetRound() != 6 || r.GetSelfDie() < 1 || r.GetSelfDie() > 6 || r.GetOmenKey() == "" || !r.GetSelfChosen() {
+		t.Fatalf("bad omen roll %v", r)
+	}
+	if r.GetTotal() != r.GetSelfDie()+r.GetOpponentDie() || r.GetPoint() < 1 || r.GetPoint() > 12 {
+		t.Fatalf("bad omen totals %v", r)
+	}
+	if len(st.GetOmens()) != 1 || st.GetOmens()[0].GetRoundsLeft() != 6 || st.GetOmens()[0].GetFromRound() != 6 || st.GetOmens()[0].GetKey() != r.GetOmenKey() {
+		t.Fatalf("bad active omens %v", st.GetOmens())
+	}
+	timers := getChessRoom(room.RoomID).match.Config().Rules.Timers
+	left := time.Until(time.UnixMilli(st.GetPhaseDeadlineMs()))
+	if left < phaseSeconds(timers.PrepSeconds+timers.OmenRevealSeconds)-2*time.Second {
+		t.Fatalf("omen-round prep must get the reveal bonus, %v left", left)
+	}
+}
+
+// Nobody acts: the timer expires, both skip, the system rolls for both; a resend shows the same roll.
+func TestOmenTimeoutBothSkipForcedRoll(t *testing.T) {
+	room, fc := newChessTestRoom(t, "olga", "c-olga")
+	cr := reachOmen(t, room, "olga", "c-olga", true)
+	if cr.match.P[1].Ready {
+		t.Fatal("the emptied bot seat must not have decided")
+	}
+	forceAdvance(t, room.RoomID)
+	st := fc.last(t)
+	if st.GetPhase() != pb.MatchPhase_MATCH_PHASE_PREP {
+		t.Fatalf("expected prep after the omen timeout, got %v", st.GetPhase())
+	}
+	r := st.GetOmenRoll()
+	if !r.GetForced() || r.GetSelfDie() < 1 || r.GetSelfDie() > 6 || r.GetOpponentDie() < 1 || r.GetOpponentDie() > 6 {
+		t.Fatalf("expected a forced roll for both, got %v", r)
+	}
+	if r.GetSelfChosen() || r.GetOpponentChosen() || r.GetRound() != 6 || r.GetOmenKey() == "" {
+		t.Fatalf("bad forced roll %v", r)
+	}
+	fc.mu.Lock()
+	fc.msgs = nil
+	fc.mu.Unlock()
+	_ = withRoom(room.RoomID, func(*types.RoomInfo) error {
+		if !chessResend(room.RoomID, "olga") {
+			t.Error("resend failed")
+		}
+		return nil
+	})
+	re := fc.waitFor(t, "resent state", func(m *pb.ServerMessage) bool { return m.GetMatchState() != nil }).GetMatchState()
+	if !proto.Equal(re.GetOmenRoll(), r) || len(re.GetOmens()) != 1 {
+		t.Fatalf("resent omen roll %v, want %v", re.GetOmenRoll(), r)
+	}
+}
+
+// During the phase the opponent's decision is visible only as "chosen"; no dice leak.
+func TestOmenChoiceHiddenDuringPhase(t *testing.T) {
+	room, _ := newChessTestRoom(t, "otto", "c-otto")
+	reachOmen(t, room, "otto", "c-otto", true)
+	var r *pb.OmenRollView
+	_ = withRoom(room.RoomID, func(*types.RoomInfo) error {
+		cr := getChessRoom(room.RoomID)
+		if err := cr.match.ChooseOmen(cr.match.P[1], true); err != nil {
+			t.Error(err)
+		}
+		r = matchStateMessage(cr, 0, 0).GetMatchState().GetOmenRoll()
+		return nil
+	})
+	if r.GetRound() != 6 || !r.GetOpponentChosen() || r.GetSelfChosen() {
+		t.Fatalf("chosen flags %v", r)
+	}
+	if r.GetOpponentDie() != 0 || r.GetSelfDie() != 0 || r.GetTotal() != 0 || r.GetOmenKey() != "" || r.GetForced() || r.GetPoint() != 0 {
+		t.Fatalf("omen result leaked during the phase: %v", r)
+	}
+}
+
+func TestRollOmenOutsidePhaseRejected(t *testing.T) {
+	_, fc := newChessTestRoom(t, "opal", "c-opal")
+	act("opal", "c-opal", 1, pickFamily(0))
+	act("opal", "c-opal", 2, rollOmen(true))
+	e := fc.waitFor(t, "reply 2", func(m *pb.ServerMessage) bool { return m.GetReplyTo() == 2 }).GetError()
+	if e.GetCode() != pb.ErrorCode_ERROR_CODE_INVALID_GAME_STATE {
+		t.Fatalf("want INVALID_GAME_STATE, got %v", e)
+	}
+}

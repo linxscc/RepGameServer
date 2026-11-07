@@ -161,7 +161,7 @@ func (cr *chessRoom) advanceIfReady() {
 				cr.advance(room)
 			}
 		}
-	case pb.MatchPhase_MATCH_PHASE_FAMILY, pb.MatchPhase_MATCH_PHASE_PREP, pb.MatchPhase_MATCH_PHASE_VAULT:
+	case pb.MatchPhase_MATCH_PHASE_FAMILY, pb.MatchPhase_MATCH_PHASE_OMEN, pb.MatchPhase_MATCH_PHASE_PREP, pb.MatchPhase_MATCH_PHASE_VAULT:
 		if cr.allReady() {
 			if room, err := service.GetRoomManager().GetRoom(cr.roomID); err == nil {
 				cr.advance(room)
@@ -181,6 +181,13 @@ func (cr *chessRoom) advance(room *types.RoomInfo) {
 			return
 		}
 		cr.enterRound()
+	case pb.MatchPhase_MATCH_PHASE_OMEN:
+		// undecided seats count as skipping; if both skip the engine rolls for both
+		if err := m.ResolveOmen(); err != nil {
+			log.Printf("room %s: resolve omen: %v", cr.roomID, err)
+			return
+		}
+		cr.enterPrep()
 	case pb.MatchPhase_MATCH_PHASE_PREP:
 		res, err := m.Settle()
 		if err != nil {
@@ -216,18 +223,37 @@ func (cr *chessRoom) advance(room *types.RoomInfo) {
 	}
 }
 
-// enterRound starts the round the engine just opened.
-// TEMPORARY: the omen phase is resolved at once (no rolls) until the omen phase is wired up.
+// enterRound starts the round the engine just opened: the omen phase on omen rounds, else prep.
 func (cr *chessRoom) enterRound() {
 	if cr.match.Phase == rules.PhaseOmen {
-		_ = cr.match.ResolveOmen()
+		cr.enterOmen()
+		return
 	}
 	cr.enterPrep()
 }
 
+// enterOmen runs the secret roll/skip phase; a timeout counts as skipping.
+func (cr *chessRoom) enterOmen() {
+	cr.phase = pb.MatchPhase_MATCH_PHASE_OMEN
+	cr.schedule(phaseSeconds(cr.match.Config().Rules.Timers.OmenSeconds))
+	for seat, b := range cr.bots {
+		if b != nil {
+			// TODO(Task 16): ask the bot (chessbot omen decision); until then bots always skip.
+			_ = cr.match.ChooseOmen(cr.match.P[seat], false)
+		}
+	}
+	cr.broadcast()
+	cr.advanceIfReady()
+}
+
 func (cr *chessRoom) enterPrep() {
 	cr.phase = pb.MatchPhase_MATCH_PHASE_PREP
-	cr.schedule(phaseSeconds(cr.match.Config().Rules.Timers.PrepSeconds))
+	t := cr.match.Config().Rules.Timers
+	secs := t.PrepSeconds
+	if cr.match.LastRoll.Round == cr.match.Round {
+		secs += t.OmenRevealSeconds // omen round: time for the reveal animation
+	}
+	cr.schedule(phaseSeconds(secs))
 	for seat, b := range cr.bots {
 		if b != nil {
 			b.Prep(cr.match, cr.match.P[seat])
@@ -337,8 +363,10 @@ func (cr *chessRoom) apply(seat int, a *pb.GameAction) error {
 	case *pb.GameAction_SetReady:
 		allowed[pb.MatchPhase_MATCH_PHASE_FAMILY] = true
 		allowed[pb.MatchPhase_MATCH_PHASE_PREP] = true
+	case *pb.GameAction_RollOmen:
+		allowed[pb.MatchPhase_MATCH_PHASE_OMEN] = true
 	case *pb.GameAction_Surrender:
-		for _, ph := range []pb.MatchPhase{pb.MatchPhase_MATCH_PHASE_FAMILY, pb.MatchPhase_MATCH_PHASE_PREP,
+		for _, ph := range []pb.MatchPhase{pb.MatchPhase_MATCH_PHASE_FAMILY, pb.MatchPhase_MATCH_PHASE_OMEN, pb.MatchPhase_MATCH_PHASE_PREP,
 			pb.MatchPhase_MATCH_PHASE_SETTLE, pb.MatchPhase_MATCH_PHASE_VAULT} {
 			allowed[ph] = true
 		}
@@ -385,6 +413,8 @@ func (cr *chessRoom) apply(seat int, a *pb.GameAction) error {
 		return m.PickVault(p, int(pv.GetOfferIndex()), int(pv.GetSellRelicSlot()), int(pv.GetTradeChoice()))
 	case *pb.GameAction_SkipVault:
 		return m.SkipVault(p)
+	case *pb.GameAction_RollOmen:
+		return m.ChooseOmen(p, act.RollOmen.GetRoll())
 	case *pb.GameAction_Surrender:
 		return m.Surrender(p)
 	}

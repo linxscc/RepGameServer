@@ -187,8 +187,12 @@ message GameAction {
     SkipVault skip_vault = 12;
     Surrender surrender = 13;
     SettleDone settle_done = 14;
+    RollOmen roll_omen = 15;
   }
 }
+
+// 天象阶段：掷（true）或不掷（false）。只能在 OMEN 阶段发一次；超时视为不掷。
+message RollOmen { bool roll = 1; }
 
 // 结算过场（含伤害动画）播放完毕；双方都发出后立即进入下一阶段，不必等结算倒计时。
 message SettleDone {}
@@ -290,6 +294,15 @@ message MatchConfig {
   int32 max_level = 12;
   int32 start_hp = 13;          // 初始血量（血条上限）
   double bond_tier_mult = 14;   // 每个生效羁绊档位的通用倍率加成
+  repeated OmenInfo omens = 15; // 天象表（按 point 查）
+}
+
+message OmenInfo {
+  string key = 1;
+  string name = 2;
+  string aspect = 3;   // 影响方面（阵容 / 神鬼 / 花色 / 经济 …）
+  string desc = 4;
+  int32 point = 5;     // 两颗骰子点数之和对应的点数
 }
 
 // ---------- 动态状态 ----------
@@ -301,6 +314,7 @@ enum MatchPhase {
   MATCH_PHASE_SETTLE = 3;    // 结算演出中（不能操作）
   MATCH_PHASE_VAULT = 4;     // 宝库
   MATCH_PHASE_OVER = 5;
+  MATCH_PHASE_OMEN = 6;      // 天象掷骰（天象回合开始时，准备阶段之前）
 }
 
 message ChessCard {
@@ -332,6 +346,7 @@ message BondCount {
   string key = 1;
   int32 count = 2;
   int32 tier = 3;   // -1 = 未生效，否则为 tiers 下标
+  int32 at_delta = 4; // 本回合各档位所需数量的增加量（失和）；实际要求 = TierInfo.at + at_delta
 }
 
 enum ScoreStepKind {
@@ -391,6 +406,8 @@ message SelfView {
   repeated BondCount trade_bonds = 20;
   repeated BondCount origin_bonds = 21;
   ScoreBreakdown preview = 22;  // 服务器算好的预计得分
+  int32 bench_size = 23;        // 本回合备战席格数（含天象修正）
+  int32 refresh_cost = 24;      // 本回合刷新费用（含天象修正）
 }
 
 message OpponentView {
@@ -417,6 +434,29 @@ message MatchState {
   OpponentView opponent = 7;
   repeated int32 family_offer = 8; // 家世阶段可选项（MatchConfig.families 下标）
   repeated string vault_offer = 9; // 宝库可选法宝 key
+  repeated ActiveOmenView omens = 10; // 本回合生效中的天象（按出现顺序）
+  OmenRollView omen_roll = 11;        // 最近一次天象掷骰；无则为空
+}
+
+message ActiveOmenView {
+  string key = 1;
+  int32 rounds_left = 2;   // 含本回合的剩余回合数
+  int32 from_round = 3;    // 出现的回合
+}
+
+// OMEN 阶段中只填 round / self_chosen / opponent_chosen（骰子为 0，不暴露对方选择）；
+// 揭晓后（该回合）填完整结果。
+message OmenRollView {
+  int32 round = 1;
+  int32 self_die = 2;        // 0 = 没掷
+  int32 opponent_die = 3;
+  bool forced = 4;           // 双方都不掷，系统替双方各掷一次
+  int32 total = 5;           // 两骰之和
+  string omen_key = 6;
+  bool shifted = 7;          // 与生效中的天象重复，点数顺延
+  bool self_chosen = 8;      // 本方已选择（OMEN 阶段中）/ 本方选择了掷（揭晓后）
+  bool opponent_chosen = 9;
+  int32 point = 10;          // 顺延后的点数
 }
 
 message SideResult {

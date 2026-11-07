@@ -84,3 +84,39 @@ func TestScoreStepOriginInView(t *testing.T) {
 		t.Fatal("no 照妖镜 step")
 	}
 }
+
+func TestViewsCarryOmenFields(t *testing.T) {
+	cfg := config.Game().Chess
+	m := rules.NewMatch(cfg, rand.New(rand.NewSource(1)), [2]string{"a", "b"})
+	m.Round = 3
+	for _, key := range []string{"quake", "discord"} {
+		i, ok := cfg.OmenIndex(key)
+		if !ok {
+			t.Fatalf("no omen %q", key)
+		}
+		m.Omens = append(m.Omens, rules.ActiveOmen{Omen: i, From: m.Round, Until: m.Round + cfg.Rules.Omen.Duration - 1})
+	}
+	sv := selfView(m, m.P[0])
+	if sv.GetBenchSize() != 6 {
+		t.Fatalf("bench size under 地动 = %d", sv.GetBenchSize())
+	}
+	if sv.GetRefreshCost() != int32(m.RefreshCost(m.P[0])) {
+		t.Fatalf("refresh cost %d", sv.GetRefreshCost())
+	}
+	for _, b := range append(sv.GetTradeBonds(), sv.GetOriginBonds()...) {
+		if b.GetAtDelta() != 1 {
+			t.Fatalf("bond %s at_delta = %d under 失和", b.GetKey(), b.GetAtDelta())
+		}
+	}
+	mc := matchConfigMessage("r", m).GetMatchConfig()
+	if len(mc.GetOmens()) != 12 {
+		t.Fatalf("omens in config = %d", len(mc.GetOmens()))
+	}
+	seen := map[int32]bool{}
+	for _, o := range mc.GetOmens() {
+		if o.GetPoint() < 1 || o.GetPoint() > 12 || seen[o.GetPoint()] || o.GetKey() == "" || o.GetName() == "" || o.GetDesc() == "" {
+			t.Fatalf("bad omen info %v", o)
+		}
+		seen[o.GetPoint()] = true
+	}
+}
