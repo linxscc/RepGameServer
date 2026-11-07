@@ -53,6 +53,7 @@ func matchConfigMessage(roomID string, m *rules.Match) *pb.ServerMessage {
 		msg.Relics = append(msg.Relics, &pb.RelicInfo{
 			Key: rl.Key, Name: rl.Name, Rarity: int32(cfg.RarityOf(i)), Desc: rl.Desc,
 			NeedsTradeChoice: m.RelicNeedsChoice(i),
+			Category:         rl.Category, CategoryName: rules.CategoryName(rl.Category),
 		})
 	}
 	for _, rr := range r.Rarities {

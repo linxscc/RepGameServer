@@ -45,3 +45,17 @@ func TestViewsCarryColorAndKind(t *testing.T) {
 		}
 	}
 }
+
+func TestViewsCarryRelicCategory(t *testing.T) {
+	cfg := config.Game().Chess
+	m := rules.NewMatch(cfg, rand.New(rand.NewSource(1)), [2]string{"a", "b"})
+	mc := matchConfigMessage("r", m).GetMatchConfig()
+	if len(mc.GetRelics()) != len(cfg.Relics) {
+		t.Fatal("relic count mismatch")
+	}
+	for i, ri := range mc.GetRelics() {
+		if ri.GetCategory() != cfg.Relics[i].Category || ri.GetCategoryName() == "" {
+			t.Fatalf("%s category %q name %q", ri.GetKey(), ri.GetCategory(), ri.GetCategoryName())
+		}
+	}
+}

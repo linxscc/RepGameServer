@@ -259,6 +259,8 @@ message RelicInfo {
   int32 rarity = 3;          // MatchConfig.rarities 的下标
   string desc = 4;
   bool needs_trade_choice = 5;
+  string category = 6;       // 类别 key：economy/growth/suit/counter/tactic
+  string category_name = 7;  // 类别显示名
 }
 
 message RarityInfo {

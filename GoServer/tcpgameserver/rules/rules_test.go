@@ -2,6 +2,7 @@ package rules
 
 import (
 	"math/rand"
+	"strings"
 	"testing"
 )
 
@@ -614,5 +615,29 @@ func TestArtisanStartCardColorConsistent(t *testing.T) {
 		if !m.CheckPool() {
 			t.Fatalf("seed %d: pool not conserved", seed)
 		}
+	}
+}
+
+func TestEveryRelicHasCategory(t *testing.T) {
+	cfg := loadTestConfig(t)
+	want := map[string]string{"graduation": CatEconomy, "treasure": CatEconomy, "thrifty": CatEconomy, "piggy": CatEconomy,
+		"furnace": CatGrowth, "accountant": CatGrowth, "grudge": CatGrowth, "mirror": CatTactic, "vanguard": CatTactic}
+	for i, r := range cfg.Relics {
+		if CategoryName(r.Category) == "" {
+			t.Fatalf("%s category %q", r.Key, r.Category)
+		}
+		if w, ok := want[r.Key]; ok && cfg.CategoryOf(i) != w {
+			t.Fatalf("%s category %s want %s", r.Key, r.Category, w)
+		}
+	}
+}
+
+func TestUnknownRelicCategoryRejected(t *testing.T) {
+	tt := loadTestTables(t)
+	tt.Rel.Relics = append([]RelicDef{}, tt.Rel.Relics...)
+	tt.Rel.Relics[0].Category = "magic"
+	_, err := tt.build()
+	if err == nil || !strings.Contains(err.Error(), `unknown category "magic"`) {
+		t.Fatalf("err = %v", err)
 	}
 }

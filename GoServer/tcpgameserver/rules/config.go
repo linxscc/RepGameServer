@@ -158,11 +158,39 @@ type BondsFile struct {
 // ---------- chess_relics.yaml ----------
 
 type RelicDef struct {
-	Key    string             `yaml:"key"`
-	Name   string             `yaml:"name"`
-	Rarity string             `yaml:"rarity"`
-	Desc   string             `yaml:"desc"`
-	Params map[string]float64 `yaml:"params"`
+	Key    string `yaml:"key"`
+	Name   string `yaml:"name"`
+	Rarity string `yaml:"rarity"`
+	Desc   string `yaml:"desc"`
+	// Category: economy / growth / suit / counter / tactic.
+	Category string             `yaml:"category"`
+	Params   map[string]float64 `yaml:"params"`
+}
+
+// Relic categories.
+const (
+	CatEconomy = "economy"
+	CatGrowth  = "growth"
+	CatSuit    = "suit"
+	CatCounter = "counter"
+	CatTactic  = "tactic"
+)
+
+// CategoryName returns the display name of a relic category, or "" if unknown.
+func CategoryName(cat string) string {
+	switch cat {
+	case CatEconomy:
+		return "经济"
+	case CatGrowth:
+		return "成长"
+	case CatSuit:
+		return "花色"
+	case CatCounter:
+		return "特攻"
+	case CatTactic:
+		return "战术"
+	}
+	return ""
 }
 
 type RelicsFile struct {
@@ -343,6 +371,7 @@ func (c *Config) validate() error {
 	for _, rl := range c.Relics {
 		_, ok := c.rarityIdx[rl.Rarity]
 		check(ok, "chess_relics %s: unknown rarity %q", rl.Key, rl.Rarity)
+		check(CategoryName(rl.Category) != "", "chess_relics %s: unknown category %q", rl.Key, rl.Category)
 		if err := validateParams("relic", rl.Key, rl.Params, relicParams); err != nil {
 			errs = append(errs, fmt.Errorf("chess_relics: %w", err))
 		}
@@ -426,6 +455,8 @@ func (c *Config) RelicIndex(key string) (int, bool) { i, ok := c.relicIdx[key]; 
 func (c *Config) FamilyIndex(key string) (int, bool) { i, ok := c.familyIdx[key]; return i, ok }
 
 func (c *Config) RarityOf(relic int) int { return c.rarityIdx[c.Relics[relic].Rarity] }
+
+func (c *Config) CategoryOf(relic int) string { return c.Relics[relic].Category }
 
 func (c *Config) RelicPrice(relic int) int { return c.Rules.Rarities[c.RarityOf(relic)].Price }
 

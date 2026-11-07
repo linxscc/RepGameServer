@@ -9,21 +9,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// loadTestConfig reads the real tables from config/tables (the package cannot import
+// testTables holds the raw decoded tables so tests can tweak one and rebuild.
+type testTables struct {
+	R   RulesTable
+	L   LinesFile
+	B   BondsFile
+	Rel RelicsFile
+	F   FamiliesFile
+}
+
+// loadTestTables reads the real tables from config/tables (the package cannot import
 // config here without an import cycle, so it decodes the same files directly).
-func loadTestConfig(t *testing.T) *Config {
+func loadTestTables(t *testing.T) testTables {
 	t.Helper()
 	dir := filepath.Join("..", "config", "tables")
-	var (
-		r  RulesTable
-		l  LinesFile
-		b  BondsFile
-		rl RelicsFile
-		f  FamiliesFile
-	)
+	var tt testTables
 	for name, dst := range map[string]any{
-		"chess_rules.yaml": &r, "chess_lines.yaml": &l, "chess_bonds.yaml": &b,
-		"chess_relics.yaml": &rl, "chess_families.yaml": &f,
+		"chess_rules.yaml": &tt.R, "chess_lines.yaml": &tt.L, "chess_bonds.yaml": &tt.B,
+		"chess_relics.yaml": &tt.Rel, "chess_families.yaml": &tt.F,
 	} {
 		data, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
@@ -33,7 +36,16 @@ func loadTestConfig(t *testing.T) *Config {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
-	cfg, err := NewConfig(r, l, b, rl, f)
+	return tt
+}
+
+func (tt testTables) build() (*Config, error) {
+	return NewConfig(tt.R, tt.L, tt.B, tt.Rel, tt.F)
+}
+
+func loadTestConfig(t *testing.T) *Config {
+	t.Helper()
+	cfg, err := loadTestTables(t).build()
 	if err != nil {
 		t.Fatal(err)
 	}
