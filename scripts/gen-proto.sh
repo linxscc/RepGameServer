@@ -31,7 +31,10 @@ done
 # 拆分前的单文件产物
 rm -f "$GO_OUT/game.pb.go" "$CS_OUT/Game.cs" "$CS_OUT/Game.cs.meta"
 
-"$PROTOC" -I "$ROOT/proto"   --go_out="$GO_OUT" --go_opt=paths=source_relative "${GO_MAPS[@]}"   --csharp_out="$CS_OUT"   "${FILES[@]}"
+"$PROTOC" -I "$ROOT/proto" \
+  --go_out="$GO_OUT" --go_opt=paths=source_relative "${GO_MAPS[@]}" \
+  --csharp_out="$CS_OUT" \
+  "${FILES[@]}"
 
 # paths=source_relative 会保留 repgame/v1 目录，拍平到 pb/ 下
 if [ -d "$GO_OUT/repgame/v1" ]; then
@@ -39,7 +42,6 @@ if [ -d "$GO_OUT/repgame/v1" ]; then
   rm -rf "$GO_OUT/repgame"
 fi
 
-# C# 解析代码里的 case 数字换成具名的线上标签枚举（<Module>Tags.cs），见 gen-wire-tags.py
 # 选第一个能 import protobuf 的解释器（Windows 上的 python3 可能是应用商店占位程序）
 if [ -z "${PYTHON:-}" ]; then
   for p in python3 python; do
@@ -50,6 +52,11 @@ if [ -z "${PYTHON:-}" ]; then
   echo "gen-proto.sh: 需要装有 protobuf 的 python（pip install protobuf），或用 PYTHON=... 指定" >&2
   exit 1
 fi
+
+# 描述符数据（schema）移到单独的文件：C# <Module>Descriptor.cs，Go <module>_desc.pb.go
+"$PYTHON" "$ROOT/scripts/split-descriptors.py" "$GO_OUT" "$CS_OUT" "${PROTOS[@]}"
+
+# C# 解析代码里的 case 数字换成具名的线上标签枚举（<Module>Tags.cs），见 gen-wire-tags.py
 DESC="$(mktemp)"
 trap 'rm -f "$DESC"' EXIT
 "$PROTOC" -I "$ROOT/proto" --include_source_info --descriptor_set_out="$DESC" "${FILES[@]}"

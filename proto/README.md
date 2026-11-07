@@ -14,8 +14,13 @@
 | `match_state.proto` | 对局动态状态（阶段、棋子、计分、回合结算、结束） |
 
 生成物：Go 在 `GoServer/tcpgameserver/pb/<模块>.pb.go`，C# 在客户端
-`Assets/Scripts/Protocol/Generated/<模块>.cs`。生成文件里的 `descriptorData` 是 protoc 编译出的
-schema，protobuf 运行时靠它解析消息，不可手改、也不能挪到配置里。
+`Assets/Scripts/Protocol/Generated/<模块>.cs`。
+
+描述符（descriptor，protoc 编译出的 schema，protobuf 运行时靠它解析消息）单独存放，
+不和代码混在一起：C# 在 `<模块>Descriptor.cs`（常量 `DescriptorBase64`），Go 在 `<模块>_desc.pb.go`，
+由 `scripts/split-descriptors.py` 在生成后拆出。它不能做成运行时读取的配置文件：
+它必须与解析代码出自同一次生成（否则版本对不上会解析错乱）；C# 在后台网络线程第一次用到消息时
+就要加载它，Unity 那时不能同步读资源；Go 在 `init()` 阶段（读配置之前）就注册它。
 
 C# 解析代码（`MergeFrom`）里的 `switch(tag)` 不用裸数字：`gen-proto.sh` 在 protoc 之后运行
 `scripts/gen-wire-tags.py`，为每个模块生成 `<模块>Tags.cs`（每个消息一个 `<消息>Tag` 枚举，
