@@ -1,7 +1,8 @@
 package service
 
 import (
-	"GoServer/tcpgameserver/config"
+	"GoServer/tcpgameserver/data/config"
+	"GoServer/tcpgameserver/data/store"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -95,9 +96,9 @@ func IsReservedUsername(username string) bool {
 //
 // 兼容旧数据：库中仍是明文密码的账号，验证通过后会自动升级为 bcrypt 哈希。
 func AuthenticateUser(username, password string) error {
-	user, err := GetUserAccount(username)
+	user, err := store.GetUserAccount(username)
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
+		if errors.Is(err, store.ErrUserNotFound) {
 			_ = compareHash(timingDummyHash(), password)
 			return ErrInvalidCredentials
 		}
@@ -117,11 +118,23 @@ func AuthenticateUser(username, password string) error {
 		return ErrInvalidCredentials
 	}
 	if hash, err := HashPassword(password); err == nil {
-		_ = updatePasswordHash(username, hash) // 升级失败不影响本次登录，下次登录会再试
+		_ = store.UpdatePasswordHash(username, hash) // 升级失败不影响本次登录，下次登录会再试
 	}
 	return nil
 }
 
 func isBcryptHash(s string) bool {
 	return strings.HasPrefix(s, "$2a$") || strings.HasPrefix(s, "$2b$") || strings.HasPrefix(s, "$2y$")
+}
+
+// ErrUserExists 注册时用户名已被占用
+var ErrUserExists = store.ErrUserExists
+
+// CreateUserAccount 注册：校验通过后以 bcrypt 哈希保存密码
+func CreateUserAccount(username, password string) error {
+	hash, err := HashPassword(password)
+	if err != nil {
+		return err
+	}
+	return store.InsertUser(username, hash)
 }

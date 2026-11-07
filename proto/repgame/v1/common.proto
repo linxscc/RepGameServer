@@ -1,0 +1,42 @@
+// 通用：错误码、错误、心跳。
+syntax = "proto3";
+
+package repgame.v1;
+
+option go_package = "GoServer/tcpgameserver/pb;pb";
+option csharp_namespace = "RepGame.Protocol";
+
+// ============================================================
+// 通用
+// ============================================================
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_INVALID_REQUEST = 1;      // 消息无法解析或缺少必要字段
+  ERROR_CODE_NOT_AUTHENTICATED = 2;    // 需要先登录
+  ERROR_CODE_INVALID_CREDENTIALS = 3;  // 用户名或密码错误
+  ERROR_CODE_USER_EXISTS = 4;          // 注册时用户名已存在
+  ERROR_CODE_SESSION_EXPIRED = 5;      // 会话令牌无效或已过期
+  ERROR_CODE_INVALID_GAME_STATE = 6;   // 当前状态下不能执行该操作
+  ERROR_CODE_INVALID_CARDS = 7;        // 牌不在手牌中、重复或数量不合法
+  ERROR_CODE_INTERNAL = 8;             // 服务器内部错误
+  ERROR_CODE_NOT_ENOUGH_GOLD = 9;      // 金币不足
+  ERROR_CODE_BENCH_FULL = 10;          // 备战席已满
+  ERROR_CODE_RELIC_SLOTS_FULL = 11;    // 法宝栏已满
+  ERROR_CODE_MAX_LEVEL = 12;           // 已满级
+  ERROR_CODE_INVALID_CHOICE = 13;      // 选项、卡牌、栏位或布局不合法
+}
+
+message Error {
+  ErrorCode code = 1;
+  string message = 2; // 给人看的说明，客户端逻辑不应依赖其内容
+}
+
+message Ping {
+  int64 client_time_ms = 1;
+}
+
+message Pong {
+  int64 client_time_ms = 1; // 原样带回，用于计算延迟
+  int64 server_time_ms = 2;
+}

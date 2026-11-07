@@ -1,0 +1,42 @@
+// 连接与账号：欢迎、登录、注册、恢复会话。
+syntax = "proto3";
+
+package repgame.v1;
+
+option go_package = "GoServer/tcpgameserver/pb;pb";
+option csharp_namespace = "RepGame.Protocol";
+
+// ============================================================
+// 连接与账号
+// ============================================================
+
+message Welcome {
+  int64 server_time_ms = 1;
+  uint32 protocol_version = 2;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2; // 仅在 TLS 连接中传输；服务器以 bcrypt 哈希存储
+}
+
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+}
+
+// 断线重连时用登录拿到的令牌恢复会话，无需再次发送密码。
+message ResumeSessionRequest {
+  string session_token = 1;
+}
+
+// 登录或恢复会话成功
+message AuthResult {
+  string username = 1;
+  string session_token = 2;
+  int64 session_expires_at_ms = 3;
+}
+
+message RegisterResult {
+  string username = 1;
+}

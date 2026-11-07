@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"GoServer/tcpgameserver/config"
-	messagehandle "GoServer/tcpgameserver/messageHandle"
-	"GoServer/tcpgameserver/protocol"
-	"GoServer/tcpgameserver/tlsutil"
+	"GoServer/tcpgameserver/data/config"
+	"GoServer/tcpgameserver/network/handler"
+	"GoServer/tcpgameserver/network/tlsutil"
+	"GoServer/tcpgameserver/network/transport"
 )
 
 // StartTCPServer 启动游戏服务器（默认启用 TLS）。
@@ -99,19 +99,19 @@ func handleConnection(conn net.Conn) {
 		_ = conn.SetDeadline(time.Time{})
 	}
 
-	protocol.Attach(conn)
-	defer protocol.Detach(conn)
+	transport.Attach(conn)
+	defer transport.Detach(conn)
 
-	clientID := messagehandle.HandleNewConnection(conn)
+	clientID := handler.HandleNewConnection(conn)
 	clientAddr := conn.RemoteAddr().String()
-	defer messagehandle.HandleConnectionClose(clientID)
+	defer handler.HandleConnectionClose(clientID)
 
 	// 超过 network.yaml 的 idle_timeout_seconds 没有任何消息（含心跳）即断开
 	idleTimeout := config.Game().Network.IdleTimeout()
 	reader := bufio.NewReader(conn)
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))
-		payload, err := protocol.ReadFrame(reader)
+		payload, err := transport.ReadFrame(reader)
 		if err != nil {
 			// 断线处理统一由上面 defer 的 HandleConnectionClose 完成
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -120,6 +120,6 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 
-		messagehandle.HandleTCPMessage(payload, conn, clientID)
+		handler.HandleTCPMessage(payload, conn, clientID)
 	}
 }

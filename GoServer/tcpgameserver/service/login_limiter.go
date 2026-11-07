@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"GoServer/tcpgameserver/config"
+	"GoServer/tcpgameserver/data/config"
 )
 
 // 登录/注册限流：按固定 1 分钟窗口计数，超过上限后在窗口剩余时间内直接拒绝。

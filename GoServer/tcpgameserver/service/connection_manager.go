@@ -1,21 +1,21 @@
 package service
 
 import (
-	"GoServer/tcpgameserver/config"
-	"GoServer/tcpgameserver/protocol"
+	"GoServer/tcpgameserver/data/config"
+	"GoServer/tcpgameserver/network/transport"
 	"fmt"
 	"log"
 	"net"
 	"sync"
 	"time"
 
-	"GoServer/tcpgameserver/types"
+	"GoServer/tcpgameserver/model"
 )
 
 // ConnectionManager 连接管理器
 type ConnectionManager struct {
 	// 连接映射 - 使用读写锁保护
-	connections map[string]*types.ClientInfo // clientID -> ClientInfo
+	connections map[string]*model.ClientInfo // clientID -> ClientInfo
 	userConns   map[string]string            // username -> clientID
 	addrConns   map[string]string            // remoteAddr -> clientID
 
@@ -33,7 +33,7 @@ type ConnectionManager struct {
 // NewConnectionManager 创建新的连接管理器
 func NewConnectionManager() *ConnectionManager {
 	return &ConnectionManager{
-		connections:      make(map[string]*types.ClientInfo),
+		connections:      make(map[string]*model.ClientInfo),
 		userConns:        make(map[string]string),
 		addrConns:        make(map[string]string),
 		heartbeatTimeout: config.Game().Network.StaleConnection(),
@@ -53,11 +53,11 @@ func (cm *ConnectionManager) Stop() {
 }
 
 // AddConnection 添加新连接
-func (cm *ConnectionManager) AddConnection(conn net.Conn, clientID string) *types.ClientInfo {
+func (cm *ConnectionManager) AddConnection(conn net.Conn, clientID string) *model.ClientInfo {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	clientInfo := types.NewClientInfo(conn, clientID)
+	clientInfo := model.NewClientInfo(conn, clientID)
 	remoteAddr := conn.RemoteAddr().String()
 
 	// 检查是否已存在相同地址的连接
@@ -95,7 +95,7 @@ func (cm *ConnectionManager) removeConnectionUnsafe(clientID string) bool {
 
 	// 关闭连接（先发完已排队的消息，例如"账号在别处登录"的通知）
 	if conn := clientInfo.GetConn(); conn != nil {
-		protocol.CloseAfterFlush(conn)
+		transport.CloseAfterFlush(conn)
 	}
 
 	return true
@@ -160,7 +160,7 @@ func (cm *ConnectionManager) UnbindUser(clientID string) error {
 }
 
 // GetConnectionByClientID 根据客户端ID获取连接信息
-func (cm *ConnectionManager) GetConnectionByClientID(clientID string) (*types.ClientInfo, bool) {
+func (cm *ConnectionManager) GetConnectionByClientID(clientID string) (*model.ClientInfo, bool) {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
 
@@ -169,7 +169,7 @@ func (cm *ConnectionManager) GetConnectionByClientID(clientID string) (*types.Cl
 }
 
 // GetConnectionByUsername 根据用户名获取连接信息
-func (cm *ConnectionManager) GetConnectionByUsername(username string) (*types.ClientInfo, bool) {
+func (cm *ConnectionManager) GetConnectionByUsername(username string) (*model.ClientInfo, bool) {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
 
@@ -183,7 +183,7 @@ func (cm *ConnectionManager) GetConnectionByUsername(username string) (*types.Cl
 }
 
 // GetConnectionByAddr 根据地址获取连接信息
-func (cm *ConnectionManager) GetConnectionByAddr(addr string) (*types.ClientInfo, bool) {
+func (cm *ConnectionManager) GetConnectionByAddr(addr string) (*model.ClientInfo, bool) {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
 
@@ -208,7 +208,7 @@ func (cm *ConnectionManager) UpdateActivity(clientID string) {
 }
 
 // SetPlayerStatus 设置玩家状态
-func (cm *ConnectionManager) SetPlayerStatus(clientID string, status types.PlayerStatus) error {
+func (cm *ConnectionManager) SetPlayerStatus(clientID string, status model.PlayerStatus) error {
 	cm.mutex.RLock()
 	clientInfo, exists := cm.connections[clientID]
 	cm.mutex.RUnlock()
@@ -236,11 +236,11 @@ func (cm *ConnectionManager) SetPlayerGameRoom(clientID, roomID string) error {
 }
 
 // GetAllConnections 获取所有连接信息
-func (cm *ConnectionManager) GetAllConnections() map[string]*types.ClientInfo {
+func (cm *ConnectionManager) GetAllConnections() map[string]*model.ClientInfo {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
 
-	result := make(map[string]*types.ClientInfo)
+	result := make(map[string]*model.ClientInfo)
 	for clientID, clientInfo := range cm.connections {
 		result[clientID] = clientInfo
 	}
@@ -248,11 +248,11 @@ func (cm *ConnectionManager) GetAllConnections() map[string]*types.ClientInfo {
 }
 
 // GetConnectionsByStatus 根据状态获取连接列表
-func (cm *ConnectionManager) GetConnectionsByStatus(status types.PlayerStatus) []*types.ClientInfo {
+func (cm *ConnectionManager) GetConnectionsByStatus(status model.PlayerStatus) []*model.ClientInfo {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
 
-	var result []*types.ClientInfo
+	var result []*model.ClientInfo
 	for _, clientInfo := range cm.connections {
 		if clientInfo.GetStatus() == status {
 			result = append(result, clientInfo)
@@ -277,15 +277,15 @@ func (cm *ConnectionManager) GetConnectionStats() map[string]int {
 
 	for _, clientInfo := range cm.connections {
 		switch clientInfo.GetStatus() {
-		case types.StatusLoggedIn:
+		case model.StatusLoggedIn:
 			stats["logged_in"]++
-		case types.StatusConnected:
+		case model.StatusConnected:
 			stats["connected"]++
-		case types.StatusReady:
+		case model.StatusReady:
 			stats["ready"]++
-		case types.StatusInGame:
+		case model.StatusInGame:
 			stats["in_game"]++
-		case types.StatusDisconnected:
+		case model.StatusDisconnected:
 			stats["disconnected"]++
 		}
 	}
@@ -305,7 +305,7 @@ func (cm *ConnectionManager) SendToUser(username string, data []byte) error {
 		return fmt.Errorf("connection is nil for user %s", username)
 	}
 
-	err := protocol.WriteFrame(conn, data)
+	err := transport.WriteFrame(conn, data)
 	if err != nil {
 		// 连接出错，移除该连接
 		cm.RemoveConnection(clientInfo.ClientID)
@@ -329,7 +329,7 @@ func (cm *ConnectionManager) SendToClient(clientID string, data []byte) error {
 		return fmt.Errorf("connection is nil for client %s", clientID)
 	}
 
-	err := protocol.WriteFrame(conn, data)
+	err := transport.WriteFrame(conn, data)
 	if err != nil {
 		// 连接出错，移除该连接
 		cm.RemoveConnection(clientID)
@@ -344,7 +344,7 @@ func (cm *ConnectionManager) SendToClient(clientID string, data []byte) error {
 // Broadcast 广播消息给所有连接
 func (cm *ConnectionManager) Broadcast(data []byte) {
 	cm.mutex.RLock()
-	connections := make([]*types.ClientInfo, 0, len(cm.connections))
+	connections := make([]*model.ClientInfo, 0, len(cm.connections))
 	for _, clientInfo := range cm.connections {
 		connections = append(connections, clientInfo)
 	}
@@ -352,7 +352,7 @@ func (cm *ConnectionManager) Broadcast(data []byte) {
 
 	for _, clientInfo := range connections {
 		if conn := clientInfo.GetConn(); conn != nil {
-			err := protocol.WriteFrame(conn, data)
+			err := transport.WriteFrame(conn, data)
 			if err != nil {
 				// 连接出错，移除该连接
 				cm.RemoveConnection(clientInfo.ClientID)
@@ -386,7 +386,7 @@ func (cm *ConnectionManager) performCleanup() {
 	var toRemove []string
 	for clientID, clientInfo := range cm.connections {
 		// 等待重连的玩家由重连宽限计时器负责清理
-		if clientInfo.GetStatus() == types.StatusWaitingReconnect {
+		if clientInfo.GetStatus() == model.StatusWaitingReconnect {
 			continue
 		}
 		if !clientInfo.IsActive(cm.heartbeatTimeout) {

@@ -1,0 +1,70 @@
+// 信封：ClientMessage / ServerMessage，按 oneof 分支区分消息类型。
+//
+// RepGame 客户端 <-> 服务器协议（唯一事实来源）。
+//
+// 传输层：TLS 之上，每条消息 = 4 字节大端序长度 + 一条序列化后的
+// ClientMessage / ServerMessage。
+//
+// 设计约定：
+// - 消息类型由 oneof 的分支本身决定，不再依赖字符串 key 或数据库里的响应码。
+// - 客户端只发送“意图”（要出哪几张牌的 UID），所有数值（伤害、血量、合成结果）
+//   一律由服务器计算，客户端上报的数值不被信任。
+// - 只追加字段，不复用/修改已有字段编号；删除字段时用 reserved 占位。
+// - 枚举 0 值统一为 *_UNSPECIFIED，表示“未设置”。
+syntax = "proto3";
+
+package repgame.v1;
+
+option go_package = "GoServer/tcpgameserver/pb;pb";
+option csharp_namespace = "RepGame.Protocol";
+
+import "repgame/v1/auth.proto";
+import "repgame/v1/common.proto";
+import "repgame/v1/lobby.proto";
+import "repgame/v1/match_action.proto";
+import "repgame/v1/match_config.proto";
+import "repgame/v1/match_state.proto";
+
+// ============================================================
+// 信封
+// ============================================================
+
+// 客户端 -> 服务器
+message ClientMessage {
+  // 客户端自增请求序号；服务器在对应回复的 reply_to 中原样带回。
+  uint32 seq = 1;
+
+  reserved 14, 15, 16; // 旧版回合制：play_cards / compose_cards / restart
+
+  oneof body {
+    LoginRequest login = 10;
+    RegisterRequest register = 11;
+    ResumeSessionRequest resume_session = 12;
+    ReadyRequest ready = 13;
+    Ping ping = 17;
+    GameAction game_action = 18;   // 新版对局的所有操作
+    CancelMatchRequest cancel_match = 19;  // 取消匹配
+  }
+}
+
+// 服务器 -> 客户端
+message ServerMessage {
+  // 回复的是哪条请求（ClientMessage.seq）；服务器主动推送时为 0。
+  uint32 reply_to = 1;
+
+  reserved 13, 14; // 旧版回合制：game_state / bond_list
+
+  oneof body {
+    Error error = 2;
+    Welcome welcome = 10;
+    AuthResult auth_result = 11;
+    RegisterResult register_result = 12;
+    PlayerPresence player_presence = 15;
+    Pong pong = 16;
+    MatchConfig match_config = 17;   // 开局下发一次：卡牌、羁绊、法宝、家世的静态数据
+    MatchState match_state = 18;     // 每次状态变化后推送的完整视图
+    RoundResult round_result = 19;   // 每回合结算
+    MatchOver match_over = 20;       // 对局结束
+    MatchmakingState matchmaking = 21;  // 匹配状态（开始 / 取消匹配的回复）
+  }
+}

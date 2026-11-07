@@ -1,0 +1,38 @@
+// 大厅：匹配与在线状态。
+syntax = "proto3";
+
+package repgame.v1;
+
+option go_package = "GoServer/tcpgameserver/pb;pb";
+option csharp_namespace = "RepGame.Protocol";
+
+// ============================================================
+// 对局：客户端意图
+// ============================================================
+
+message ReadyRequest {}
+
+message CancelMatchRequest {}
+
+// 匹配状态：searching = true 表示已在匹配队列中
+message MatchmakingState {
+  bool searching = 1;
+}
+
+// ============================================================
+// 在线状态
+// ============================================================
+
+enum PresenceStatus {
+  PRESENCE_STATUS_UNSPECIFIED = 0;
+  PRESENCE_STATUS_DISCONNECTED = 1; // 掉线，等待重连
+  PRESENCE_STATUS_RECONNECTED = 2;
+}
+
+// 同房间其他玩家的在线状态变化
+message PlayerPresence {
+  string username = 1;
+  string room_id = 2;
+  PresenceStatus status = 3;
+  string reason = 4;
+}

@@ -1,7 +1,7 @@
 package service
 
 import (
-	"GoServer/tcpgameserver/types"
+	"GoServer/tcpgameserver/model"
 	"fmt"
 	"sync"
 	"time"
@@ -9,7 +9,7 @@ import (
 
 // RoomManager 房间管理器
 type RoomManager struct {
-	rooms map[string]*types.RoomInfo // 房间列表，key为房间ID
+	rooms map[string]*model.RoomInfo // 房间列表，key为房间ID
 	mutex sync.RWMutex               // 读写锁
 }
 
@@ -22,21 +22,21 @@ var (
 func GetRoomManager() *RoomManager {
 	roomOnce.Do(func() {
 		roomManager = &RoomManager{
-			rooms: make(map[string]*types.RoomInfo),
+			rooms: make(map[string]*model.RoomInfo),
 		}
 	})
 	return roomManager
 }
 
 // CreateRoom 创建新房间
-func (rm *RoomManager) CreateRoom(roomName string, maxPlayers int) (*types.RoomInfo, error) {
+func (rm *RoomManager) CreateRoom(roomName string, maxPlayers int) (*model.RoomInfo, error) {
 	rm.mutex.Lock()
 	defer rm.mutex.Unlock()
 
 	// 生成房间ID（使用时间戳）
 	roomID := fmt.Sprintf("room_%d", time.Now().UnixNano())
 	// 创建房间
-	room := types.NewRoomInfo(roomID, roomName, maxPlayers)
+	room := model.NewRoomInfo(roomID, roomName, maxPlayers)
 
 	// 添加到房间列表
 	rm.rooms[roomID] = room
@@ -45,7 +45,7 @@ func (rm *RoomManager) CreateRoom(roomName string, maxPlayers int) (*types.RoomI
 }
 
 // GetRoom 获取指定房间
-func (rm *RoomManager) GetRoom(roomID string) (*types.RoomInfo, error) {
+func (rm *RoomManager) GetRoom(roomID string) (*model.RoomInfo, error) {
 	rm.mutex.RLock()
 	defer rm.mutex.RUnlock()
 
@@ -91,7 +91,7 @@ func (rm *RoomManager) LeaveRoom(roomID, username string) error {
 }
 
 // FindRoomByPlayer 根据玩家名查找房间
-func (rm *RoomManager) FindRoomByPlayer(username string) (*types.RoomInfo, error) {
+func (rm *RoomManager) FindRoomByPlayer(username string) (*model.RoomInfo, error) {
 	rm.mutex.RLock()
 	defer rm.mutex.RUnlock()
 
@@ -105,13 +105,13 @@ func (rm *RoomManager) FindRoomByPlayer(username string) (*types.RoomInfo, error
 }
 
 // GetAvailableRooms 获取可加入的房间列表
-func (rm *RoomManager) GetAvailableRooms() []*types.RoomInfo {
+func (rm *RoomManager) GetAvailableRooms() []*model.RoomInfo {
 	rm.mutex.RLock()
 	defer rm.mutex.RUnlock()
 
-	var availableRooms []*types.RoomInfo
+	var availableRooms []*model.RoomInfo
 	for _, room := range rm.rooms {
-		if !room.IsRoomFull() && room.GetStatus() == types.RoomStatusWaiting {
+		if !room.IsRoomFull() && room.GetStatus() == model.RoomStatusWaiting {
 			availableRooms = append(availableRooms, room)
 		}
 	}
@@ -120,11 +120,11 @@ func (rm *RoomManager) GetAvailableRooms() []*types.RoomInfo {
 }
 
 // GetAllRooms 获取所有房间
-func (rm *RoomManager) GetAllRooms() map[string]*types.RoomInfo {
+func (rm *RoomManager) GetAllRooms() map[string]*model.RoomInfo {
 	rm.mutex.RLock()
 	defer rm.mutex.RUnlock()
 
-	rooms := make(map[string]*types.RoomInfo)
+	rooms := make(map[string]*model.RoomInfo)
 	for id, room := range rm.rooms {
 		rooms[id] = room
 	}
@@ -146,9 +146,9 @@ func (rm *RoomManager) GetRoomStats() map[string]interface{} {
 		totalPlayers += stats["current_players"].(int)
 
 		switch room.GetStatus() {
-		case types.RoomStatusWaiting:
+		case model.RoomStatusWaiting:
 			waitingRooms++
-		case types.RoomStatusPlaying:
+		case model.RoomStatusPlaying:
 			playingRooms++
 		}
 	}

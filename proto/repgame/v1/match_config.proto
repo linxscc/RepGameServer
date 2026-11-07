@@ -1,0 +1,94 @@
+// 对局：开局下发一次的静态数据（卡牌、羁绊、法宝、家世、征兆等）。
+syntax = "proto3";
+
+package repgame.v1;
+
+option go_package = "GoServer/tcpgameserver/pb;pb";
+option csharp_namespace = "RepGame.Protocol";
+
+// ---------- 静态数据（开局下发一次） ----------
+
+message TierInfo {
+  int32 at = 1;
+  string desc = 2;
+}
+
+message BondInfo {
+  string key = 1;
+  string name = 2;
+  string desc = 3;
+  repeated TierInfo tiers = 4;
+  repeated string line_keys = 5;
+}
+
+enum CardColor {
+  CARD_COLOR_UNSPECIFIED = 0;
+  CARD_COLOR_RED = 1;
+  CARD_COLOR_BLACK = 2;
+}
+
+enum CardKind {
+  CARD_KIND_UNSPECIFIED = 0;
+  CARD_KIND_GOD = 1;
+  CARD_KIND_GHOST = 2;
+}
+
+message LineInfo {
+  string key = 1;
+  string name = 2;
+  repeated string star_names = 3;
+  int32 cost = 4;
+  int32 points = 5;
+  string trade_key = 6;
+  string origin_key = 7;
+  string legend_desc = 8;
+  CardKind kind = 9;
+}
+
+message RelicInfo {
+  string key = 1;
+  string name = 2;
+  int32 rarity = 3;          // MatchConfig.rarities 的下标
+  string desc = 4;
+  bool needs_trade_choice = 5;
+  string category = 6;       // 类别 key：economy/growth/suit/counter/tactic
+  string category_name = 7;  // 类别显示名
+}
+
+message RarityInfo {
+  string key = 1;
+  string name = 2;
+  int32 price = 3;
+}
+
+message FamilyInfo {
+  string key = 1;
+  string name = 2;
+  string desc = 3;
+}
+
+message MatchConfig {
+  string room_id = 1;
+  repeated LineInfo lines = 2;
+  repeated BondInfo trades = 3;
+  repeated BondInfo origins = 4;
+  repeated RelicInfo relics = 5;
+  repeated RarityInfo rarities = 6;
+  repeated FamilyInfo families = 7;
+  int32 max_star = 8;
+  int32 bench_size = 9;
+  int32 refresh_cost = 10;
+  int32 xp_cost = 11;
+  int32 max_level = 12;
+  int32 start_hp = 13;          // 初始血量（血条上限）
+  double bond_tier_mult = 14;   // 每个生效羁绊档位的通用倍率加成
+  repeated OmenInfo omens = 15; // 天象表（按 point 查）
+}
+
+message OmenInfo {
+  string key = 1;
+  string name = 2;
+  string aspect = 3;   // 影响方面（阵容 / 神鬼 / 花色 / 经济 …）
+  string desc = 4;
+  int32 point = 5;     // 两颗骰子点数之和对应的点数
+}

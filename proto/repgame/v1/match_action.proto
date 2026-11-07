@@ -1,0 +1,64 @@
+// 对局：客户端操作意图（GameAction 及各操作）。
+syntax = "proto3";
+
+package repgame.v1;
+
+option go_package = "GoServer/tcpgameserver/pb;pb";
+option csharp_namespace = "RepGame.Protocol";
+
+// ============================================================
+// 新版对局（商店 + 合成 + 法宝）
+// ------------------------------------------------------------
+// 服务器权威：客户端只发送操作意图，所有判定、计分、伤害由服务器完成。
+// 每个成功的操作都会以 MatchState（reply_to = 该请求的 seq）回复，
+// 并同时推送给对手；失败则回复 Error。
+// ============================================================
+
+// ---------- 客户端操作 ----------
+
+message GameAction {
+  oneof action {
+    PickFamily pick_family = 1;
+    BuyCard buy_card = 2;
+    SellCard sell_card = 3;
+    RefreshShop refresh_shop = 4;
+    BuyXp buy_xp = 5;
+    BuyRelic buy_relic = 6;
+    SellRelic sell_relic = 7;
+    ArrangeBoard arrange = 8;
+    LockShop lock_shop = 9;
+    SetReady set_ready = 10;
+    PickVault pick_vault = 11;
+    SkipVault skip_vault = 12;
+    Surrender surrender = 13;
+    SettleDone settle_done = 14;
+    RollOmen roll_omen = 15;
+  }
+}
+
+// 天象阶段：掷（true）或不掷（false）。只能在 OMEN 阶段发一次；超时视为不掷。
+message RollOmen { bool roll = 1; }
+
+// 结算过场（含伤害动画）播放完毕；双方都发出后立即进入下一阶段，不必等结算倒计时。
+message SettleDone {}
+message PickFamily { int32 offer_index = 1; }        // MatchState.family_offer 的下标
+message BuyCard { int32 shop_slot = 1; }              // MatchState.self.shop 的下标
+message SellCard { string card_uid = 1; }
+message RefreshShop {}
+message BuyXp {}
+message BuyRelic { int32 trade_choice = 1; }          // 需要选行当的法宝填 MatchConfig.trades 的下标
+message SellRelic { int32 relic_slot = 1; }
+// 出阵从左到右的卡；其余卡回到备战席。relic_order 为空表示不改法宝顺序。
+message ArrangeBoard {
+  repeated string board_uids = 1;
+  repeated int32 relic_order = 2;
+}
+message LockShop { bool locked = 1; }
+message SetReady { bool ready = 1; }
+message PickVault {
+  int32 offer_index = 1;
+  int32 sell_relic_slot = 2;  // 法宝栏已满时先卖掉的栏位；-1 表示不卖
+  int32 trade_choice = 3;
+}
+message SkipVault {}
+message Surrender {}   // 认输：对局立即结束，发起方判负

@@ -1,17 +1,42 @@
 # RepGame 通信协议
 
-`repgame/v1/game.proto` 是客户端与服务器协议的**唯一事实来源**，Go 和 C# 代码都由它生成。
+`repgame/v1/*.proto` 是客户端与服务器协议的**唯一事实来源**，Go 和 C# 代码都由它生成。
+按模块拆分为多个文件，同属 `package repgame.v1`（线上格式与拆分前完全一致）：
+
+| 文件 | 内容 |
+|---|---|
+| `envelope.proto` | `ClientMessage` / `ServerMessage` 信封（oneof 分支决定消息类型） |
+| `common.proto` | 错误码、错误、心跳 |
+| `auth.proto` | 欢迎、登录、注册、恢复会话 |
+| `lobby.proto` | 匹配与在线状态 |
+| `match_action.proto` | 对局操作意图（`GameAction` 及各操作） |
+| `match_config.proto` | 开局下发一次的静态数据（卡牌、羁绊、法宝、家世、天象） |
+| `match_state.proto` | 对局动态状态（阶段、棋子、计分、回合结算、结束） |
+
+生成物：Go 在 `GoServer/tcpgameserver/pb/<模块>.pb.go`，C# 在客户端
+`Assets/Scripts/Protocol/Generated/<模块>.cs`。生成文件里的 `descriptorData` 是 protoc 编译出的
+schema，protobuf 运行时靠它解析消息，不可手改、也不能挪到配置里。
 
 ## 分层
 
 | 层 | 服务器 (Go) | 客户端 (Unity C#) |
 |---|---|---|
 | 传输 | `tls.Listen`，`server.go` | `SecureConnection`（TLS + 证书指纹固定） |
-| 帧 | `protocol/frame.go` | `Net/FrameCodec.cs` |
-| 编解码 | `protocol/codec.go` | `Google.Protobuf` |
-| 分发 | `messageHandle/handler.go` 路由表 | `Net/ServerMessageRouter.cs` |
-| 模型转换 | `protocol/mapper.go` | `Net/ProtocolMapper.cs` |
-| 业务 | `logic/`、`service/` | UI 只订阅 `NetEvents` + 领域模型 |
+| 帧 | `network/transport/frame.go` | `Network/Transport/FrameCodec.cs` |
+| 编解码 / 发送队列 | `network/transport/codec.go`、`conn_writer.go` | `Google.Protobuf`、`SecureConnection` |
+| 分发 | `network/handler/handler.go` 路由表 | `Network/ServerMessageRouter.cs` |
+| 模型转换 | `logic/match/chess_views.go` | `Network/ProtocolMapper.cs` |
+| 业务 | `logic/`、`service/` | `Logic/`、`Service/`；UI 只订阅 `NetEvents` |
+
+服务器目录分层（`GoServer/tcpgameserver/`）：
+
+| 目录 | 职责 |
+|---|---|
+| `network/`（`transport`、`handler`、`tlsutil`） | 网络通信：帧、发送队列、TLS、请求路由与处理 |
+| `model/` | 连接、房间、账号等数据结构 |
+| `data/`（`config`、`store`） | 配置表加载（`config/tables/*.yaml`）、MySQL 存取 |
+| `service/` | 账号认证、会话、连接管理、房间管理、限流 |
+| `logic/`（`match`、`rules`、`chessbot`） | 对局流程、规则引擎（`rules/keys.go` 为配置 key 常量）、机器人 |
 
 帧格式：`[4 字节大端序长度][protobuf 消息]`，单帧上限 1MB。
 
@@ -37,5 +62,6 @@
    PROTOC=/path/to/protoc ./scripts/gen-proto.sh ../RepGame
    ```
 
-4. 新增请求：在 `ClientMessage.body` 加分支 → 在 `messageHandle/handler.go` 的 `routes` 注册处理器。
+4. 新增请求：在 `envelope.proto` 的 `ClientMessage.body` 加分支 → 在 `network/handler/handler.go` 的 `routes` 注册处理器。
+   新模块的消息放进对应模块的 `.proto`；新增 `.proto` 文件时同时加进 `scripts/gen-proto.sh` 的 `PROTOS` 列表。
    新增推送：在 `ServerMessage.body` 加分支 → 在客户端 `ServerMessageRouter` 构造函数注册。

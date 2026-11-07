@@ -1,7 +1,7 @@
 package service
 
 import (
-	"GoServer/tcpgameserver/config"
+	"GoServer/tcpgameserver/data/config"
 	"crypto/rand"
 	"encoding/base64"
 	"sync"
