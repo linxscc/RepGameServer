@@ -1111,3 +1111,35 @@ func TestSecretArtRepeatsFactors(t *testing.T) {
 		t.Fatalf("each retrigger doubles fresh card points: %+v", st)
 	}
 }
+
+func TestOmenTableComplete(t *testing.T) {
+	cfg := loadTestConfig(t)
+	if cfg.MaxOmenPoint() != 12 || len(cfg.Omens) != 12 {
+		t.Fatalf("omens %d max %d", len(cfg.Omens), cfg.MaxOmenPoint())
+	}
+	for pt := 1; pt <= 12; pt++ {
+		if cfg.OmenByPoint(pt) < 0 {
+			t.Fatalf("no omen at %d", pt)
+		}
+	}
+	if cfg.Omens[cfg.OmenByPoint(1)].Key != "quake" || cfg.Omens[cfg.OmenByPoint(12)].Key != "upheaval" {
+		t.Fatal("point table order")
+	}
+	for _, r := range []int{6, 11, 16, 21, 26} {
+		if !cfg.IsOmenRound(r) {
+			t.Fatalf("round %d", r)
+		}
+	}
+	if cfg.IsOmenRound(7) || cfg.Rules.Omen.Duration != 6 {
+		t.Fatal("rounds/duration")
+	}
+}
+
+func TestOmenTableRejectsDuplicatePoint(t *testing.T) {
+	tt := loadTestTables(t)
+	tt.O.Omens[1].Point = 1
+	_, err := tt.build()
+	if err == nil || !strings.Contains(err.Error(), "chess_omens: point 1 used twice") {
+		t.Fatalf("err = %v", err)
+	}
+}

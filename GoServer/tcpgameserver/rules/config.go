@@ -102,12 +102,19 @@ type RulesTable struct {
 		SkipGold int         `yaml:"skip_gold"`
 		Odds     []VaultOdds `yaml:"odds"`
 	} `yaml:"vault"`
+	Omen struct {
+		Rounds   []int `yaml:"rounds"`
+		Duration int   `yaml:"duration"`
+		DieSides int   `yaml:"die_sides"`
+	} `yaml:"omen"`
 	Rarities []RarityDef `yaml:"rarities"`
 	Timers   struct {
-		FamilySeconds int `yaml:"family_seconds"`
-		PrepSeconds   int `yaml:"prep_seconds"`
-		SettleSeconds int `yaml:"settle_seconds"`
-		VaultSeconds  int `yaml:"vault_seconds"`
+		FamilySeconds     int `yaml:"family_seconds"`
+		PrepSeconds       int `yaml:"prep_seconds"`
+		SettleSeconds     int `yaml:"settle_seconds"`
+		VaultSeconds      int `yaml:"vault_seconds"`
+		OmenSeconds       int `yaml:"omen_seconds"`
+		OmenRevealSeconds int `yaml:"omen_reveal_seconds"`
 	} `yaml:"timers"`
 }
 
@@ -210,6 +217,21 @@ type FamiliesFile struct {
 	Families []FamilyDef `yaml:"families"`
 }
 
+// ---------- chess_omens.yaml ----------
+
+type OmenDef struct {
+	Point  int                `yaml:"point"` // 两个骰子点数之和
+	Key    string             `yaml:"key"`
+	Name   string             `yaml:"name"`
+	Aspect string             `yaml:"aspect"`
+	Desc   string             `yaml:"desc"`
+	Params map[string]float64 `yaml:"params"`
+}
+
+type OmensFile struct {
+	Omens []OmenDef `yaml:"omens"`
+}
+
 // ---------- assembled config ----------
 
 // Config is the full, validated rule set. Build it with NewConfig.
@@ -220,6 +242,7 @@ type Config struct {
 	Origins  []BondDef
 	Relics   []RelicDef
 	Families []FamilyDef
+	Omens    []OmenDef
 
 	tradeIdx  map[string]int
 	originIdx map[string]int
@@ -227,12 +250,14 @@ type Config struct {
 	relicIdx  map[string]int
 	rarityIdx map[string]int
 	familyIdx map[string]int
+	omenIdx   map[string]int
+	omenPoint map[int]int
 	vaultSet  map[int]bool
 }
 
 // NewConfig assembles and validates the tables.
-func NewConfig(r RulesTable, l LinesFile, b BondsFile, rel RelicsFile, f FamiliesFile) (*Config, error) {
-	c := &Config{Rules: r, Lines: l.Lines, Trades: b.Trades, Origins: b.Origins, Relics: rel.Relics, Families: f.Families}
+func NewConfig(r RulesTable, l LinesFile, b BondsFile, rel RelicsFile, f FamiliesFile, o OmensFile) (*Config, error) {
+	c := &Config{Rules: r, Lines: l.Lines, Trades: b.Trades, Origins: b.Origins, Relics: rel.Relics, Families: f.Families, Omens: o.Omens}
 	if err := c.index(); err != nil {
 		return nil, err
 	}
@@ -266,6 +291,15 @@ func (c *Config) index() error {
 	c.relicIdx = indexKeys(c.Relics, func(r RelicDef) string { return r.Key }, "chess_relics", &errs)
 	c.rarityIdx = indexKeys(c.Rules.Rarities, func(r RarityDef) string { return r.Key }, "chess_rules.rarities", &errs)
 	c.familyIdx = indexKeys(c.Families, func(f FamilyDef) string { return f.Key }, "chess_families", &errs)
+	c.omenIdx = indexKeys(c.Omens, func(o OmenDef) string { return o.Key }, "chess_omens", &errs)
+	c.omenPoint = map[int]int{}
+	for i, o := range c.Omens {
+		if _, dup := c.omenPoint[o.Point]; dup {
+			errs = append(errs, fmt.Errorf("chess_omens: point %d used twice", o.Point))
+			continue
+		}
+		c.omenPoint[o.Point] = i
+	}
 	c.vaultSet = map[int]bool{}
 	for _, r := range c.Rules.Vault.Rounds {
 		c.vaultSet[r] = true
@@ -332,7 +366,15 @@ func (c *Config) validate() error {
 	for _, rr := range r.Rarities {
 		check(rr.Price > 0, "chess_rules.rarities %s price must be > 0", rr.Key)
 	}
+	om := r.Omen
+	check(om.Duration >= 1, "chess_rules.omen.duration must be >= 1")
+	check(om.DieSides >= 2, "chess_rules.omen.die_sides must be >= 2")
+	for i, rd := range om.Rounds {
+		check(rd >= 2, "chess_rules.omen.rounds[%d] must be >= 2", i)
+		check(i == 0 || rd > om.Rounds[i-1], "chess_rules.omen.rounds must be strictly increasing")
+	}
 	t := r.Timers
+	check(t.OmenSeconds > 0 && t.OmenRevealSeconds >= 0, "chess_rules.timers omen seconds are invalid")
 	check(t.FamilySeconds > 0 && t.PrepSeconds >= 5 && t.SettleSeconds >= 0 && t.VaultSeconds > 0, "chess_rules.timers are invalid")
 
 	// lines
@@ -392,6 +434,25 @@ func (c *Config) validate() error {
 	for _, f := range c.Families {
 		if err := validateParams("family", f.Key, f.Params, familyParams); err != nil {
 			errs = append(errs, fmt.Errorf("chess_families: %w", err))
+		}
+	}
+	// omens
+	if om.DieSides >= 2 {
+		for pt := 1; pt <= c.MaxOmenPoint(); pt++ {
+			if _, ok := c.omenPoint[pt]; !ok {
+				errs = append(errs, fmt.Errorf("chess_omens: point %d missing", pt))
+			}
+		}
+		for _, o := range c.Omens {
+			check(o.Point >= 1 && o.Point <= c.MaxOmenPoint(), "chess_omens %s: point %d out of range 1..%d", o.Key, o.Point, c.MaxOmenPoint())
+		}
+	}
+	for _, o := range c.Omens {
+		if err := validateParams("omen", o.Key, o.Params, omenParams); err != nil {
+			errs = append(errs, fmt.Errorf("chess_omens: %w", err))
+		}
+		if v, ok := o.Params["factor"]; ok {
+			check(v > 0 && v <= 1, "chess_omens %s.factor must be in (0, 1]", o.Key)
 		}
 	}
 	return errors.Join(errs...)
@@ -459,6 +520,29 @@ func (c *Config) RarityOf(relic int) int { return c.rarityIdx[c.Relics[relic].Ra
 func (c *Config) CategoryOf(relic int) string { return c.Relics[relic].Category }
 
 func (c *Config) RelicPrice(relic int) int { return c.Rules.Rarities[c.RarityOf(relic)].Price }
+
+// IsOmenRound reports whether a new omen appears at the start of this round.
+func (c *Config) IsOmenRound(round int) bool {
+	for _, r := range c.Rules.Omen.Rounds {
+		if r == round {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Config) OmenIndex(key string) (int, bool) { i, ok := c.omenIdx[key]; return i, ok }
+
+// OmenByPoint returns the omen index for a dice total, or -1.
+func (c *Config) OmenByPoint(point int) int {
+	if i, ok := c.omenPoint[point]; ok {
+		return i
+	}
+	return -1
+}
+
+// MaxOmenPoint is the highest dice total (two dice).
+func (c *Config) MaxOmenPoint() int { return 2 * c.Rules.Omen.DieSides }
 
 func (c *Config) IsVaultRound(round int) bool { return c.vaultSet[round] }
 

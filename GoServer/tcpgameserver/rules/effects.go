@@ -101,6 +101,22 @@ var relicParams = func() map[string][]string {
 	return m
 }()
 
+// omenParams: omen key → required params.
+var omenParams = map[string][]string{
+	"quake":         {"bench"},
+	"solar_eclipse": {"factor"},
+	"ghost_rout":    {"factor"},
+	"red_moon":      {"factor"},
+	"ink_rain":      {"factor"},
+	"famine":        {"income"},
+	"market_closed": {"refresh"},
+	"heavy_tax":     {},
+	"shortage":      {"shop"},
+	"narrow_path":   {"slots"},
+	"discord":       {"at"},
+	"upheaval":      {"factor"},
+}
+
 // familyParams: family key → required params.
 var familyParams = map[string][]string{
 	"merchant": {"gold"},                         // 开局 +金

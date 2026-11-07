@@ -142,6 +142,7 @@ func Load(overrideDir string) (*Tables, error) {
 		chessBonds    rules.BondsFile
 		chessRelics   rules.RelicsFile
 		chessFamilies rules.FamiliesFile
+		chessOmens    rules.OmensFile
 	)
 	files := []struct {
 		name string
@@ -156,6 +157,7 @@ func Load(overrideDir string) (*Tables, error) {
 		{"chess_bonds.yaml", &chessBonds},
 		{"chess_relics.yaml", &chessRelics},
 		{"chess_families.yaml", &chessFamilies},
+		{"chess_omens.yaml", &chessOmens},
 	}
 	for _, f := range files {
 		data, err := readTable(overrideDir, f.name)
@@ -168,7 +170,7 @@ func Load(overrideDir string) (*Tables, error) {
 			return nil, fmt.Errorf("%s: %w", f.name, err)
 		}
 	}
-	chess, err := rules.NewConfig(chessRules, chessLines, chessBonds, chessRelics, chessFamilies)
+	chess, err := rules.NewConfig(chessRules, chessLines, chessBonds, chessRelics, chessFamilies, chessOmens)
 	if err != nil {
 		return nil, err
 	}

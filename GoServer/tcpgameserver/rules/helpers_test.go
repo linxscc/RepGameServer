@@ -16,6 +16,7 @@ type testTables struct {
 	B   BondsFile
 	Rel RelicsFile
 	F   FamiliesFile
+	O   OmensFile
 }
 
 // loadTestTables reads the real tables from config/tables (the package cannot import
@@ -26,7 +27,7 @@ func loadTestTables(t *testing.T) testTables {
 	var tt testTables
 	for name, dst := range map[string]any{
 		"chess_rules.yaml": &tt.R, "chess_lines.yaml": &tt.L, "chess_bonds.yaml": &tt.B,
-		"chess_relics.yaml": &tt.Rel, "chess_families.yaml": &tt.F,
+		"chess_relics.yaml": &tt.Rel, "chess_families.yaml": &tt.F, "chess_omens.yaml": &tt.O,
 	} {
 		data, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
@@ -40,7 +41,7 @@ func loadTestTables(t *testing.T) testTables {
 }
 
 func (tt testTables) build() (*Config, error) {
-	return NewConfig(tt.R, tt.L, tt.B, tt.Rel, tt.F)
+	return NewConfig(tt.R, tt.L, tt.B, tt.Rel, tt.F, tt.O)
 }
 
 func loadTestConfig(t *testing.T) *Config {

@@ -83,6 +83,11 @@ vault:
     - { from_round: 11, odds: [20, 50, 30] }
 
 # 法宝稀有度（顺序即 relic_odds / odds 的下标顺序）
+omen:
+  rounds: [6, 11, 16, 21, 26]  # 这些回合出现新天象（第 R 回合出现，生效 R..R+duration-1）
+  duration: 6                  # 持续回合数
+  die_sides: 6                 # 骰子面数；两人点数之和 2..2×面数
+
 rarities:
   - { key: common, name: 普通, price: 4 }
   - { key: rare,   name: 稀有, price: 6 }
@@ -93,3 +98,5 @@ timers:
   prep_seconds: 30     # 准备阶段
   settle_seconds: 40   # 结算演出的最长等待；双方客户端播完（含扣血）会提前结束
   vault_seconds: 15    # 宝库
+  omen_seconds: 12         # 天象掷骰；超时 = 不掷
+  omen_reveal_seconds: 5   # 天象回合的准备阶段额外加这么多秒，给揭晓动画

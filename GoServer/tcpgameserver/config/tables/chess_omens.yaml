@@ -1,0 +1,23 @@
+# ============================================================
+# 天象表：每个天象回合，双方各掷一颗骰子，点数之和对应一条天象
+# ------------------------------------------------------------
+# point   点数 1..2×die_sides（见 chess_rules.yaml 的 omen），各恰好一条
+# key     决定效果（rules/effects.go 的 omenParams），key 不可改（客户端按 key 取图）
+# params  数值：
+#   bench 备战席格数增减；factor 战力倍率（0..1]；income 每回合基础收入增减；
+#   refresh 刷新费用增减；shop 商店卡位增减；slots 出阵格增减；at 羁绊生效所需数量增减
+# aspect  方面（仅展示）
+# ============================================================
+omens:
+  - { point: 1,  key: quake,         name: 地动,     aspect: 阵容, desc: 备战席格数 −2（放不下的卡自动卖出）,                       params: { bench: -2 } }
+  - { point: 2,  key: solar_eclipse, name: 天狗食日, aspect: 神鬼, desc: 神卡战力 ×0.4,                                          params: { factor: 0.4 } }
+  - { point: 3,  key: ghost_rout,    name: 百鬼退散, aspect: 神鬼, desc: 鬼卡战力 ×0.4,                                          params: { factor: 0.4 } }
+  - { point: 4,  key: red_moon,      name: 赤月,     aspect: 花色, desc: 红色卡战力 ×0.6,                                        params: { factor: 0.6 } }
+  - { point: 5,  key: ink_rain,      name: 墨雨,     aspect: 花色, desc: 黑色卡战力 ×0.6,                                        params: { factor: 0.6 } }
+  - { point: 6,  key: famine,        name: 荒年,     aspect: 经济, desc: 每回合基础收入 −2,                                      params: { income: -2 } }
+  - { point: 7,  key: market_closed, name: 闭市,     aspect: 商店, desc: 刷新费用 +1,                                            params: { refresh: 1 } }
+  - { point: 8,  key: heavy_tax,     name: 苛税,     aspect: 经济, desc: 不产生利息,                                             params: {} }
+  - { point: 9,  key: shortage,      name: 断货,     aspect: 商店, desc: 商店卡位 −1,                                             params: { shop: -1 } }
+  - { point: 10, key: narrow_path,   name: 窄道,     aspect: 阵容, desc: 出阵格 −1,                                              params: { slots: -1 } }
+  - { point: 11, key: discord,       name: 失和,     aspect: 羁绊, desc: 所有羁绊生效所需数量 +1,                                  params: { at: 1 } }
+  - { point: 12, key: upheaval,      name: 天地异变, aspect: 花色, desc: 出阵中张数最多的花色（至少 2 张；并列时都算）战力 ×0.5, params: { factor: 0.5 } }
