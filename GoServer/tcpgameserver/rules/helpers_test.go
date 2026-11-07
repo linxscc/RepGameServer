@@ -58,6 +58,7 @@ func newPrepMatch(t *testing.T, seed int64) *Match {
 	for _, p := range m.P {
 		for _, c := range append(append([]Card{}, p.Board...), p.Bench...) {
 			m.Pool[c.Line] += m.copiesOf(c.Star)
+			m.PoolRed[c.Line] += c.Red
 		}
 		p.Board, p.Bench = nil, nil
 		p.Gold = 100
@@ -95,19 +96,57 @@ func mustFamily(t *testing.T, cfg *Config, key string) int {
 	return i
 }
 
-// forceShop replaces the player's shop with the given lines, keeping pool accounting exact.
+// forceShop replaces the player's shop with the given lines, all Red (Black once red is exhausted),
+// keeping pool accounting exact.
 func forceShop(t *testing.T, m *Match, p *Player, keys ...string) {
 	t.Helper()
 	m.returnShop(p)
-	p.Shop = nil
+	p.Shop, p.ShopColor = nil, nil
 	for _, k := range keys {
 		l := mustLine(t, m.cfg, k)
 		if m.Pool[l] == 0 {
 			t.Fatalf("pool empty for %s", k)
 		}
-		m.Pool[l]--
+		c := Red
+		if m.PoolRed[l] == 0 {
+			c = Black
+		}
+		takeFromPool(m, l, c)
 		p.Shop = append(p.Shop, l)
+		p.ShopColor = append(p.ShopColor, c)
 	}
+}
+
+// forceShopColored is forceShop with explicit slot colors.
+func forceShopColored(t *testing.T, m *Match, p *Player, keys []string, colors []Color) {
+	t.Helper()
+	m.returnShop(p)
+	p.Shop, p.ShopColor = nil, nil
+	for i, k := range keys {
+		l := mustLine(t, m.cfg, k)
+		if m.Pool[l] == 0 || (colors[i] == Red && m.PoolRed[l] == 0) || (colors[i] == Black && m.Pool[l]-m.PoolRed[l] == 0) {
+			t.Fatalf("pool empty for %s color %d", k, colors[i])
+		}
+		takeFromPool(m, l, colors[i])
+		p.Shop = append(p.Shop, l)
+		p.ShopColor = append(p.ShopColor, colors[i])
+	}
+}
+
+func takeFromPool(m *Match, l int, c Color) {
+	m.Pool[l]--
+	if c == Red {
+		m.PoolRed[l]--
+	}
+}
+
+// coloredCard builds a card of the given color without touching the pool.
+func coloredCard(m *Match, t *testing.T, key string, star int, c Color) Card {
+	cd := Card{UID: m.newUID(), Line: mustLine(t, m.cfg, key), Star: star, Color: c}
+	if c == Red {
+		cd.Red = m.copiesOf(star)
+	}
+	return cd
 }
 
 func card(m *Match, t *testing.T, key string, star int) Card {

@@ -7,9 +7,10 @@ import (
 
 // NewMatch creates a match in the family-pick phase. rng makes it deterministic.
 func NewMatch(cfg *Config, rng *rand.Rand, ids [2]string) *Match {
-	m := &Match{cfg: cfg, rng: rng, Phase: PhaseFamily, Winner: -1, Pool: make([]int, len(cfg.Lines))}
+	m := &Match{cfg: cfg, rng: rng, Phase: PhaseFamily, Winner: -1, Pool: make([]int, len(cfg.Lines)), PoolRed: make([]int, len(cfg.Lines))}
 	for i, l := range cfg.Lines {
 		m.Pool[i] = l.Pool
+		m.PoolRed[i] = l.Pool / 2
 	}
 	for i := range m.P {
 		p := &Player{
@@ -115,8 +116,13 @@ func (m *Match) dealStart(p *Player) {
 			return
 		}
 		got = append(got, l)
-		m.Pool[l] -= need
-		c := Card{UID: m.newUID(), Line: l, Star: star}
+		red := 0
+		for i := 0; i < need; i++ {
+			if m.drawColor(l) == Red { // drawColor also takes the copy out of Pool
+				red++
+			}
+		}
+		c := Card{UID: m.newUID(), Line: l, Star: star, Red: red, Color: majorityColor(red, need)}
 		if star == m.cfg.Rules.Merge.MaxStar {
 			p.three[l] = true
 		}
@@ -411,20 +417,25 @@ func (m *Match) BothReady() bool { return m.P[0].Ready && m.P[1].Ready }
 // CheckPool verifies card conservation (pool + shops + owned copies == configured pool).
 func (m *Match) CheckPool() bool {
 	total := append([]int{}, m.Pool...)
+	red := append([]int{}, m.PoolRed...)
 	for _, p := range m.P {
-		for _, l := range p.Shop {
+		for i, l := range p.Shop {
 			if l >= 0 {
 				total[l]++
+				if i < len(p.ShopColor) && p.ShopColor[i] == Red {
+					red[l]++
+				}
 			}
 		}
 		for _, cs := range [][]Card{p.Board, p.Bench} {
 			for _, c := range cs {
 				total[c.Line] += m.copiesOf(c.Star)
+				red[c.Line] += c.Red
 			}
 		}
 	}
 	for l, def := range m.cfg.Lines {
-		if total[l] != def.Pool {
+		if total[l] != def.Pool || red[l] != def.Pool/2 || m.PoolRed[l] < 0 || m.PoolRed[l] > m.Pool[l] {
 			return false
 		}
 	}

@@ -29,7 +29,35 @@ func (m *Match) pickWeighted(w []int) int {
 
 // ---------- shop ----------
 
-func (m *Match) drawShopCard(p *Player) int {
+// drawColor takes one copy of the line out of the red/black split (weighted by what remains)
+// and returns its color. It also decrements Pool[l].
+func (m *Match) drawColor(l int) Color {
+	red, black := m.PoolRed[l], m.Pool[l]-m.PoolRed[l]
+	if red < 0 {
+		red = 0
+	}
+	if black < 0 {
+		black = 0
+	}
+	m.Pool[l]--
+	if m.pickWeighted([]int{red, black}) == 1 {
+		return Black
+	}
+	m.PoolRed[l]--
+	return Red
+}
+
+// majorityColor is the color held by most of n cards, red of which are red.
+// With the default group size of 3 a majority always exists; for an even group
+// size a tie goes to Red.
+func majorityColor(red, n int) Color {
+	if red*2 >= n {
+		return Red
+	}
+	return Black
+}
+
+func (m *Match) drawShopCard(p *Player) (int, Color) {
 	odds := m.cfg.Level(p.Level).ShopOdds
 	tierW := make([]int, len(odds))
 	for t := range odds {
@@ -42,7 +70,7 @@ func (m *Match) drawShopCard(p *Player) int {
 	}
 	t := m.pickWeighted(tierW)
 	if t < 0 {
-		return -1
+		return -1, Black
 	}
 	w := make([]int, len(m.cfg.Lines))
 	for l, def := range m.cfg.Lines {
@@ -51,19 +79,22 @@ func (m *Match) drawShopCard(p *Player) int {
 		}
 	}
 	l := m.pickWeighted(w)
-	if l >= 0 {
-		m.Pool[l]--
+	if l < 0 {
+		return -1, Black
 	}
-	return l
+	return l, m.drawColor(l)
 }
 
 func (m *Match) returnShop(p *Player) {
-	for _, l := range p.Shop {
+	for i, l := range p.Shop {
 		if l >= 0 {
 			m.Pool[l]++
+			if p.ShopColor[i] == Red {
+				m.PoolRed[l]++
+			}
 		}
 	}
-	p.Shop = nil
+	p.Shop, p.ShopColor = nil, nil
 }
 
 // randomRelic picks a relic the player does not own, by rarity odds, skipping excluded ones.
@@ -104,8 +135,9 @@ func (m *Match) randomRelic(p *Player, odds []int, exclude map[int]bool) int {
 func (m *Match) rollShop(p *Player) {
 	m.returnShop(p)
 	p.Shop = make([]int, m.cfg.Rules.Board.ShopSize)
+	p.ShopColor = make([]Color, len(p.Shop))
 	for i := range p.Shop {
-		p.Shop[i] = m.drawShopCard(p)
+		p.Shop[i], p.ShopColor[i] = m.drawShopCard(p)
 	}
 	p.ShopRelic = -1
 	if m.cfg.Rules.Board.ShopRelic {
@@ -190,7 +222,7 @@ func (m *Match) CanBuyCard(p *Player, i int) error {
 	if len(p.Bench) < m.cfg.Rules.Board.BenchSize {
 		return nil
 	}
-	if m.CountCopies(p, l, 1) >= m.cfg.Rules.Merge.GroupSize-1 {
+	if m.copiesForMerge(p, l, 1, p.ShopColor[i]) >= m.cfg.Rules.Merge.GroupSize-1 {
 		return nil // completes a merge: total cards does not grow
 	}
 	return ErrBenchFull
@@ -203,12 +235,26 @@ func (m *Match) BuyCard(p *Player, i int) ([]Card, error) {
 	}
 	l := p.Shop[i]
 	p.Gold -= m.cfg.Lines[l].Cost
-	p.Shop[i] = -1
-	p.Bench = append(p.Bench, Card{UID: m.newUID(), Line: l, Star: 1})
+	col := p.ShopColor[i]
+	p.Shop[i] = -1 // ShopColor[i] is left as is (meaningless for empty slots)
+	nc := Card{UID: m.newUID(), Line: l, Star: 1, Color: col}
+	if col == Red {
+		nc.Red = 1
+	}
+	p.Bench = append(p.Bench, nc)
 	return m.checkMerges(p), nil
 }
 
 // ---------- merge ----------
+
+// copiesForMerge counts the cards that would join a merge group with a card of the given color:
+// same line and star, and also same color when Merge.SameColor is set.
+func (m *Match) copiesForMerge(p *Player, line, star int, c Color) int {
+	if m.cfg.Rules.Merge.SameColor {
+		return m.CountCopiesColor(p, line, star, c)
+	}
+	return m.CountCopies(p, line, star)
+}
 
 func (m *Match) checkMerges(p *Player) []Card {
 	var made []Card
@@ -216,9 +262,12 @@ func (m *Match) checkMerges(p *Player) []Card {
 		merged := false
 		for l := range m.cfg.Lines {
 			for s := 1; s < m.cfg.Rules.Merge.MaxStar && !merged; s++ {
-				if m.CountCopies(p, l, s) >= m.cfg.Rules.Merge.GroupSize {
-					made = append(made, m.merge(p, l, s))
-					merged = true
+				for _, col := range []Color{Red, Black} {
+					if m.copiesForMerge(p, l, s, col) >= m.cfg.Rules.Merge.GroupSize {
+						made = append(made, m.merge(p, l, s, col))
+						merged = true
+						break
+					}
 				}
 			}
 			if merged {
@@ -231,14 +280,25 @@ func (m *Match) checkMerges(p *Player) []Card {
 	}
 }
 
-func (m *Match) merge(p *Player, line, star int) Card {
+// merge combines GroupSize cards of (line, star). With Merge.SameColor only cards of color col
+// take part; otherwise col is ignored. The result takes the majority color of the cards used
+// (ties, possible only with an even group size, go to Red) and the sum of their Red counts.
+func (m *Match) merge(p *Player, line, star int, col Color) Card {
 	need := m.cfg.Rules.Merge.GroupSize
-	taken, bonus, pos := 0, 0, -1
+	sameColor := m.cfg.Rules.Merge.SameColor
+	joins := func(c Card) bool {
+		return c.Line == line && c.Star == star && (!sameColor || c.Color == col)
+	}
+	taken, bonus, pos, red, redCards := 0, 0, -1, 0, 0
 	var board []Card
 	for i, c := range p.Board {
-		if taken < need && c.Line == line && c.Star == star {
+		if taken < need && joins(c) {
 			taken++
 			bonus += c.Bonus
+			red += c.Red
+			if c.Color == Red {
+				redCards++
+			}
 			if pos < 0 {
 				pos = i
 				board = append(board, Card{}) // placeholder for the result
@@ -249,14 +309,18 @@ func (m *Match) merge(p *Player, line, star int) Card {
 	}
 	var bench []Card
 	for _, c := range p.Bench {
-		if taken < need && c.Line == line && c.Star == star {
+		if taken < need && joins(c) {
 			taken++
 			bonus += c.Bonus
+			red += c.Red
+			if c.Color == Red {
+				redCards++
+			}
 			continue
 		}
 		bench = append(bench, c)
 	}
-	nc := Card{UID: m.newUID(), Line: line, Star: star + 1, Bonus: bonus}
+	nc := Card{UID: m.newUID(), Line: line, Star: star + 1, Bonus: bonus, Red: red, Color: majorityColor(redCards, need)}
 
 	// ops rewards judged on the last settled board
 	ops := m.OpsBonds(p)
@@ -361,6 +425,7 @@ func (m *Match) SellCard(p *Player, uid string) error {
 func (m *Match) disposeCard(p *Player, c Card) {
 	p.Gold += m.SellPrice(c)
 	m.Pool[c.Line] += m.copiesOf(c.Star)
+	m.PoolRed[c.Line] += c.Red
 	if c.Star == m.cfg.Rules.Merge.MaxStar {
 		p.three[c.Line] = false
 	}

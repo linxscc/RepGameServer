@@ -28,12 +28,22 @@ const (
 	PhaseOver                // 对局结束
 )
 
+// Color is a card's suit color.
+type Color int
+
+const (
+	Red   Color = 0
+	Black Color = 1
+)
+
 // Card is one card instance owned by a player.
 type Card struct {
 	UID   string
 	Line  int // index into Config.Lines
 	Star  int // 1..MaxStar
 	Bonus int // 永久点数加成
+	Color Color
+	Red   int // red 1★ copies contained in this card (1★: 1 for red, 0 for black)
 }
 
 // RelicInst is one relic a player owns.
@@ -58,8 +68,9 @@ type Player struct {
 	WinStreak, LossStreak int
 	WonLast, LostLast     bool
 
-	Shop       []int // line index per slot, -1 = empty; each shown card is reserved from the pool
-	ShopRelic  int   // relic index, -1 = none
+	Shop       []int   // line index per slot, -1 = empty; each shown card is reserved from the pool
+	ShopColor  []Color // same length as Shop; meaningless where Shop[i] < 0
+	ShopRelic  int     // relic index, -1 = none
 	Locked     bool
 	LockStreak int
 
@@ -77,13 +88,14 @@ type Player struct {
 
 // Match is a deterministic 1v1 game. It is not safe for concurrent use.
 type Match struct {
-	cfg    *Config
-	rng    *rand.Rand
-	Round  int
-	Phase  Phase
-	Pool   []int // remaining copies per line
-	P      [2]*Player
-	Winner int // 0/1, -1 = draw (valid once Phase == PhaseOver)
+	cfg     *Config
+	rng     *rand.Rand
+	Round   int
+	Phase   Phase
+	Pool    []int // remaining copies per line (red + black)
+	PoolRed []int // remaining red copies per line; black = Pool[l] - PoolRed[l]
+	P       [2]*Player
+	Winner  int // 0/1, -1 = draw (valid once Phase == PhaseOver)
 	// FirstDealt is the seat that drew its opening cards first (for balance analysis).
 	FirstDealt int
 	// Surrendered is set when the match ended because a player gave up.
@@ -447,6 +459,19 @@ func (m *Match) trigger(p *Player, key string) bool {
 	}
 	p.triggers[key]++
 	return true
+}
+
+// CountCopiesColor is CountCopies restricted to one color.
+func (m *Match) CountCopiesColor(p *Player, line, star int, c Color) int {
+	n := 0
+	for _, cs := range [][]Card{p.Board, p.Bench} {
+		for _, cd := range cs {
+			if cd.Line == line && cd.Star == star && cd.Color == c {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 func (m *Match) CountCopies(p *Player, line, star int) int {

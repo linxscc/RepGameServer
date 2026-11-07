@@ -440,3 +440,176 @@ func TestLinesHaveKindAndEvenPool(t *testing.T) {
 		t.Fatal("same_color must default to false")
 	}
 }
+
+func TestShopSlotsCarryColor(t *testing.T) {
+	m := newPrepMatch(t, 11)
+	p := m.P[0]
+	for i := 0; i < 50; i++ {
+		m.rollShop(p)
+		if len(p.ShopColor) != len(p.Shop) {
+			t.Fatalf("ShopColor len %d != Shop len %d", len(p.ShopColor), len(p.Shop))
+		}
+		if !m.CheckPool() {
+			t.Fatalf("pool not conserved after roll %d", i)
+		}
+	}
+}
+
+func TestMergeTakesMajorityColor(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	soldier := mustLine(t, m.cfg, "soldier")
+	p.Bench = []Card{coloredCard(m, t, "soldier", 1, Red), coloredCard(m, t, "soldier", 1, Red)}
+	m.Pool[soldier] -= 2
+	m.PoolRed[soldier] -= 2
+	forceShopColored(t, m, p, []string{"soldier"}, []Color{Black})
+	if _, err := m.BuyCard(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Bench) != 1 {
+		t.Fatalf("bench = %+v", p.Bench)
+	}
+	c := p.Bench[0]
+	if c.Color != Red || c.Red != 2 || c.Star != 2 {
+		t.Fatalf("merged = %+v", c)
+	}
+	if !m.CheckPool() {
+		t.Fatal("pool not conserved")
+	}
+}
+
+func TestSellMergedReturnsExactColors(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	p := m.P[0]
+	soldier := mustLine(t, m.cfg, "soldier")
+	p.Bench = []Card{coloredCard(m, t, "soldier", 1, Red), coloredCard(m, t, "soldier", 1, Red)}
+	m.Pool[soldier] -= 2
+	m.PoolRed[soldier] -= 2
+	forceShopColored(t, m, p, []string{"soldier"}, []Color{Black})
+	if _, err := m.BuyCard(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	pool, red := m.Pool[soldier], m.PoolRed[soldier]
+	if err := m.SellCard(p, p.Bench[0].UID); err != nil {
+		t.Fatal(err)
+	}
+	if m.Pool[soldier] != pool+3 || m.PoolRed[soldier] != red+2 {
+		t.Fatalf("pool %d->%d red %d->%d", pool, m.Pool[soldier], red, m.PoolRed[soldier])
+	}
+	if !m.CheckPool() {
+		t.Fatal("pool not conserved")
+	}
+}
+
+func TestSameColorMergeRule(t *testing.T) {
+	m := newPrepMatch(t, 1)
+	m.cfg.Rules.Merge.SameColor = true
+	p := m.P[0]
+	soldier := mustLine(t, m.cfg, "soldier")
+	p.Bench = []Card{coloredCard(m, t, "soldier", 1, Red), coloredCard(m, t, "soldier", 1, Red)}
+	m.Pool[soldier] -= 2
+	m.PoolRed[soldier] -= 2
+	forceShopColored(t, m, p, []string{"soldier", "soldier"}, []Color{Black, Red})
+	if _, err := m.BuyCard(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Bench) != 3 {
+		t.Fatalf("red,red,black must not merge: %+v", p.Bench)
+	}
+	if _, err := m.BuyCard(p, 1); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Bench) != 2 {
+		t.Fatalf("bench = %+v", p.Bench)
+	}
+	var merged *Card
+	for i := range p.Bench {
+		if p.Bench[i].Star == 2 {
+			merged = &p.Bench[i]
+		}
+	}
+	if merged == nil || merged.Red != 3 || merged.Color != Red {
+		t.Fatalf("bench = %+v", p.Bench)
+	}
+	if !m.CheckPool() {
+		t.Fatal("pool not conserved")
+	}
+}
+
+func TestShopDrawsOtherColorWhenOneExhausted(t *testing.T) {
+	m := newPrepMatch(t, 2)
+	p := m.P[0]
+	m.returnShop(p)
+	p.Shop, p.ShopColor = nil, nil
+	// exhaust red in every line; the draw must fall back to Black without ever going negative
+	for l := range m.cfg.Lines {
+		m.Pool[l] -= m.PoolRed[l]
+		m.PoolRed[l] = 0
+	}
+	for i := 0; i < 200; i++ {
+		l, c := m.drawShopCard(p)
+		if l < 0 {
+			t.Fatal("no card drawn")
+		}
+		if c != Black {
+			t.Fatal("drew Red from an exhausted red pool")
+		}
+		for k := range m.PoolRed {
+			if m.PoolRed[k] < 0 {
+				t.Fatalf("PoolRed[%d] = %d", k, m.PoolRed[k])
+			}
+		}
+		m.Pool[l]++ // undo so the pool never runs dry
+	}
+}
+
+func TestLockedShopKeepsColors(t *testing.T) {
+	m := newPrepMatch(t, 3)
+	p := m.P[0]
+	firstShop := append([]int{}, p.Shop...)
+	firstColor := append([]Color{}, p.ShopColor...)
+	if err := m.SetLock(p, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Settle(); err != nil {
+		t.Fatal(err)
+	}
+	if m.Phase == PhaseVault {
+		if err := m.CloseVault(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := range firstShop {
+		if p.Shop[i] != firstShop[i] || p.ShopColor[i] != firstColor[i] {
+			t.Fatalf("slot %d changed: %d/%d -> %d/%d", i, firstShop[i], firstColor[i], p.Shop[i], p.ShopColor[i])
+		}
+	}
+}
+
+func TestArtisanStartCardColorConsistent(t *testing.T) {
+	for seed := int64(1); seed <= 20; seed++ {
+		cfg := loadTestConfig(t)
+		m := NewMatch(cfg, rand.New(rand.NewSource(seed)), [2]string{"a", "b"})
+		for _, p := range m.P {
+			p.FamilyOffer = []int{mustFamily(t, cfg, "artisan")}
+			if err := m.PickFamily(p, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := m.Begin(); err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range m.P {
+			c := append(append([]Card{}, p.Board...), p.Bench...)[0]
+			if c.Star != 2 || c.Red < 0 || c.Red > 3 {
+				t.Fatalf("seed %d: card %+v", seed, c)
+			}
+			if (c.Red >= 2) != (c.Color == Red) {
+				t.Fatalf("seed %d: color %d inconsistent with Red=%d", seed, c.Color, c.Red)
+			}
+		}
+		if !m.CheckPool() {
+			t.Fatalf("seed %d: pool not conserved", seed)
+		}
+	}
+}
