@@ -17,6 +17,12 @@
 `Assets/Scripts/Protocol/Generated/<模块>.cs`。生成文件里的 `descriptorData` 是 protoc 编译出的
 schema，protobuf 运行时靠它解析消息，不可手改、也不能挪到配置里。
 
+C# 解析代码（`MergeFrom`）里的 `switch(tag)` 不用裸数字：`gen-proto.sh` 在 protoc 之后运行
+`scripts/gen-wire-tags.py`，为每个模块生成 `<模块>Tags.cs`（每个消息一个 `<消息>Tag` 枚举，
+注释写明字段编号、类型、线型和 .proto 里的说明），并把 `case 8:` 改写为 `case (uint) ErrorTag.Code:`。
+线上标签 = 字段编号 << 3 | 线型（0 变长整数、1 定长 64 位、2 长度前缀、5 定长 32 位），
+值与原数字相同，编译结果不变。需要 `pip install protobuf`。
+
 ## 分层
 
 | 层 | 服务器 (Go) | 客户端 (Unity C#) |
